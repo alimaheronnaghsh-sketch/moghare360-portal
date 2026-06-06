@@ -1,0 +1,88 @@
+<?php
+declare(strict_types=1);
+require_once __DIR__ . '/inventory-controlled-helpers.php';
+
+inv_require_inventory_access('inbound');
+
+try {
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        checkCsrf();
+
+        $receiptNumber = trim((string)($_POST['receipt_number'] ?? ''));
+        $itemName = trim((string)($_POST['item_name'] ?? ''));
+        $technicalCode = trim((string)($_POST['technical_code'] ?? ''));
+        $quantity = (float)($_POST['quantity'] ?? 0);
+        $warehouseId = (int)($_POST['warehouse_id'] ?? 0);
+        $floor = trim((string)($_POST['floor_code'] ?? ''));
+        $row = trim((string)($_POST['row_code'] ?? ''));
+        $rack = trim((string)($_POST['rack_code'] ?? ''));
+        $section = trim((string)($_POST['section_code'] ?? ''));
+
+        if ($itemName === '' || $technicalCode === '' || $quantity <= 0 || $warehouseId <= 0 || $floor === '' || $row === '' || $rack === '' || $section === '') {
+            throw new RuntimeException('فیلدهای اجباری ثبت ورود کالا کامل نیست.');
+        }
+
+        if ($receiptNumber === '') $receiptNumber = inv_generate_receipt_number('INB');
+
+        $warehouse = inv_fetch_one("SELECT warehouse_name FROM inventory_warehouses WHERE id = ?", [$warehouseId]);
+        if (!$warehouse) throw new RuntimeException('انبار معتبر نیست.');
+
+        $locationCode = inv_location_code((string)$warehouse['warehouse_name'], $floor, $row, $rack, $section);
+        $receiptPhoto = inv_upload_file('receipt_photo', 'uploads/inventory-receipts');
+        if (!$receiptPhoto) throw new RuntimeException('برای ثبت ورود کالا، عکس رسید/فاکتور الزامی است.');
+
+        $purchasePrice = inv_can_purchase_price() ? (float)($_POST['purchase_price'] ?? 0) : null;
+
+        $stmt = inv_pdo()->prepare("
+            INSERT INTO inventory_movements_staging
+            (movement_type, receipt_number, item_name, technical_code, quantity, warehouse_id, warehouse_name,
+             floor_code, row_code, rack_code, section_code, location_code, purchase_price, receipt_photo_path,
+             notes, created_by_staff_id, updated_at)
+            VALUES
+            ('INBOUND', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+        ");
+
+        $stmt->execute([
+            $receiptNumber, $itemName, $technicalCode, $quantity, $warehouseId, $warehouse['warehouse_name'],
+            $floor, $row, $rack, $section, $locationCode, $purchasePrice, $receiptPhoto,
+            trim((string)($_POST['notes'] ?? '')), inv_staff_id()
+        ]);
+
+        flash('ورود کالا با رسید ' . $receiptNumber . ' ثبت شد.', 'ok');
+        redirect('staff-inventory-inbound.php');
+    }
+} catch (Throwable $e) {
+    showErrorPage('ثبت ورود کالا انجام نشد.', $e->getMessage());
+}
+
+renderHeader('ثبت ورود کالا با رسید', 'کارتابل انبار');
+renderFlashes();
+?>
+<main class="form-shell">
+  <section class="panel-card wide-card">
+    <h2>ثبت ورود کالا</h2>
+    <form method="post" enctype="multipart/form-data" class="form-grid">
+      <?= csrfField() ?>
+
+      <div class="field"><label>شماره رسید</label><input name="receipt_number" class="num" placeholder="اگر خالی باشد خودکار ساخته می‌شود"></div>
+      <div class="field"><label>نام کالا *</label><input name="item_name" required></div>
+      <div class="field"><label>کد فنی *</label><input name="technical_code" class="num" required></div>
+      <div class="field"><label>تعداد ورودی *</label><input name="quantity" type="number" step="0.01" class="num" required></div>
+
+      <?php inv_render_location_selectors(); ?>
+
+      <?php if (inv_can_purchase_price()): ?>
+      <div class="field"><label>قیمت خرید ریال</label><input name="purchase_price" type="number" step="1" class="num"></div>
+      <?php endif; ?>
+
+      <div class="field"><label>عکس رسید/فاکتور *</label><input name="receipt_photo" type="file" accept=".jpg,.jpeg,.png,.webp" required></div>
+      <div class="field full"><label>توضیحات رسید</label><textarea name="notes"></textarea></div>
+
+      <div class="actions full">
+        <button class="btn primary" type="submit">ثبت ورود کالا</button>
+        <a class="btn" href="staff-inventory.php">بازگشت</a>
+      </div>
+    </form>
+  </section>
+</main>
+<?php renderFooter(); ?>

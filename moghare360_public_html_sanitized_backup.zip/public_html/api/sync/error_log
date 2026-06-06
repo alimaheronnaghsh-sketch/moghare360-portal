@@ -1,0 +1,65 @@
+[21-May-2026 11:19:31 UTC] PHP Fatal error:  Uncaught Error: Call to undefined function syncJsonResponse() in /home2/moghareh/public_html/api/sync/health.php:8
+Stack trace:
+#0 {main}
+  thrown in /home2/moghareh/public_html/api/sync/health.php on line 8
+[21-May-2026 11:24:04 UTC] PHP Fatal error:  Uncaught Error: Call to undefined function syncJsonResponse() in /home2/moghareh/public_html/api/sync/pending.php:31
+Stack trace:
+#0 {main}
+  thrown in /home2/moghareh/public_html/api/sync/pending.php on line 31
+[21-May-2026 11:24:51 UTC] PHP Fatal error:  Uncaught Error: Call to undefined function syncJsonResponse() in /home2/moghareh/public_html/api/sync/pending.php:31
+Stack trace:
+#0 {main}
+  thrown in /home2/moghareh/public_html/api/sync/pending.php on line 31
+[21-May-2026 11:25:07 UTC] PHP Fatal error:  Uncaught Error: Call to undefined function syncJsonResponse() in /home2/moghareh/public_html/api/sync/pending.php:31
+Stack trace:
+#0 {main}
+  thrown in /home2/moghareh/public_html/api/sync/pending.php on line 31
+[21-May-2026 11:26:55 UTC] PHP Fatal error:  Uncaught Error: Call to undefined function syncJsonResponse() in /home2/moghareh/public_html/api/sync/pending.php:31
+Stack trace:
+#0 {main}
+  thrown in /home2/moghareh/public_html/api/sync/pending.php on line 31
+[24-May-2026 08:48:02 UTC] PHP Fatal error:  Uncaught Error: Call to undefined function syncJsonResponse() in /home2/moghareh/public_html/api/sync/pending.php:31
+Stack trace:
+#0 {main}
+  thrown in /home2/moghareh/public_html/api/sync/pending.php on line 31
+[24-May-2026 08:52:25 UTC] PHP Fatal error:  Uncaught Error: Call to undefined function syncJsonResponse() in /home2/moghareh/public_html/api/sync/pending.php:31
+Stack trace:
+#0 {main}
+  thrown in /home2/moghareh/public_html/api/sync/pending.php on line 31
+[24-May-2026 08:54:03 UTC] PHP Fatal error:  Uncaught Error: Call to undefined function syncJsonResponse() in /home2/moghareh/public_html/api/sync/pending.php:31
+Stack trace:
+#0 {main}
+  thrown in /home2/moghareh/public_html/api/sync/pending.php on line 31
+[24-May-2026 08:55:16 UTC] PHP Fatal error:  Uncaught Error: Call to undefined function syncJsonResponse() in /home2/moghareh/public_html/api/sync/pending.php:31
+Stack trace:
+#0 {main}
+  thrown in /home2/moghareh/public_html/api/sync/pending.php on line 31
+[24-May-2026 08:56:12 UTC] PHP Fatal error:  Uncaught Error: Call to undefined function syncJsonResponse() in /home2/moghareh/public_html/api/sync/pending.php:31
+Stack trace:
+#0 {main}
+  thrown in /home2/moghareh/public_html/api/sync/pending.php on line 31
+[24-May-2026 08:58:00 UTC] PHP Fatal error:  strict_types declaration must be the very first statement in the script in /home2/moghareh/public_html/api/sync/pending.php on line 5
+[24-May-2026 08:58:34 UTC] PHP Fatal error:  Uncaught Error: Call to undefined function syncJsonResponse() in /home2/moghareh/public_html/api/sync/pending.php:32
+Stack trace:
+#0 {main}
+  thrown in /home2/moghareh/public_html/api/sync/pending.php on line 32
+[24-May-2026 09:10:12 UTC] PHP Fatal error:  Uncaught Error: Call to undefined function syncJsonResponse() in /home2/moghareh/public_html/api/sync/ack.php:43
+Stack trace:
+#0 {main}
+  thrown in /home2/moghareh/public_html/api/sync/ack.php on line 43
+[24-May-2026 09:35:46 UTC] PHP Fatal error:  Uncaught Error: Call to undefined function syncJsonResponse() in /home2/moghareh/public_html/api/sync/ack.php:43
+Stack trace:
+#0 {main}
+  thrown in /home2/moghareh/public_html/api/sync/ack.php on line 43
+[24-May-2026 09:37:55 UTC] PHP Fatal error:  Uncaught Error: Call to undefined function syncJsonResponse() in /home2/moghareh/public_html/api/sync/ack.php:43
+Stack trace:
+#0 {main}
+  thrown in /home2/moghareh/public_html/api/sync/ack.php on line 43
+[24-May-2026 09:39:44 UTC] PHP Fatal error:  Uncaught Error: Call to undefined function syncJsonResponse() in /home2/moghareh/public_html/api/sync/ack.php:43
+Stack trace:
+#0 {main}
+  thrown in /home2/moghareh/public_html/api/sync/ack.php on line 43
+[24-May-2026 09:41:04 UTC] PHP Fatal error:  Uncaught Error: Call to undefined function syncJsonResponse() in /home2/moghareh/public_html/api/sync/ack.php:43
+Stack trace:
+#0 {main}
+  thrown in /home2/moghareh/public_html/api/sync/ack.php on line 43
