@@ -89,7 +89,7 @@ function createImmutableContractSnapshot(
     $serviceType = trim((string)($request['service_type'] ?? 'در حال کارشناسی'));
     $plate = trim((string)($request['plate_number'] ?? '-'));
     $riskFlag = trim((string)($terms['risk_flag'] ?? 'NONE'));
-    $partsLimit = trim((string)($terms['legal_q3_limit_amount'] ?? ''));
+    $purchaseLimitLabel = trim((string)($terms['purchase_limit_option_label'] ?? '-'));
 
     $snapshotHtml = '<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
         . '<title>Contract Snapshot - ' . e($requestCode) . '</title>'
@@ -105,10 +105,10 @@ function createImmutableContractSnapshot(
         . '<p>پلاک: <strong>' . e($plate !== '' ? $plate : '-') . '</strong></p>'
         . '<p>نوع خدمت: <strong>' . e($serviceType) . '</strong></p></section>'
         . '<section class="box"><h2>تاییدات مشتری</h2><ul>'
-        . '<li>تایید خرابی‌های پنهان: <strong>' . (trim((string)($terms['legal_q1_accept'] ?? '')) === '1' ? 'بله' : 'خیر') . '</strong></li>'
-        . '<li>وضعیت بیمه بدنه: <strong>' . e((string)($terms['legal_q2_insurance_label'] ?? '-')) . '</strong></li>'
-        . '<li>سیاست خرید قطعه: <strong>' . e((string)($terms['legal_q3_parts_policy_label'] ?? '-')) . '</strong></li>'
-        . '<li>سقف مجاز خرید قطعه: <strong>' . e($partsLimit !== '' ? $partsLimit : '-') . '</strong></li>'
+        . '<li>تایید خرابی‌های پنهان: <strong>' . (trim((string)($terms['hidden_fault_accepted'] ?? '')) === '1' ? 'بله' : 'خیر') . '</strong></li>'
+        . '<li>وضعیت بیمه بدنه: <strong>' . e((string)($terms['insurance_option_label'] ?? '-')) . '</strong></li>'
+        . '<li>تأیید هشدار بیمه / تست رانندگی: <strong>' . (trim((string)($terms['insurance_warning_accepted'] ?? '0')) === '1' ? 'بله' : 'خیر') . '</strong></li>'
+        . '<li>سقف اختیار خرید قطعه و خدمات مرتبط: <strong>' . e($purchaseLimitLabel !== '' ? $purchaseLimitLabel : '-') . '</strong></li>'
         . '<li>Risk Flag: <strong>' . e($riskFlag) . '</strong></li>'
         . '<li>نام امضاکننده: <strong>' . e((string)($terms['typed_signature'] ?? '-')) . '</strong></li>'
         . '<li>کد ملی امضاکننده: <strong>' . e((string)($terms['signed_national_code'] ?? '-')) . '</strong></li>'
@@ -146,16 +146,16 @@ function insuranceLabel(string $insurance): string
     return '-';
 }
 
-function partsPolicyLabel(string $policy): string
+function purchaseLimitLabel(string $option): string
 {
-    if ($policy === 'ALWAYS_CONFIRM') {
-        return 'قبل از هر خرید قطعه هماهنگ شود';
+    if ($option === 'under_1b_rial') {
+        return 'کمتر از ۱,۰۰۰,۰۰۰,۰۰۰ ریال';
     }
-    if ($policy === 'ALLOW_LIMIT') {
-        return 'مجاز تا سقف مبلغ تعیین‌شده';
+    if ($option === 'between_1b_2_5b_rial') {
+        return 'از ۱,۰۰۰,۰۰۰,۰۰۰ ریال تا ۲,۵۰۰,۰۰۰,۰۰۰ ریال';
     }
-    if ($policy === 'URGENT_LIMIT') {
-        return 'فقط در موارد فوری تا سقف مبلغ تعیین‌شده';
+    if ($option === 'unlimited') {
+        return 'بدون سقف، مطابق نیاز فنی خودرو و تشخیص مجموعه';
     }
     return '-';
 }
@@ -206,7 +206,10 @@ function buildContractPayload(
         $payload['contract_viewed_at'] = (string)$terms['contract_viewed_at'];
     }
     if (in_array('contract_view_closed_at', $columns, true)) {
-        $payload['contract_view_closed_at'] = (string)$terms['contract_view_closed_at'];
+        $payload['contract_view_closed_at'] = (string)($terms['contract_read_confirmed_at'] ?? $terms['contract_viewed_at']);
+    }
+    if (in_array('contract_read_confirmed_at', $columns, true)) {
+        $payload['contract_read_confirmed_at'] = (string)$terms['contract_read_confirmed_at'];
     }
     if (in_array('otp_hash', $columns, true)) {
         $payload['otp_hash'] = $otpHash;
@@ -393,50 +396,50 @@ try {
     }
 
     $contractViewedAt = trim((string)($_POST['contract_viewed_at'] ?? ''));
-    $contractClosedAt = trim((string)($_POST['contract_view_closed_at'] ?? ''));
-    $q1Accept = isset($_POST['legal_q1_accept']) ? '1' : '0';
-    $q2Insurance = trim((string)($_POST['legal_q2_insurance'] ?? ''));
-    $q3PartsPolicy = trim((string)($_POST['legal_q3_parts_policy'] ?? ''));
-    $q3LimitAmountRaw = trim((string)($_POST['legal_q3_limit_amount'] ?? ''));
-    $finalAgreement = isset($_POST['final_agreement']) ? '1' : '0';
+    $contractReadConfirmed = trim((string)($_POST['contract_read_confirmed'] ?? ''));
+    $contractReadConfirmedAt = trim((string)($_POST['contract_read_confirmed_at'] ?? ''));
+    $hiddenFaultAccepted = trim((string)($_POST['hidden_fault_accepted'] ?? ''));
+    $insuranceOption = trim((string)($_POST['insurance_option'] ?? ''));
+    $insuranceWarningAccepted = trim((string)($_POST['insurance_warning_accepted'] ?? '0'));
+    $purchaseLimitOption = trim((string)($_POST['purchase_limit_option'] ?? ''));
+    $uiVersion = trim((string)($_POST['ui_version'] ?? 'contract_ui_v2'));
     $typedSignature = trim((string)($_POST['typed_signature'] ?? ''));
     $signedNationalCode = trim((string)($_POST['signed_national_code'] ?? ''));
     $signatureData = trim((string)($_POST['signature_data'] ?? ''));
 
-    if ($contractViewedAt === '' || $contractClosedAt === '') {
-        flash('ابتدا متن قرارداد را باز کنید و پس از مطالعه پنجره را ببندید.', 'bad');
+    if ($contractViewedAt === '' || $contractReadConfirmed !== '1' || $contractReadConfirmedAt === '') {
+        flash('ابتدا متن قرارداد را باز کنید، مطالعه آن را تأیید کنید و سپس ادامه دهید.', 'bad');
         redirect('customer-contract.php?request_id=' . $requestId);
     }
+
     $viewedTs = strtotime($contractViewedAt);
-    $closedTs = strtotime($contractClosedAt);
-    if (!$viewedTs || !$closedTs || $closedTs < $viewedTs) {
-        flash('ثبت مشاهده قرارداد معتبر نیست. لطفاً قرارداد را دوباره مشاهده کنید.', 'bad');
+    $confirmedTs = strtotime($contractReadConfirmedAt);
+
+    if (!$viewedTs || !$confirmedTs || $confirmedTs < $viewedTs) {
+        flash('ثبت مشاهده و تأیید مطالعه قرارداد معتبر نیست. لطفاً قرارداد را دوباره مشاهده کنید.', 'bad');
         redirect('customer-contract.php?request_id=' . $requestId);
     }
-    if ($q1Accept !== '1') {
-        flash('تایید بند خرابی‌های پنهان الزامی است.', 'bad');
+
+    if ($hiddenFaultAccepted !== '1') {
+        flash('تأیید بند خرابی‌های پنهان و کامپیوتری الزامی است.', 'bad');
         redirect('customer-contract.php?request_id=' . $requestId);
     }
-    if (!in_array($q2Insurance, ['ALLOW', 'NOT_ALLOWED', 'NOT_AVAILABLE'], true)) {
-        flash('انتخاب وضعیت بیمه بدنه الزامی است.', 'bad');
+
+    if (!in_array($insuranceOption, ['ALLOW', 'NOT_ALLOWED', 'NOT_AVAILABLE'], true)) {
+        flash('انتخاب وضعیت تست رانندگی و بیمه بدنه الزامی است.', 'bad');
         redirect('customer-contract.php?request_id=' . $requestId);
     }
-    if (!in_array($q3PartsPolicy, ['ALWAYS_CONFIRM', 'ALLOW_LIMIT', 'URGENT_LIMIT'], true)) {
-        flash('انتخاب سیاست خرید قطعه الزامی است.', 'bad');
+
+    if (
+        in_array($insuranceOption, ['NOT_ALLOWED', 'NOT_AVAILABLE'], true) &&
+        $insuranceWarningAccepted !== '1'
+    ) {
+        flash('برای ادامه، تأیید هشدار مربوط به تست رانندگی و بیمه بدنه الزامی است.', 'bad');
         redirect('customer-contract.php?request_id=' . $requestId);
     }
-    if ($q3PartsPolicy !== 'ALWAYS_CONFIRM') {
-        $numeric = preg_replace('/[^0-9]/', '', $q3LimitAmountRaw) ?? '';
-        if ($numeric === '' || (int)$numeric <= 0) {
-            flash('برای سیاست انتخاب‌شده، تعیین سقف مبلغ قطعه الزامی است.', 'bad');
-            redirect('customer-contract.php?request_id=' . $requestId);
-        }
-        $q3LimitAmountRaw = $numeric;
-    } else {
-        $q3LimitAmountRaw = '';
-    }
-    if ($finalAgreement !== '1') {
-        flash('تایید نهایی قرارداد الزامی است.', 'bad');
+
+    if (!in_array($purchaseLimitOption, ['under_1b_rial', 'between_1b_2_5b_rial', 'unlimited'], true)) {
+        flash('انتخاب سقف اختیار خرید قطعه و خدمات مرتبط الزامی است.', 'bad');
         redirect('customer-contract.php?request_id=' . $requestId);
     }
     if (!isPersianLettersAndSpace($typedSignature)) {
@@ -452,17 +455,19 @@ try {
         redirect('customer-contract.php?request_id=' . $requestId);
     }
 
-    $riskFlag = riskFlagFromInsuranceSelection($q2Insurance);
+    $riskFlag = riskFlagFromInsuranceSelection($insuranceOption);
+
     $terms = [
+        'ui_version' => $uiVersion !== '' ? $uiVersion : 'contract_ui_v2',
         'contract_viewed_at' => $contractViewedAt,
-        'contract_view_closed_at' => $contractClosedAt,
-        'legal_q1_accept' => $q1Accept,
-        'legal_q2_insurance' => $q2Insurance,
-        'legal_q2_insurance_label' => insuranceLabel($q2Insurance),
-        'legal_q3_parts_policy' => $q3PartsPolicy,
-        'legal_q3_parts_policy_label' => partsPolicyLabel($q3PartsPolicy),
-        'legal_q3_limit_amount' => $q3LimitAmountRaw,
-        'final_agreement' => $finalAgreement,
+        'contract_read_confirmed' => '1',
+        'contract_read_confirmed_at' => $contractReadConfirmedAt,
+        'hidden_fault_accepted' => $hiddenFaultAccepted,
+        'insurance_option' => $insuranceOption,
+        'insurance_option_label' => insuranceLabel($insuranceOption),
+        'insurance_warning_accepted' => $insuranceWarningAccepted,
+        'purchase_limit_option' => $purchaseLimitOption,
+        'purchase_limit_option_label' => purchaseLimitLabel($purchaseLimitOption),
         'typed_signature' => $typedSignature,
         'signed_national_code' => $signedNationalCode,
         'signature_data' => $signatureData,
