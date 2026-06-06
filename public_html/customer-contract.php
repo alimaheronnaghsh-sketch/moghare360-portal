@@ -140,195 +140,207 @@ try {
     $closedAt = trim((string)($contractRecord['contract_view_closed_at'] ?? ''));
     $canAnswerQuestions = ($closedAt !== '');
 
-    renderHeader('قرارداد آنلاین پذیرش خودرو', 'تایید حقوقی مشتری');
-    renderFlashes();
-    ?>
-    <main class="auth-wrap wide-auth contract-page">
-      <section class="card contract-summary-card">
-        <h2>خلاصه پذیرش</h2>
-        <div class="contract-summary-grid">
-          <article class="summary-item">
-            <span>نام مشتری</span>
-            <strong><?= e($customerName) ?></strong>
-          </article>
-          <article class="summary-item">
-            <span>خودرو</span>
-            <strong><?= e($vehicleName !== '' ? $vehicleName : '-') ?></strong>
-          </article>
-          <article class="summary-item">
-            <span>کد پرونده</span>
-            <strong class="tracking-code"><?= e($requestCode) ?></strong>
-          </article>
-          <article class="summary-item">
-            <span>نوع خدمت</span>
-            <strong><?= e($serviceType) ?></strong>
-          </article>
-          <article class="summary-item">
-            <span>محدوده هزینه</span>
-            <strong><?= e($costRange) ?></strong>
-          </article>
-          <article class="summary-item">
-            <span>علی‌الحساب</span>
-            <strong><?= e($prepayment) ?></strong>
-          </article>
-          <article class="summary-item">
-            <span>وضعیت مشتری</span>
-            <strong><?= e($vipStatus) ?></strong>
-          </article>
-          <article class="summary-item">
-            <span>شماره موبایل</span>
-            <strong class="mobile-field"><?= e($mobile) ?></strong>
-          </article>
-        </div>
-      </section>
+renderHeader('قرارداد آنلاین پذیرش خودرو', 'تایید حقوقی مشتری');
+renderFlashes();
+?>
+<main class="auth-wrap wide-auth contract-page contract-flow">
+  <section class="card contract-summary-card">
+    <h2>قرارداد آنلاین پذیرش خودرو</h2>
+    <p class="muted">
+      لطفاً ابتدا متن قرارداد را مشاهده کنید. پس از مطالعه و تأیید متن قرارداد، مرحله امضا فعال می‌شود.
+    </p>
 
-      <?php if ($alreadySigned): ?>
-        <section class="card contract-success-card">
-          <h2>قرارداد آنلاین نهایی شد</h2>
-          <p>این قرارداد قبلاً با موفقیت امضا و تایید شده است.</p>
-          <div class="action-row">
-            <a class="btn primary" href="customer-request-status.php?request_id=<?= e((string)$requestId) ?>">مشاهده وضعیت پرونده</a>
-            <a class="btn ghost" href="customer-profile.php?mode=dashboard">بازگشت</a>
-            <a class="btn danger" href="customer-logout.php">خروج از حساب کاربری</a>
-          </div>
-        </section>
-      <?php else: ?>
-        <section class="card contract-viewer-card">
-          <h2>متن رسمی قرارداد</h2>
-          <p class="muted">برای ادامه، ابتدا متن قرارداد را باز کنید، کامل ببینید و پنجره را ببندید.</p>
-          <div class="action-row">
-            <button type="button" class="btn primary large-btn" id="openContractViewer">مشاهده متن قرارداد</button>
-            <a class="btn secondary" target="_blank" rel="noopener" href="contract-template-intake.php?request_id=<?= e((string)$requestId) ?>">نمای رسمی در صفحه جداگانه</a>
-          </div>
-          <p class="muted contract-view-state" id="contractViewState">
-            <?= $canAnswerQuestions ? 'مشاهده قرارداد ثبت شده است. می‌توانید ادامه دهید.' : 'هنوز مشاهده قرارداد ثبت نشده است.' ?>
-          </p>
-          <?php if ($viewedAt !== '' || $closedAt !== ''): ?>
-            <p class="muted tiny-text">
-              مشاهده: <?= e($viewedAt !== '' ? $viewedAt : '-') ?> |
-              بستن پنجره: <?= e($closedAt !== '' ? $closedAt : '-') ?>
-            </p>
-          <?php endif; ?>
-        </section>
+    <div class="contract-summary-grid">
+      <article class="summary-item">
+        <span>نام مشتری</span>
+        <strong><?= e($customerName) ?></strong>
+      </article>
 
-        <?php if ($hasOtpPending && $contractId > 0): ?>
-          <section class="card">
-            <h3>کد تایید قبلاً ارسال شده است</h3>
-            <p class="muted">در صورت دریافت کد، تایید نهایی را ادامه دهید. در غیر این صورت کد جدید بگیرید.</p>
-            <div class="action-row">
-              <a class="btn primary" href="verify-contract-otp.php?request_id=<?= e((string)$requestId) ?>&contract_id=<?= e((string)$contractId) ?>">ادامه تایید OTP</a>
-            </div>
-          </section>
-        <?php endif; ?>
+      <article class="summary-item">
+        <span>خودرو</span>
+        <strong><?= e($vehicleName !== '' ? $vehicleName : '-') ?></strong>
+      </article>
 
-        <form class="card form-card contract-form" method="post" action="send-contract-otp.php" id="contractAgreementForm">
-          <?= csrfField() ?>
-          <input type="hidden" name="request_id" value="<?= e((string)$requestId) ?>">
-          <input type="hidden" name="contract_viewed_at" id="contractViewedAt" value="<?= e($viewedAt) ?>">
-          <input type="hidden" name="contract_view_closed_at" id="contractClosedAt" value="<?= e($closedAt) ?>">
-          <input type="hidden" name="signature_data" id="signatureData" value="<?= e(pickTermValue($terms, 'signature_data')) ?>">
+      <article class="summary-item">
+        <span>کد پرونده</span>
+        <strong class="tracking-code"><?= e($requestCode) ?></strong>
+      </article>
 
-          <fieldset id="contractQuestionsFieldset" <?= $canAnswerQuestions ? '' : 'disabled' ?>>
-            <h2>تایید حقوقی قرارداد</h2>
+      <article class="summary-item">
+        <span>نوع خدمت</span>
+        <strong><?= e($serviceType) ?></strong>
+      </article>
 
-            <div class="contract-question">
-              <p>خرابی‌های پنهان، کامپیوتری و ایرادات غیرقابل مشاهده در لحظه پذیرش را مطالعه کردم و می‌پذیرم.</p>
-              <label class="checkbox-line">
-                <input type="checkbox" name="legal_q1_accept" value="1" <?= pickTermValue($terms, 'legal_q1_accept') === '1' ? 'checked' : '' ?>>
-                می‌پذیرم
-              </label>
-            </div>
+      <article class="summary-item">
+        <span>محدوده هزینه</span>
+        <strong><?= e($costRange) ?></strong>
+      </article>
 
-            <div class="contract-question">
-              <p>وضعیت استفاده از بیمه بدنه در صورت حادثه احتمالی:</p>
-              <?php $q2 = pickTermValue($terms, 'legal_q2_insurance'); ?>
-              <label class="radio-line">
-                <input type="radio" name="legal_q2_insurance" value="ALLOW" <?= $q2 === 'ALLOW' ? 'checked' : '' ?>>
-                اجازه استفاده از بیمه بدنه خودرو را می‌دهم.
-              </label>
-              <label class="radio-line">
-                <input type="radio" name="legal_q2_insurance" value="NOT_ALLOWED" <?= $q2 === 'NOT_ALLOWED' ? 'checked' : '' ?>>
-                اجازه استفاده از بیمه بدنه خودرو را نمی‌دهم.
-              </label>
-              <label class="radio-line">
-                <input type="radio" name="legal_q2_insurance" value="NOT_AVAILABLE" <?= $q2 === 'NOT_AVAILABLE' ? 'checked' : '' ?>>
-                خودرو بیمه بدنه ندارد / اطلاع ندارم.
-              </label>
-            </div>
+      <article class="summary-item">
+        <span>علی‌الحساب</span>
+        <strong><?= e($prepayment) ?></strong>
+      </article>
 
-            <div class="contract-question">
-              <p>سیاست خرید قطعه:</p>
-              <?php $q3 = pickTermValue($terms, 'legal_q3_parts_policy'); ?>
-              <label class="radio-line">
-                <input type="radio" name="legal_q3_parts_policy" value="ALWAYS_CONFIRM" <?= $q3 === 'ALWAYS_CONFIRM' ? 'checked' : '' ?>>
-                قبل از هر خرید قطعه با من هماهنگ شود.
-              </label>
-              <label class="radio-line">
-                <input type="radio" name="legal_q3_parts_policy" value="ALLOW_LIMIT" <?= $q3 === 'ALLOW_LIMIT' ? 'checked' : '' ?>>
-                مجموعه تا سقف مبلغ تعیین‌شده مجاز به خرید قطعه است.
-              </label>
-              <label class="radio-line">
-                <input type="radio" name="legal_q3_parts_policy" value="URGENT_LIMIT" <?= $q3 === 'URGENT_LIMIT' ? 'checked' : '' ?>>
-                در موارد فوری تا سقف مبلغ تعیین‌شده مجاز به خرید قطعه است.
-              </label>
-              <label>سقف مبلغ مجاز (تومان)
-                <input class="input-number price-field" type="number" min="0" step="10000" name="legal_q3_limit_amount" id="partsLimitAmount" value="<?= e(pickTermValue($terms, 'legal_q3_limit_amount')) ?>" placeholder="مثلاً 5000000">
-              </label>
-            </div>
+      <article class="summary-item">
+        <span>وضعیت مشتری</span>
+        <strong><?= e($vipStatus) ?></strong>
+      </article>
 
-            <label class="checkbox-line final-agree-line">
-              <input type="checkbox" name="final_agreement" value="1" <?= pickTermValue($terms, 'final_agreement') === '1' ? 'checked' : '' ?>>
-              متن قرارداد و شرایط پذیرش را مطالعه کردم و با آن موافقم.
-            </label>
+      <article class="summary-item">
+        <span>شماره موبایل</span>
+        <strong class="mobile-field"><?= e($mobile) ?></strong>
+      </article>
+    </div>
+  </section>
 
-            <div class="contract-signature-box">
-              <label>نام و نام خانوادگی جهت امضا
-                <input name="typed_signature" required value="<?= e(pickTermValue($terms, 'typed_signature', $customerName)) ?>" placeholder="نام کامل فارسی">
-              </label>
-              <label>کد ملی امضاکننده
-                <input class="national-code-field input-number" name="signed_national_code" inputmode="numeric" maxlength="10" required value="<?= e(pickTermValue($terms, 'signed_national_code')) ?>">
-              </label>
-              <label>امضای دیجیتال (با انگشت یا قلم)
-                <canvas id="signaturePad" class="signature-pad" width="650" height="180"></canvas>
-              </label>
-              <div class="action-row">
-                <button class="btn ghost" type="button" id="clearSignatureBtn">پاک کردن امضا</button>
-                <span class="muted tiny-text">زمان امضا در لحظه ارسال نهایی ثبت می‌شود.</span>
-              </div>
-            </div>
-          </fieldset>
+  <?php if ($alreadySigned): ?>
+    <section class="card contract-success-card">
+      <h2>قرارداد آنلاین نهایی شد</h2>
+      <p>این قرارداد قبلاً با موفقیت امضا و تأیید شده است.</p>
 
-          <div class="action-row">
-            <button class="btn primary" type="submit">ارسال کد تایید قرارداد</button>
-            <a class="btn ghost" href="customer-request-status.php?request_id=<?= e((string)$requestId) ?>">بازگشت</a>
-            <a class="btn danger" href="customer-logout.php">خروج از حساب کاربری</a>
-          </div>
-        </form>
-      <?php endif; ?>
-    </main>
-
-    <section class="modal-overlay" id="contractViewerModal" aria-hidden="true">
-      <div class="modal-card contract-modal-card">
-        <div class="contract-modal-header">
-          <h3>متن رسمی قرارداد پذیرش</h3>
-          <button type="button" class="btn ghost" id="closeContractViewer">بستن</button>
-        </div>
-        <iframe
-          src="contract-template-intake.php?request_id=<?= e((string)$requestId) ?>"
-          title="قرارداد رسمی پذیرش"
-          class="contract-viewer-frame"
-          loading="lazy"
-        ></iframe>
+      <div class="action-row">
+        <a class="btn primary" href="customer-request-status.php?request_id=<?= e((string)$requestId) ?>">مشاهده وضعیت پرونده</a>
+        <a class="btn ghost" href="customer-profile.php?mode=dashboard">بازگشت</a>
+        <a class="btn danger" href="customer-logout.php">خروج از حساب کاربری</a>
       </div>
     </section>
+  <?php else: ?>
 
-    <script>
-      window.MOGHARE360_CONTRACT_FLOW = {
-        canAnswerQuestions: <?= $canAnswerQuestions ? 'true' : 'false' ?>
-      };
-    </script>
-    <?php
-    renderFooter();
-} catch (Throwable $e) {
-    showErrorPage('خطا در نمایش قرارداد مشتری.', $e->getMessage());
-}
+    <section class="card contract-viewer-card">
+      <h2>متن رسمی قرارداد</h2>
+      <p class="muted">
+        برای ادامه، متن قرارداد را باز کنید. فقط پس از تیک مطالعه قرارداد و بستن تأییدی، مرحله امضا فعال می‌شود.
+      </p>
+
+      <div class="action-row">
+        <button type="button" class="btn primary large-btn" id="openContractViewer">
+          مشاهده متن قرارداد
+        </button>
+
+        <a class="btn secondary" target="_blank" rel="noopener" href="contract-template-intake.php?request_id=<?= e((string)$requestId) ?>">
+          نمای رسمی در صفحه جداگانه
+        </a>
+      </div>
+
+      <p class="muted contract-view-state" id="contractViewState">
+        هنوز متن قرارداد با تأیید مطالعه بسته نشده است.
+      </p>
+    </section>
+
+    <?php if ($hasOtpPending && $contractId > 0): ?>
+      <section class="card">
+        <h3>کد تأیید قبلاً ارسال شده است</h3>
+        <p class="muted">
+          در صورت دریافت کد، تأیید نهایی را ادامه دهید. در غیر این صورت کد جدید بگیرید.
+        </p>
+
+        <div class="action-row">
+          <a class="btn primary" href="verify-contract-otp.php?request_id=<?= e((string)$requestId) ?>&contract_id=<?= e((string)$contractId) ?>">
+            ادامه تأیید OTP
+          </a>
+        </div>
+      </section>
+    <?php endif; ?>
+
+    <form class="card form-card contract-form" method="post" action="send-contract-otp.php" id="contractAgreementForm">
+      <?= csrfField() ?>
+
+      <input type="hidden" name="request_id" value="<?= e((string)$requestId) ?>">
+      <input type="hidden" name="contract_viewed_at" id="contractViewedAt" value="">
+      <input type="hidden" name="contract_read_confirmed" id="contractReadConfirmed" value="1">
+      <input type="hidden" name="contract_read_confirmed_at" id="contractReadConfirmedAt" value="">
+      <input type="hidden" name="signature_data" id="signatureData" value="">
+
+      <input type="hidden" name="hidden_fault_accepted" id="hiddenFaultAccepted" value="">
+      <input type="hidden" name="insurance_option" id="insuranceOption" value="">
+      <input type="hidden" name="insurance_warning_accepted" id="insuranceWarningAccepted" value="0">
+      <input type="hidden" name="purchase_limit_option" id="purchaseLimitOption" value="">
+      <input type="hidden" name="ui_version" value="contract_ui_v2">
+
+      <section id="signatureBox" class="contract-signature-box hidden">
+        <h2>امضا و تأیید اولیه قرارداد</h2>
+
+        <p class="muted">
+          متن قرارداد توسط شما مشاهده و تأیید شد. لطفاً اطلاعات امضا را تکمیل کنید.
+        </p>
+
+        <label>
+          نام و نام خانوادگی جهت امضا
+          <input id="typedSignature" name="typed_signature" required value="<?= e($customerName) ?>" placeholder="نام کامل فارسی">
+        </label>
+
+        <label>
+          کد ملی امضاکننده
+          <input id="signedNationalCode" class="national-code-field input-number" name="signed_national_code" inputmode="numeric" maxlength="10" required>
+        </label>
+
+        <label>
+          امضای دیجیتال
+          <canvas id="signaturePad" class="signature-pad" width="650" height="180"></canvas>
+        </label>
+
+        <div class="action-row">
+          <button class="btn ghost" type="button" id="clearSignatureBtn">پاک کردن امضا</button>
+          <span class="muted tiny-text">زمان امضا در لحظه ارسال نهایی ثبت می‌شود.</span>
+        </div>
+
+        <div class="action-row">
+          <button class="btn primary" type="button" id="startQuestionsBtn">
+            ثبت امضا و ادامه تأییدهای نهایی
+          </button>
+
+          <a class="btn ghost" href="customer-request-status.php?request_id=<?= e((string)$requestId) ?>">بازگشت</a>
+          <a class="btn danger" href="customer-logout.php">خروج از حساب کاربری</a>
+        </div>
+      </section>
+    </form>
+  <?php endif; ?>
+</main>
+
+<section class="modal-overlay" id="contractViewerModal" aria-hidden="true">
+  <div class="modal-card contract-modal-card">
+    <div class="contract-modal-header">
+      <h3>متن رسمی قرارداد پذیرش</h3>
+      <button type="button" class="btn ghost" id="closeContractViewer">
+        بستن بدون تأیید
+      </button>
+    </div>
+
+    <iframe
+      src="contract-template-intake.php?request_id=<?= e((string)$requestId) ?>"
+      title="قرارداد رسمی پذیرش"
+      class="contract-viewer-frame"
+      loading="lazy"
+    ></iframe>
+
+    <div class="contract-read-confirm-box">
+      <label class="checkbox-line">
+        <input type="checkbox" id="contractReadConfirm">
+        متن کامل قرارداد را مطالعه کردم و با آگاهی درخواست ادامه فرآیند امضا را دارم.
+      </label>
+
+      <button type="button" class="btn primary" id="closeAfterReadBtn" disabled>
+        متن قرارداد را مطالعه کردم و می‌بندم
+      </button>
+
+      <p class="muted tiny-text">
+        بدون تأیید مطالعه قرارداد، مرحله امضا فعال نمی‌شود.
+      </p>
+    </div>
+  </div>
+</section>
+
+<section class="modal-overlay" id="contractQuestionModal" aria-hidden="true">
+  <div class="modal-card contract-modal-card contract-question-modal">
+    <div class="contract-modal-header">
+      <h3 id="contractQuestionTitle">سؤال تأییدی</h3>
+    </div>
+
+    <div id="contractQuestionBody" class="contract-question-body"></div>
+
+    <div id="contractQuestionActions" class="question-actions"></div>
+  </div>
+</section>
+
+<script src="contract-flow.js"></script>
+<?php
