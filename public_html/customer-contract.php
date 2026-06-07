@@ -344,3 +344,9 @@ renderFlashes();
 
 <script src="contract-flow.js"></script>
 <?php
+<script src="contract-flow.js"></script>
+<?php
+    renderFooter();
+} catch (Throwable $e) {
+    showErrorPage('خطا در نمایش قرارداد مشتری.', $e->getMessage());
+}
