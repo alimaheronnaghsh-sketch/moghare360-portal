@@ -10,7 +10,7 @@ body {
     radial-gradient(circle at 15% 10%, rgba(27, 153, 126, 0.25), transparent 28%),
     linear-gradient(135deg, #050807 0%, #101715 45%, #070b0a 100%);
   color: #eef7f3;
-  font-family: Tahoma, Arial, sans-serif;
+  font-family: "Vazirmatn", "Tahoma", Arial, sans-serif;
   line-height: 1.8;
 }
 
