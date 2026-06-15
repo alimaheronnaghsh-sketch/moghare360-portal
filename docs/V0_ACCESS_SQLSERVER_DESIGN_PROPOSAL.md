@@ -1,4 +1,6 @@
+<<<<<<< HEAD
 # MOGHARE360 — Version 0 Access Lifecycle SQL Server Database Design Proposal
+
 ## Document metadata
 
 | Field | Value |
@@ -25,10 +27,12 @@
 
 **Explicitly excluded in Version 0:** `core_user_permissions` (no direct user → permission grants).
 
+---
 
 ## Entity relationship summary
 
 ```
+=======
 MOGHARE360 — Version 0 Access Lifecycle SQL Server Database Design Proposal
 
 Document metadata
