@@ -1,0 +1,6 @@
+# MOGHARE360 ERP local/private config
+private/erp-config.php
+*.local.php
+.env
+.env.*
+!.env.example
