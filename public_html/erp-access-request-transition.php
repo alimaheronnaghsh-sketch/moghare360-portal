@@ -18,10 +18,35 @@ declare(strict_types=1);
  * This page does not perform database writes.
  */
 
-require_once __DIR__ . '/../includes/erp-auth-context.php';
-require_once __DIR__ . '/../includes/erp-csrf.php';
-require_once __DIR__ . '/../includes/erp-permission-check.php';
-require_once __DIR__ . '/../includes/erp-workflow-engine.php';
+if (!function_exists('erp_access_request_transition_require_helper')) {
+    function erp_access_request_transition_require_helper(string $helper_file): void
+    {
+        $helper_file = trim($helper_file);
+
+        if ($helper_file === '') {
+            throw new RuntimeException('ERP helper file name is required.');
+        }
+
+        $candidate_paths = [
+            __DIR__ . '/../includes/' . $helper_file,
+            __DIR__ . '/includes/' . $helper_file,
+        ];
+
+        foreach ($candidate_paths as $candidate_path) {
+            if (is_file($candidate_path)) {
+                require_once $candidate_path;
+                return;
+            }
+        }
+
+        throw new RuntimeException('Required ERP helper not found: ' . $helper_file);
+    }
+}
+
+erp_access_request_transition_require_helper('erp-auth-context.php');
+erp_access_request_transition_require_helper('erp-csrf.php');
+erp_access_request_transition_require_helper('erp-permission-check.php');
+erp_access_request_transition_require_helper('erp-workflow-engine.php');
 
 const ERP_ACCESS_REQUEST_TRANSITION_FORM_KEY = 'access_request_submit';
 const ERP_ACCESS_REQUEST_TRANSITION_PERMISSION = 'access_request.submit';
