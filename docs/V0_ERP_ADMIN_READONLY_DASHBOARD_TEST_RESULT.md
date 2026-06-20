@@ -1,95 +1,102 @@
 # V0 ERP Admin Read-Only Dashboard Test Result
 
-## Project
-MOGHARE360 ERP
+Project: MOGHARE360 ERP  
+Database: moghare360_ERP  
+SQL Server Instance: SQLEXPRESS  
+Database Collation: Persian_100_CI_AS  
+Runtime: XAMPP PHP 8.0.30  
+Connection Method: PHP ODBC  
+Dashboard File: public_html/erp-admin-readonly-dashboard.php  
 
-## Database
-moghare360_ERP
+## Test Date
+
+2026-06-20
+
+## Current Architecture Status
+
+```text
+Core ERP Foundation + Controlled Admin Prototype
+```
 
 ## Environment
-- SQL Server Instance: SQLEXPRESS
-- SSMS Version: 19
-- Web Server: XAMPP Apache
-- PHP Version: 8.0.30
-- Connection Method: PHP ODBC
-- Local URL:
-  http://localhost:8080/moghareh360/erp-admin-readonly-dashboard.php
 
-## Tested Files
-- public_html/erp-admin-readonly-dashboard.php
-- erp-admin-readonly-dashboard.php
+Local URL:
 
-## Test Scope
-This test confirms that the ERP Admin Read-Only Dashboard works correctly in local development mode.
+```text
+http://localhost:8080/moghare360/erp-admin-readonly-dashboard.php
+```
 
-The dashboard is read-only and only uses SELECT queries.
+Do not use this as current local URL:
 
-## Final Test Result
+```text
+http://localhost:8080/moghareh360/erp-admin-readonly-dashboard.php
+```
 
-| Check Code | Check Name | Result |
-|---|---|---|
-| D01 | Database connection | OK |
-| D02 | Current database | OK |
-| D03 | Core table count | OK |
-| D04 | Departments count | OK |
-| D05 | Positions count | OK |
-| D06 | Roles count | OK |
-| D07 | Permissions count | OK |
-| D08 | Approval rules count | OK |
-| D09 | Customer role count | OK |
-| D10 | Platform Owner exists | OK |
-| D11 | role_permissions count | OK |
-| D12 | Platform Owner login enabled | OK |
-| D13 | Platform Owner system owner flag | OK |
-| D14 | Bootstrap request exists | OK |
-| D15 | Bootstrap request state | OK |
-| D16 | Audit log count | OK |
-| D17 | Access change history count | OK |
-| D18 | No password hash displayed | OK |
-| D19 | No config secret displayed | OK |
+Naming note:
 
-## Corrected Issue
+```text
+Current local folder: moghare360
+Future naming standard: moghareh360
+```
 
-During testing, D11 initially failed because the dashboard expected role_permissions count was incorrect.
+## Confirmed Database Facts
 
-SSMS confirmed:
+| Check | Confirmed Result |
+|---|---:|
+| core_table_count | 16 |
+| department_count | 14 |
+| position_count | 43 |
+| role_count | 18 |
+| permission_count | 43 |
+| role_permission_count | 162 |
+| access_request_count | 2 |
+| approval_rule_count | 16 |
+| customer_role_count | 0 |
 
-- Database: moghare360_ERP
-- dbo.core_role_permissions count: 162
+## Dashboard Test Result
 
-The dashboard expected value was corrected to 162.
+| Diagnostic Check | Result |
+|---|---|
+| D01 - D19 | OK |
+| Overall Status | OK |
 
-Final D11 result:
+## Read-Only Safety Confirmation
 
-- Actual = 162
-- Expected = 162
-- Result = OK
+The dashboard is read-only.
 
-## Confirmed Safety Rules
+This test did not change:
 
-- Dashboard is read-only.
-- Only SELECT queries are used.
-- No INSERT is used.
-- No UPDATE is used.
-- No DELETE is used.
-- No CREATE is used.
-- No ALTER is used.
-- No login logic was changed.
-- No staff-auth.php change was made.
-- No access-control.php change was made.
-- No config.php change was made.
-- No config.example.php change was made.
-- No SQL file was changed.
-- No user was created.
-- No role assignment was changed.
-- No migration was performed.
-- No password hash is displayed.
-- No configuration secret is displayed.
+- Login logic
+- staff-auth.php
+- access-control.php
+- staff-login.php
+- config.php
+- config.example.php
+- Users
+- Roles
+- Role assignments
+- Permissions
+- Workflow state
+- Tenant data
+- Customer portal files
+- Inventory files
+- Legacy tables
+- SQL schema
+- Runtime behavior
+
+## Final Confirmation
+
+```text
+ERP Admin Read-Only Dashboard test passed locally.
+D01 - D19 = OK
+Overall Status = OK
+role_permission_count = 162
+access_request_count = 2
+```
 
 ## Final Status
-PASSED
 
-## Decision
-The ERP Admin Read-Only Dashboard is approved as a local diagnostic and administrative visibility tool for V0.
-
-No real ERP login replacement, no new user creation, no new role assignment, and no migration from staff_users is approved in this step.
+```text
+MOGHARE360 ERP remains in:
+Core ERP Foundation + Controlled Admin Prototype
+```

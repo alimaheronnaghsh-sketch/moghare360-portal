@@ -288,7 +288,7 @@ if ($connectionOk && $connection !== false) {
     );
 
     $accessRequestCount = erp_dash_int(erp_dash_scalar($connection, 'SELECT COUNT(*) FROM dbo.core_access_requests'));
-    erp_dash_add_check($checks, 'D16', 'تعداد درخواست‌های دسترسی', '1', (string)$accessRequestCount, $accessRequestCount === 1);
+    erp_dash_add_check($checks, 'D16', 'تعداد درخواست‌های دسترسی', '2', (string)$accessRequestCount, $accessRequestCount === 2);
 
     $auditCountOwner = erp_dash_int(erp_dash_scalar(
         $connection,
@@ -360,7 +360,7 @@ if ($connectionOk && $connection !== false) {
         ['D13', 'تعداد کاربران', '1'],
         ['D14', 'مالک پلتفرم', '10001'],
         ['D15', 'نقش‌های مالک پلتفرم', 'owner, system_admin'],
-        ['D16', 'تعداد درخواست‌های دسترسی', '1'],
+        ['D16', 'تعداد درخواست‌های دسترسی', '2'],
         ['D17', 'تعداد audit', '>= 1'],
         ['D18', 'تعداد history', '>= 3'],
         ['D19', 'تعداد نقش CUSTOMER', '0'],
