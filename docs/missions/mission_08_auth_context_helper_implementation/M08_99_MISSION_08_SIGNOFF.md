@@ -1,18 +1,30 @@
-# Mission 8 Signoff
+# Mission 8 - Signoff
 
-Project: MOGHARE360 ERP
-Mission: Mission 8
-Document Type: Mission Signoff
-Status: PENDING UNTIL CLI AND BROWSER TESTS PASS
-Scope: Auth Context Helper Implementation
+## Status
+SIGNED OFF
 
 ## Mission
 Mission 8 - Auth Context Helper Implementation Pack
 
-## Decision
-Mission 8 implements the approved Auth Context helper and test surfaces only.
+## Completed Files
+- includes/erp-auth-context.php
+- tools/test-erp-auth-context.php
+- public_html/erp-auth-context-readonly-test.php
+- docs/missions/mission_08_auth_context_helper_implementation/
 
-## Confirmed Design Boundaries
+## Confirmed Implementation
+- Auth Context helper implemented
+- CLI test OK
+- Browser read-only test OK
+- user_id 10001 loaded
+- roles loaded
+- permissions loaded
+- can access.request.approve OK
+- can access.request.apply OK
+- tenant placeholder implemented
+- Read-Only test page OK
+
+## Confirmed Security Boundaries
 - No login replacement
 - No users created
 - No roles assigned
@@ -22,23 +34,7 @@ Mission 8 implements the approved Auth Context helper and test surfaces only.
 - No Customer Portal change
 - No legacy file change
 - No production deploy
-- No Real Assignment
-- No core_user_roles write
-- No core_access_request_items update
+- No forbidden files changed
 
-## Implemented Files
-- includes/erp-auth-context.php
-- tools/test-erp-auth-context.php
-- public_html/erp-auth-context-readonly-test.php
-
-## Test Requirement
-Mission 8 signoff is allowed only after:
-- PHP syntax tests pass
-- CLI auth context test passes with Overall: OK
-- Browser read-only test passes with Overall Status = OK
-- Forbidden file check confirms no unauthorized changes
-
-## Final Signoff
-Status: PENDING UNTIL CLI AND BROWSER TESTS PASS
-
-Mission 8 is completed only after tests pass, this signoff is updated, and Mission 8 files are committed and pushed.
+## Final Decision
+Mission 8 is signed off after this document update is committed and pushed.
