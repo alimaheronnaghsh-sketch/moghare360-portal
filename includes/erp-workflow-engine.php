@@ -18,6 +18,7 @@ declare(strict_types=1);
  * - DRAFT -> SUBMITTED
  * - SUBMITTED -> UNDER_REVIEW
  * - UNDER_REVIEW -> APPROVED
+ * - APPROVED -> APPLIED
  */
 
 if (!function_exists('erp_workflow_normalize_value')) {
@@ -51,6 +52,9 @@ if (!function_exists('erp_workflow_get_allowed_transitions')) {
                 ],
                 'UNDER_REVIEW' => [
                     'APPROVED',
+                ],
+                'APPROVED' => [
+                    'APPLIED',
                 ],
             ],
         ];
