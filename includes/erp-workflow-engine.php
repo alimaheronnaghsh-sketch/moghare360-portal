@@ -17,6 +17,7 @@ declare(strict_types=1);
  * Entity: access_request
  * - DRAFT -> SUBMITTED
  * - SUBMITTED -> UNDER_REVIEW
+ * - UNDER_REVIEW -> APPROVED
  */
 
 if (!function_exists('erp_workflow_normalize_value')) {
@@ -47,6 +48,9 @@ if (!function_exists('erp_workflow_get_allowed_transitions')) {
                 ],
                 'SUBMITTED' => [
                     'UNDER_REVIEW',
+                ],
+                'UNDER_REVIEW' => [
+                    'APPROVED',
                 ],
             ],
         ];
