@@ -1,107 +1,159 @@
 # Mission 17 - Test Result
 
 ## Status
-PENDING UNTIL USER RUNS TESTS
+
+PASSED
 
 ## SQL Execution Test
-Status: PENDING UNTIL USER RUNS TESTS
 
-Script:
-public_html/sql/sqlserver/mission_17_jobcard_foundation.sql
+PASSED
 
-Result:
-Pending
+Confirmed:
+
+* SQL foundation script executed manually in SSMS
+* Database = moghare360_ERP
+* JobCard foundation tables created
+* No DROP
+* No TRUNCATE
+* No destructive migration
+* No legacy table modification
+
+Created tables:
+
+* dbo.erp_jobcards
+* dbo.erp_jobcard_change_history
 
 ## PHP Syntax Test
-Status: PENDING UNTIL USER RUNS TESTS
 
-Commands:
-```powershell
-C:\xampp\php\php.exe -l public_html\erp-jobcard-create.php
-C:\xampp\php\php.exe -l public_html\erp-jobcard-readonly-list.php
-C:\xampp\php\php.exe -l public_html\erp-jobcard-detail.php
-C:\xampp\php\php.exe -l tools\test-erp-jobcard-foundation.php
-```
+PASSED
 
-Result:
-Pending
+Confirmed:
+
+* public_html/erp-jobcard-create.php = No syntax errors
+* public_html/erp-jobcard-readonly-list.php = No syntax errors
+* public_html/erp-jobcard-detail.php = No syntax errors
+* tools/test-erp-jobcard-foundation.php = No syntax errors
 
 ## CLI Foundation Test
-Status: PENDING UNTIL USER RUNS TESTS
 
-Command:
-```powershell
-C:\xampp\php\php.exe tools\test-erp-jobcard-foundation.php
-```
+PASSED
 
-Expected:
-- Overall: OK
+Confirmed:
 
-Result:
-Pending
+* M17 JOBCARD FOUNDATION TEST = OK
+* user_id = 10001
+* roles = owner, system_admin
+* permissions loaded = 43
+* table erp_jobcards = OK
+* table erp_jobcard_change_history = OK
+* customer_vehicle_foundation = OK
+* test relation relation_id 1 = OK
+* guard jobcard.create = PLACEHOLDER_OWNER_ALLOWED
+* guard jobcard.view = PLACEHOLDER_OWNER_ALLOWED
+* guard jobcard.list = PLACEHOLDER_OWNER_ALLOWED
+* No write performed by test = OK
+* Overall = OK
 
 ## Browser Create Test
-Status: PENDING UNTIL USER RUNS TESTS
 
-URL:
-http://localhost:8080/moghare360/erp-jobcard-create.php
+PASSED
 
-Expected:
-- Overall Status = OK after valid POST
+Confirmed:
 
-Result:
-Pending
+* URL = http://localhost:8080/moghare360/erp-jobcard-create.php
+* Auth Context loaded
+* Permission Guard loaded
+* CSRF required
+* Controlled POST create succeeded
+* Created JobCard ID = 1
+* jobcard_number = JC-20260621231416-1740
+* customer_id = 1
+* vehicle_id = 1
+* relation_id = 1
+* jobcard_status = RECEIVED
+* Audit/History = RECORDED
+* Overall Status = OK
 
 ## Browser Read-Only List Test
-Status: PENDING UNTIL USER RUNS TESTS
 
-URL:
-http://localhost:8080/moghare360/erp-jobcard-readonly-list.php
+PASSED
 
-Expected:
-- Overall Status = OK
+Confirmed:
 
-Result:
-Pending
+* URL = http://localhost:8080/moghare360/erp-jobcard-readonly-list.php
+* Created JobCard visible
+* JobCard ID = 1
+* JobCard Number = JC-20260621231416-1740
+* Customer = Amir Ali Maher
+* Mobile = 09128166648
+* Vehicle = Toyota Camry
+* Plate/VIN = TEST-M15-001
+* Status = RECEIVED
+* Detail link visible
+* Read-only list confirmed
 
 ## Browser Detail Test
-Status: PENDING UNTIL USER RUNS TESTS
 
-URL:
-http://localhost:8080/moghare360/erp-jobcard-detail.php
+PASSED
 
-Expected:
-- Overall Status = OK
+Confirmed:
 
-Result:
-Pending
+* URL = http://localhost:8080/moghare360/erp-jobcard-detail.php?jobcard_id=1
+* JobCard ID = 1
+* JobCard Number = JC-20260621231416-1740
+* Status = RECEIVED
+* Priority = NORMAL
+* Lifecycle State = ACTIVE
+* JOBCARD_CREATED visible
+* JOBCARD_RECEIVED visible
+
+## Table Count Test
+
+PASSED
+
+Confirmed:
+
+* erp_jobcards = 1
+* erp_jobcard_change_history = 2
 
 ## History / Audit Test
-Status: PENDING UNTIL USER RUNS TESTS
 
-Expected:
-- JOBCARD_CREATED
-- JOBCARD_RECEIVED when status is RECEIVED
+PASSED
 
-Result:
-Pending
+Confirmed:
+
+* JOBCARD_CREATED = OK
+* JOBCARD_RECEIVED = OK
+* changed_by_user_id = 10001
+* Audit/History rows created = 2
 
 ## Forbidden Scope Check
-Status: PENDING UNTIL USER RUNS TESTS
 
-Expected:
-- No Service Operation created
-- No Inventory write
-- No Finance write
-- No Customer Portal changed
-- No legacy file changed
-- No forbidden files changed
+PASSED
 
-Result:
-Pending
+Confirmed:
+
+* No Service Operation write
+* No Inventory write
+* No Finance write
+* No Delivery write
+* No Invoice write
+* No Payment write
+* No Customer Portal change
+* No legacy file change
+* No customer login created
+* No config change
+* No login replacement
+* No staff-auth.php change
+* No access-control.php change
+* No core_user_roles write
+* No access request workflow write
+* No role assignment
+* No permission mutation
+* No tenant implementation
+* No production deploy
+* No forbidden files changed
 
 ## Final Test Result
-Status: PENDING UNTIL USER RUNS TESTS
 
-Final Result:
-Pending
+Mission 17 tests passed.

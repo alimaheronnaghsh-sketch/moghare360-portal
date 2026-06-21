@@ -1,54 +1,89 @@
-# Mission 17 Signoff
+# Mission 17 - Signoff
 
-Project: MOGHARE360 ERP
-Mission: Mission 17
-Document Type: Mission Signoff
-Status: PENDING UNTIL SQL, CLI, BROWSER CREATE, LIST, DETAIL, AND HISTORY TESTS PASS
-Scope: JobCard Controlled Create Prototype
+## Status
+
+SIGNED OFF
 
 ## Mission
+
 Mission 17 - JobCard Controlled Create Prototype
 
-## Decision
-Mission 17 introduces ERP JobCard foundation SQL script and controlled create, list, and detail prototype pages.
+## Completed Files
+
+* public_html/sql/sqlserver/mission_17_jobcard_foundation.sql
+* public_html/erp-jobcard-create.php
+* public_html/erp-jobcard-readonly-list.php
+* public_html/erp-jobcard-detail.php
+* tools/test-erp-jobcard-foundation.php
+* docs/missions/mission_17_jobcard_controlled_create/
+
+## Confirmed Implementation
+
+* JobCard SQL foundation implemented
+* Controlled JobCard create page implemented
+* Read-only JobCard list page implemented
+* Read-only JobCard detail page implemented
+* CLI foundation test implemented
+* SQL executed manually in SSMS
+* Browser controlled create test OK
+* Browser read-only list test OK
+* Browser detail test OK
+* History / Audit records created
+* CSRF required
+* Auth Context used
+* Permission Guard used
+* Controlled transaction used
+* Safe error handling used
+* Identity retrieval stabilized without OUTPUT INSERTED or SCOPE_IDENTITY
+
+## Created Test Record
+
+* Created JobCard ID = 1
+* jobcard_number = JC-20260621231416-1740
+* customer_id = 1
+* vehicle_id = 1
+* relation_id = 1
+* jobcard_status = RECEIVED
+
+## Confirmed Table Counts
+
+* erp_jobcards = 1
+* erp_jobcard_change_history = 2
+
+## Confirmed History / Audit
+
+* JOBCARD_CREATED
+* JOBCARD_RECEIVED
+* changed_by_user_id = 10001
 
 ## Confirmed Security Boundaries
-- Controlled JobCard Create Prototype pending test
-- No Service Operation created
-- No Inventory write
-- No Finance write
-- No Delivery write
-- No Customer Portal changed
-- No legacy file changed
-- No customer login created
-- No forbidden files changed
-- No core_user_roles write
-- No access request workflow write
-- No role assignment
-- No permission mutation
-- No tenant implementation
-- No production deploy
 
-## Implemented Files
-- public_html/sql/sqlserver/mission_17_jobcard_foundation.sql
-- public_html/erp-jobcard-create.php
-- public_html/erp-jobcard-readonly-list.php
-- public_html/erp-jobcard-detail.php
-- tools/test-erp-jobcard-foundation.php
-- docs/missions/mission_17_jobcard_controlled_create/
+* Auth Context used
+* Permission Guard used
+* CSRF required
+* Controlled transaction used
+* Safe error handling used
+* No Service Operation write
+* No Inventory write
+* No Finance write
+* No Delivery write
+* No Invoice write
+* No Payment write
+* No Customer Portal change
+* No legacy file change
+* No customer login created
+* No config change
+* No login replacement
+* No staff-auth.php change
+* No access-control.php change
+* No core_user_roles write
+* No access request workflow write
+* No role assignment
+* No permission mutation
+* No tenant implementation
+* No production deploy
+* No forbidden files changed
 
-## Test Requirement
-Mission 17 signoff is allowed only after:
-- SQL script executed manually in SSMS
-- PHP syntax tests pass
-- CLI foundation test passes with Overall: OK
-- Browser create test passes with Overall Status = OK
-- Browser read-only list test passes with Overall Status = OK
-- Browser detail test passes with Overall Status = OK
-- History/audit rows confirmed after create
-- Forbidden scope check confirms no unauthorized changes
+## Final Decision
 
-## Final Signoff
-Status: PENDING UNTIL SQL, CLI, BROWSER CREATE, LIST, DETAIL, AND HISTORY TESTS PASS
-
-Mission 17 is completed only after tests pass, this signoff is updated, and Mission 17 files are committed and pushed.
+Mission 17 is signed off after this document update is committed and pushed.
