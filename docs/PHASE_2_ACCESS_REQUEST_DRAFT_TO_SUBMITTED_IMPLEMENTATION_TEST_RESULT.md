@@ -217,7 +217,7 @@ No syntax errors detected in public_html/erp-access-request-transition.php
 
 ## 13. Final Result
 
-Controlled write-enabled DRAFT -> SUBMITTED transition was implemented, executed through browser, and verified by SQL.
+Controlled write-enabled DRAFT -> SUBMITTED transition was implemented, executed through browser, verified by SQL, and duplicate submit protection was confirmed.
 
 ## 14. Verified Browser Result
 
@@ -255,3 +255,20 @@ core_access_change_history:
 - after_json: {"request_state":"SUBMITTED","submitted_at":"2026-06-21 15:00:13.874"}
 - changed_by_user_id: 10001
 - changed_at: 2026-06-21 15:00:13.874
+
+## 16. Verified Duplicate Submit Protection
+
+Duplicate submit test was executed after request_id 4 was already transitioned to SUBMITTED.
+
+Verified result:
+- Re-submitting the same request was blocked.
+- request_state remained SUBMITTED.
+- submitted_at remained unchanged.
+- updated_at remained unchanged.
+- submitted_history_count remained 1.
+- No additional ACCESS_REQUEST_SUBMITTED history row was inserted.
+
+Confirmed protection:
+- The transition is not repeatable after the request leaves DRAFT state.
+- State-based concurrency guard works as expected.
+- Duplicate browser submission does not create duplicate workflow history.
