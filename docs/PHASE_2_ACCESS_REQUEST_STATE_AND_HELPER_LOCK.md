@@ -252,7 +252,7 @@ DRAFT → SUBMITTED
 **Permission:** `access_request.submit`
 
 **Confirmed:**
-- `SUBMITTED` is allowed by `CK_core_access_requests_state`
+- SUBMITTED is allowed by CK_core_access_requests_state
 - Candidate row: `request_id = 4`
 - `request_number = AR-20260620-084634-10001`
 - `request_type = ROLE_GRANT`
