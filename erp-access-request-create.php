@@ -4,6 +4,16 @@
  *
  * Phase 1A controlled local prototype write UI.
  * Safe output only.
+ *
+ * Safety guard chain:
+ * - Config loader: erp-config-loader.php
+ * - Auth/session: erp_auth_require_login()
+ * - Permission: erp_permission_require_any_role(['owner', 'system_admin'])
+ * - CSRF: erp_csrf_require_valid() on POST forms only
+ * - Workflow engine: not used (request creation, not state transition)
+ * - Audit: erp_audit_write() on approved create write path only
+ *
+ * Forbidden: direct role assignment, permission change, user creation, workflow bypass.
  */
 
 declare(strict_types=1);
@@ -14,6 +24,7 @@ require_once __DIR__ . '/includes/erp-permission-helper.php';
 require_once __DIR__ . '/includes/erp-csrf-helper.php';
 require_once __DIR__ . '/includes/erp-audit-helper.php';
 
+// Runtime guards: config loaded above; auth and permission enforced before any action.
 erp_auth_require_login();
 erp_permission_require_any_role(['owner', 'system_admin']);
 
@@ -152,6 +163,7 @@ $form = [
 ];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    // POST write path: CSRF first, then validation, then transaction + audit.
     erp_csrf_require_valid('access_request_create', $_POST['erp_csrf_token'] ?? null);
 
     $form['request_type'] = erp_ar_safe_value('request_type', 'ROLE_GRANT');

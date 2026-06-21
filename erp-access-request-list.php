@@ -4,6 +4,15 @@
  *
  * Phase 1A controlled read-only local prototype page.
  * SELECT-only. Safe output only.
+ *
+ * Safety guard chain:
+ * - Config loader: erp-config-loader.php
+ * - Auth/session: erp_auth_require_login()
+ * - Permission: erp_permission_require_any_role(['owner', 'system_admin'])
+ * - CSRF: not used (read-only GET page, no forms/actions)
+ * - Workflow engine: not used (no transition actions on this page)
+ *
+ * Forbidden: direct role assignment, permission change, user creation, write bypass.
  */
 
 declare(strict_types=1);
@@ -12,6 +21,7 @@ require_once __DIR__ . '/includes/erp-config-loader.php';
 require_once __DIR__ . '/includes/erp-auth-helper.php';
 require_once __DIR__ . '/includes/erp-permission-helper.php';
 
+// Runtime guards: config loaded above; auth and permission enforced before SELECT.
 erp_auth_require_login();
 erp_permission_require_any_role(['owner', 'system_admin']);
 
