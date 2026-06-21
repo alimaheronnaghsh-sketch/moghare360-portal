@@ -1,19 +1,29 @@
-# Mission 11 Signoff
+# Mission 11 - Signoff
 
-Project: MOGHARE360 ERP
-Mission: Mission 11
-Document Type: Mission Signoff
-Status: PENDING UNTIL CLI AND BROWSER TESTS PASS
-Scope: Access Denied Audit Prototype
+## Status
+SIGNED OFF
 
 ## Mission
 Mission 11 - Access Denied Audit Prototype
 
-## Decision
-Mission 11 implements simulation-only Access Denied handler and test surfaces only.
+## Completed Files
+- includes/erp-access-denied-handler.php
+- tools/test-erp-access-denied-handler.php
+- public_html/erp-access-denied-readonly-test.php
+- docs/missions/mission_11_access_denied_audit_prototype/
+
+## Confirmed Implementation
+- Access Denied handler implemented as simulation
+- CLI Access Denied Handler test OK
+- Browser Read-Only Access Denied test OK
+- Mode = SIMULATION_ONLY
+- safe access denied message implemented
+- denied event shape implemented
+- audit write = NOT PERFORMED
+- No sensitive error exposed
+- Overall Status OK
 
 ## Confirmed Security Boundaries
-- Access Denied handler implemented as simulation
 - No real audit insert
 - No database write
 - No login replacement
@@ -27,19 +37,5 @@ Mission 11 implements simulation-only Access Denied handler and test surfaces on
 - No production deploy
 - No forbidden files changed
 
-## Implemented Files
-- includes/erp-access-denied-handler.php
-- tools/test-erp-access-denied-handler.php
-- public_html/erp-access-denied-readonly-test.php
-
-## Test Requirement
-Mission 11 signoff is allowed only after:
-- PHP syntax tests pass
-- CLI access denied handler test passes with Overall: OK
-- Browser read-only test passes with Overall Status = OK
-- Forbidden file check confirms no unauthorized changes
-
-## Final Signoff
-Status: PENDING UNTIL CLI AND BROWSER TESTS PASS
-
-Mission 11 is completed only after tests pass, this signoff is updated, and Mission 11 files are committed and pushed.
+## Final Decision
+Mission 11 is signed off after this document update is committed and pushed.
