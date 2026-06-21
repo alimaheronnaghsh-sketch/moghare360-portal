@@ -13,9 +13,10 @@ declare(strict_types=1);
  * It does not perform database writes.
  * It does not update workflow state.
  *
- * First controlled workflow scope:
+ * Transitions:
  * Entity: access_request
- * Transition: DRAFT -> SUBMITTED
+ * - DRAFT -> SUBMITTED
+ * - SUBMITTED -> UNDER_REVIEW
  */
 
 if (!function_exists('erp_workflow_normalize_value')) {
@@ -43,6 +44,9 @@ if (!function_exists('erp_workflow_get_allowed_transitions')) {
             'access_request' => [
                 'DRAFT' => [
                     'SUBMITTED',
+                ],
+                'SUBMITTED' => [
+                    'UNDER_REVIEW',
                 ],
             ],
         ];
