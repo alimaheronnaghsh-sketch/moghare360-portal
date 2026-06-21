@@ -4,18 +4,13 @@ declare(strict_types=1);
 /**
  * MOGHARE360 ERP Controlled Access Request Transition Page
  *
- * Phase 2 controlled browser action prototype.
+ * Phase 2 controlled write-enabled workflow transition.
  *
- * This page validates the first controlled workflow transition preview:
  * Entity: access_request
  * Transition: DRAFT -> SUBMITTED
- * Permission concept: access_request.submit
+ * Permission: access_request.submit
  * CSRF form key: access_request_submit
- *
- * This page does not connect to database.
- * This page does not update workflow state.
- * This page does not insert audit/history records.
- * This page does not perform database writes.
+ * History change_type: ACCESS_REQUEST_SUBMITTED
  */
 
 if (!function_exists('erp_access_request_transition_require_helper')) {
@@ -43,6 +38,7 @@ if (!function_exists('erp_access_request_transition_require_helper')) {
     }
 }
 
+erp_access_request_transition_require_helper('erp-config-loader.php');
 erp_access_request_transition_require_helper('erp-auth-context.php');
 erp_access_request_transition_require_helper('erp-csrf.php');
 erp_access_request_transition_require_helper('erp-permission-check.php');
@@ -53,6 +49,8 @@ const ERP_ACCESS_REQUEST_TRANSITION_PERMISSION = 'access_request.submit';
 const ERP_ACCESS_REQUEST_TRANSITION_ENTITY = 'access_request';
 const ERP_ACCESS_REQUEST_TRANSITION_FROM_STATE = 'DRAFT';
 const ERP_ACCESS_REQUEST_TRANSITION_TO_STATE = 'SUBMITTED';
+const ERP_ACCESS_REQUEST_TRANSITION_HISTORY_TYPE = 'ACCESS_REQUEST_SUBMITTED';
+const ERP_ACCESS_REQUEST_TRANSITION_DEFAULT_REQUEST_ID = 4;
 
 if (!function_exists('erp_access_request_transition_escape')) {
     function erp_access_request_transition_escape(string $value): string
@@ -61,9 +59,251 @@ if (!function_exists('erp_access_request_transition_escape')) {
     }
 }
 
+if (!function_exists('erp_access_request_transition_parse_request_id')) {
+    function erp_access_request_transition_parse_request_id(mixed $value): int
+    {
+        if (!is_string($value) && !is_int($value)) {
+            return 0;
+        }
+
+        $raw = trim((string)$value);
+
+        if ($raw === '' || !ctype_digit($raw)) {
+            return 0;
+        }
+
+        $requestId = (int)$raw;
+
+        return $requestId > 0 ? $requestId : 0;
+    }
+}
+
+if (!function_exists('erp_access_request_transition_get_actor_user_id')) {
+    function erp_access_request_transition_get_actor_user_id(array $context): int
+    {
+        if (isset($context['current_user_id']) && is_int($context['current_user_id'])) {
+            return $context['current_user_id'];
+        }
+
+        if (isset($context['user_id']) && is_int($context['user_id'])) {
+            return $context['user_id'];
+        }
+
+        return 0;
+    }
+}
+
+if (!function_exists('erp_access_request_transition_db_connection')) {
+    function erp_access_request_transition_db_connection()
+    {
+        $config = erp_load_config();
+        $database = $config['database'] ?? [];
+
+        $server = (string)($database['server'] ?? '');
+        $name = (string)($database['name'] ?? '');
+        $trusted = (bool)($database['trusted_connection'] ?? true);
+        $username = (string)($database['username'] ?? '');
+        $password = (string)($database['password'] ?? '');
+
+        if ($server === '' || $name === '') {
+            return false;
+        }
+
+        $connectionString = 'Driver={ODBC Driver 17 for SQL Server};Server=' .
+            $server .
+            ';Database=' .
+            $name .
+            ';TrustServerCertificate=Yes;';
+
+        if ($trusted) {
+            $connectionString .= 'Trusted_Connection=Yes;';
+
+            return @odbc_connect($connectionString, '', '');
+        }
+
+        return @odbc_connect($connectionString, $username, $password);
+    }
+}
+
+if (!function_exists('erp_access_request_transition_execute')) {
+    function erp_access_request_transition_execute($connection, string $sql, array $params = [])
+    {
+        $statement = @odbc_prepare($connection, $sql);
+
+        if (!$statement) {
+            return false;
+        }
+
+        if (!@odbc_execute($statement, $params)) {
+            return false;
+        }
+
+        return $statement;
+    }
+}
+
+if (!function_exists('erp_access_request_transition_perform_write')) {
+    /**
+     * @return array<string, mixed>
+     */
+    function erp_access_request_transition_perform_write($connection, int $requestId, int $changedByUserId): array
+    {
+        $selectSql = '
+            SELECT
+                request_id,
+                request_number,
+                request_state,
+                subject_user_id,
+                submitted_at
+            FROM dbo.core_access_requests
+            WHERE request_id = ?
+        ';
+
+        $selectStatement = erp_access_request_transition_execute($connection, $selectSql, [$requestId]);
+
+        if (!$selectStatement || @odbc_fetch_row($selectStatement) !== true) {
+            throw new RuntimeException('ERP access request was not found.');
+        }
+
+        $requestNumber = trim((string)@odbc_result($selectStatement, 'request_number'));
+        $currentState = strtoupper(trim((string)@odbc_result($selectStatement, 'request_state')));
+        $subjectUserId = (int)@odbc_result($selectStatement, 'subject_user_id');
+        $currentSubmittedAt = @odbc_result($selectStatement, 'submitted_at');
+        $currentSubmittedAt = $currentSubmittedAt === null || $currentSubmittedAt === false
+            ? null
+            : trim((string)$currentSubmittedAt);
+
+        if ($currentState !== ERP_ACCESS_REQUEST_TRANSITION_FROM_STATE) {
+            throw new RuntimeException('ERP access request is not in DRAFT state.');
+        }
+
+        if ($subjectUserId <= 0) {
+            throw new RuntimeException('ERP transition could not be completed.');
+        }
+
+        $beforeJson = json_encode([
+            'request_state' => $currentState,
+            'submitted_at' => $currentSubmittedAt,
+        ], JSON_UNESCAPED_UNICODE);
+
+        if (!is_string($beforeJson) || $beforeJson === '') {
+            throw new RuntimeException('ERP transition could not be completed.');
+        }
+
+        if (!@odbc_autocommit($connection, false)) {
+            throw new RuntimeException('ERP transition could not be completed.');
+        }
+
+        try {
+            $updateSql = '
+                UPDATE dbo.core_access_requests
+                SET
+                    request_state = ?,
+                    submitted_at = SYSDATETIME(),
+                    updated_at = SYSDATETIME()
+                OUTPUT
+                    INSERTED.request_state,
+                    INSERTED.submitted_at
+                WHERE
+                    request_id = ?
+                    AND request_state = ?
+            ';
+
+            $updateStatement = erp_access_request_transition_execute(
+                $connection,
+                $updateSql,
+                [
+                    ERP_ACCESS_REQUEST_TRANSITION_TO_STATE,
+                    $requestId,
+                    ERP_ACCESS_REQUEST_TRANSITION_FROM_STATE,
+                ]
+            );
+
+            if (!$updateStatement || @odbc_fetch_row($updateStatement) !== true) {
+                throw new RuntimeException('ERP access request is not in DRAFT state.');
+            }
+
+            $newState = strtoupper(trim((string)@odbc_result($updateStatement, 'request_state')));
+            $newSubmittedAt = trim((string)@odbc_result($updateStatement, 'submitted_at'));
+
+            $afterJson = json_encode([
+                'request_state' => $newState,
+                'submitted_at' => $newSubmittedAt,
+            ], JSON_UNESCAPED_UNICODE);
+
+            if (!is_string($afterJson) || $afterJson === '') {
+                throw new RuntimeException('ERP transition could not be completed.');
+            }
+
+            $historySql = '
+                INSERT INTO dbo.core_access_change_history
+                (
+                    user_id,
+                    request_id,
+                    change_type,
+                    entity_type,
+                    entity_id,
+                    before_json,
+                    after_json,
+                    changed_by_user_id,
+                    changed_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, SYSDATETIME())
+            ';
+
+            $historyStatement = erp_access_request_transition_execute(
+                $connection,
+                $historySql,
+                [
+                    $subjectUserId,
+                    $requestId,
+                    ERP_ACCESS_REQUEST_TRANSITION_HISTORY_TYPE,
+                    'core_access_requests',
+                    $requestId,
+                    $beforeJson,
+                    $afterJson,
+                    $changedByUserId,
+                ]
+            );
+
+            if (!$historyStatement) {
+                throw new RuntimeException('ERP transition could not be completed.');
+            }
+
+            if (!@odbc_commit($connection)) {
+                throw new RuntimeException('ERP transition could not be completed.');
+            }
+
+            @odbc_autocommit($connection, true);
+
+            return [
+                'ok' => true,
+                'request_id' => $requestId,
+                'request_number' => $requestNumber,
+                'from_state' => ERP_ACCESS_REQUEST_TRANSITION_FROM_STATE,
+                'to_state' => ERP_ACCESS_REQUEST_TRANSITION_TO_STATE,
+                'transition' => ERP_ACCESS_REQUEST_TRANSITION_FROM_STATE . ' -> ' . ERP_ACCESS_REQUEST_TRANSITION_TO_STATE,
+                'history_change_type' => ERP_ACCESS_REQUEST_TRANSITION_HISTORY_TYPE,
+                'database_updated' => true,
+                'history_inserted' => true,
+            ];
+        } catch (Throwable $exception) {
+            @odbc_rollback($connection);
+            @odbc_autocommit($connection, true);
+
+            if ($exception instanceof RuntimeException) {
+                throw $exception;
+            }
+
+            throw new RuntimeException('ERP transition could not be completed.');
+        }
+    }
+}
+
 $status_message = '';
 $error_message = '';
 $transition_result = null;
+$write_result = null;
 $context = [];
 
 try {
@@ -80,6 +320,7 @@ try {
     if ($request_method === 'POST') {
         $posted_action = $_POST['transition_action'] ?? '';
         $posted_token = $_POST['csrf_token'] ?? '';
+        $posted_request_id = $_POST['request_id'] ?? '';
 
         if (!is_string($posted_action) || trim($posted_action) !== 'submit_access_request') {
             throw new RuntimeException('Invalid ERP transition action.');
@@ -93,13 +334,43 @@ try {
 
         erp_permission_require($context, ERP_ACCESS_REQUEST_TRANSITION_PERMISSION);
 
+        erp_workflow_require_transition(
+            ERP_ACCESS_REQUEST_TRANSITION_ENTITY,
+            ERP_ACCESS_REQUEST_TRANSITION_FROM_STATE,
+            ERP_ACCESS_REQUEST_TRANSITION_TO_STATE
+        );
+
         $transition_result = erp_workflow_build_transition_result(
             ERP_ACCESS_REQUEST_TRANSITION_ENTITY,
             ERP_ACCESS_REQUEST_TRANSITION_FROM_STATE,
             ERP_ACCESS_REQUEST_TRANSITION_TO_STATE
         );
 
-        $status_message = 'Controlled transition preview approved. No database state was changed.';
+        $requestId = erp_access_request_transition_parse_request_id($posted_request_id);
+
+        if ($requestId <= 0) {
+            throw new RuntimeException('Invalid ERP access request ID.');
+        }
+
+        $changedByUserId = erp_access_request_transition_get_actor_user_id($context);
+
+        if ($changedByUserId <= 0) {
+            throw new RuntimeException('ERP auth context is missing current_user_id.');
+        }
+
+        $connection = erp_access_request_transition_db_connection();
+
+        if (!$connection) {
+            throw new RuntimeException('ERP transition could not be completed.');
+        }
+
+        try {
+            $write_result = erp_access_request_transition_perform_write($connection, $requestId, $changedByUserId);
+        } finally {
+            @odbc_close($connection);
+        }
+
+        $status_message = 'Controlled transition completed. Database state was updated.';
     }
 } catch (Throwable $exception) {
     $error_message = $exception->getMessage();
@@ -131,7 +402,7 @@ if (isset($context['full_name']) && is_string($context['full_name'])) {
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <title>MOGHARE360 ERP - Access Request Transition Preview</title>
+    <title>MOGHARE360 ERP - Access Request Transition</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
         body {
@@ -170,7 +441,7 @@ if (isset($context['full_name']) && is_string($context['full_name'])) {
             background: #fff0f0;
         }
 
-        .blocked {
+        .warning {
             border-color: #ef6c00;
             background: #fff7ed;
         }
@@ -205,12 +476,13 @@ if (isset($context['full_name']) && is_string($context['full_name'])) {
 </head>
 <body>
 <div class="page">
-    <h1>MOGHARE360 ERP - Access Request Transition Preview</h1>
+    <h1>MOGHARE360 ERP - Access Request Transition</h1>
 
-    <div class="box blocked">
-        <strong>Controlled Prototype Boundary</strong>
-        <p>This page validates the transition preview only.</p>
-        <p>No database connection, no workflow state update, no audit insert, and no history insert are performed.</p>
+    <div class="box warning">
+        <strong>Controlled Write-Enabled Boundary</strong>
+        <p>This page performs the first controlled workflow transition write only:</p>
+        <p><code>DRAFT -&gt; SUBMITTED</code> for a single <code>request_id</code> form submission.</p>
+        <p>It does not assign roles, change permissions, create users, or insert approvals.</p>
     </div>
 
     <div class="box">
@@ -251,8 +523,16 @@ if (isset($context['full_name']) && is_string($context['full_name'])) {
                 <td><code><?php echo erp_access_request_transition_escape(ERP_ACCESS_REQUEST_TRANSITION_PERMISSION); ?></code></td>
             </tr>
             <tr>
+                <th>History Change Type</th>
+                <td><code><?php echo erp_access_request_transition_escape(ERP_ACCESS_REQUEST_TRANSITION_HISTORY_TYPE); ?></code></td>
+            </tr>
+            <tr>
                 <th>CSRF Form Key</th>
                 <td><code><?php echo erp_access_request_transition_escape(ERP_ACCESS_REQUEST_TRANSITION_FORM_KEY); ?></code></td>
+            </tr>
+            <tr>
+                <th>Candidate Request ID</th>
+                <td><code><?php echo erp_access_request_transition_escape((string)ERP_ACCESS_REQUEST_TRANSITION_DEFAULT_REQUEST_ID); ?></code></td>
             </tr>
         </table>
     </div>
@@ -274,12 +554,22 @@ if (isset($context['full_name']) && is_string($context['full_name'])) {
                     </tr>
                     <tr>
                         <th>Database Update</th>
-                        <td>Blocked</td>
+                        <td><?php echo is_array($write_result) && !empty($write_result['database_updated']) ? 'Applied' : 'Not Applied'; ?></td>
                     </tr>
                     <tr>
-                        <th>Audit / History Write</th>
-                        <td>Blocked</td>
+                        <th>History Write</th>
+                        <td><?php echo is_array($write_result) && !empty($write_result['history_inserted']) ? 'Applied' : 'Not Applied'; ?></td>
                     </tr>
+                    <?php if (is_array($write_result)): ?>
+                        <tr>
+                            <th>Request ID</th>
+                            <td><?php echo erp_access_request_transition_escape((string)($write_result['request_id'] ?? '')); ?></td>
+                        </tr>
+                        <tr>
+                            <th>Request Number</th>
+                            <td><?php echo erp_access_request_transition_escape((string)($write_result['request_number'] ?? '')); ?></td>
+                        </tr>
+                    <?php endif; ?>
                 </table>
             <?php endif; ?>
         </div>
@@ -293,14 +583,14 @@ if (isset($context['full_name']) && is_string($context['full_name'])) {
     <?php endif; ?>
 
     <div class="box">
-        <h2>Preview Action</h2>
+        <h2>Submit Transition</h2>
         <form method="post">
             <input type="hidden" name="csrf_token" value="<?php echo erp_access_request_transition_escape($csrf_token); ?>">
             <input type="hidden" name="transition_action" value="submit_access_request">
-            <button type="submit">Preview DRAFT to SUBMITTED Transition</button>
+            <input type="hidden" name="request_id" value="<?php echo erp_access_request_transition_escape((string)ERP_ACCESS_REQUEST_TRANSITION_DEFAULT_REQUEST_ID); ?>">
+            <button type="submit">Submit DRAFT to SUBMITTED Transition</button>
         </form>
     </div>
 </div>
 </body>
 </html>
-
