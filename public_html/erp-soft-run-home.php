@@ -50,6 +50,7 @@ m37_ux_render_release_css_link();
 
   <div class="m360-page-toolbar">
     <a class="m360-btn m360-btn-primary m360-btn-sm" href="erp-business-command-center.php">Business Command Center</a>
+    <a class="m360-btn m360-btn-secondary m360-btn-sm" href="moghare360-commercial-demo.php">Commercial Demo</a>
     <a class="m360-btn m360-btn-primary m360-btn-sm" href="erp-moghare-ready.php?role=<?= m37_ux_h(rawurlencode($roleMode)) ?>">Moghare Ready</a>
     <a class="m360-btn m360-btn-secondary m360-btn-sm" href="erp-soft-run-flow-test.php?jobcard_id=1&role=<?= m37_ux_h(rawurlencode($roleMode)) ?>">Flow Test</a>
     <a class="m360-btn m360-btn-ghost m360-btn-sm" href="erp-soft-run-readiness.php?jobcard_id=1">Soft Run Gate M30</a>

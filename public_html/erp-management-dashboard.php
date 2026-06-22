@@ -46,6 +46,7 @@ $reports = [
     ['erp-inventory-pressure-report.php', 'فشار انبار', 'موجودی و خرید'],
     ['erp-staff-performance-preview.php', 'عملکرد پرسنل', 'HR preview'],
     ['erp-soft-run-audit.php', 'Soft Run Audit', 'چک‌لیست آمادگی'],
+    ['moghare360-final-release-report.php', 'گزارش نهایی Commercial', 'Phase 10'],
 ];
 foreach ($reports as [$url, $title, $sub]) {
     echo '<a class="p1cc-nav-card" href="' . br_h($url) . '"><span class="p1cc-nav-title">' . br_h($title) . '</span><span class="p1cc-nav-sub">' . br_h($sub) . '</span></a>';
