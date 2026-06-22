@@ -104,6 +104,7 @@ if ($errorMessage !== '') {
     echo '<a class="p1cc-nav-card" href="erp-jobcard-cost-preview.php"><span class="p1cc-nav-title">هزینه JobCard</span><span class="p1cc-nav-sub">Phase 5 — مالی</span></a>';
     echo '<a class="p1cc-nav-card" href="erp-finance-control-center.php"><span class="p1cc-nav-title">مرکز کنترل مالی</span><span class="p1cc-nav-sub">Phase 5</span></a>';
     echo '<a class="p1cc-nav-card" href="erp-crm-followup-board.php"><span class="p1cc-nav-title">تابلو پیگیری CRM</span><span class="p1cc-nav-sub">Phase 6</span></a>';
+    echo '<a class="p1cc-nav-card" href="erp-hr-dashboard.php"><span class="p1cc-nav-title">داشبورد HR</span><span class="p1cc-nav-sub">Phase 7</span></a>';
     echo '</div></div>';
 }
 

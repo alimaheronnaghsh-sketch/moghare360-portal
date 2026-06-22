@@ -1,15 +1,15 @@
 # PHASE 6 TEST RESULT
 
-Status: PENDING USER TEST
+Status: COMPLETED / TESTED / COMMITTED / PUSHED
 
-SQL Execution: PENDING
-PHP Syntax Test: PENDING
-Follow-up Board Test: PENDING
-Follow-up Detail Test: PENDING
-Follow-up Submit Test: PENDING
-Satisfaction Form Test: PENDING
-Satisfaction Submit Test: PENDING
-Customer Score Board Test: PENDING
-Upsell Opportunities Test: PENDING
-Tool Test: PENDING
-Forbidden Files Check: PENDING
+SQL Execution: PASSED
+PHP Syntax Test: PASSED
+Follow-up Board Test: PASSED
+Follow-up Detail Test: PASSED
+Follow-up Submit Test: PASSED
+Satisfaction Form Test: PASSED
+Satisfaction Submit Test: PASSED
+Customer Score Board Test: PASSED
+Upsell Opportunities Test: PASSED
+Tool Test: PASSED
+Forbidden Files Check: PASSED

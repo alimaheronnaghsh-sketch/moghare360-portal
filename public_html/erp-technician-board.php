@@ -112,4 +112,6 @@ if ($errorMessage !== '') {
     echo '</tbody></table></div>';
 }
 
+echo '<div class="p1cc-card"><p class="p1cc-hint"><a class="p2oe-link" href="erp-hr-dashboard.php">داشبورد HR (Phase 7)</a> — پورتال اداری داخلی، بدون اتصال پرسنلی تکنسین</p></div>';
+
 operation_engine_render_foot();
