@@ -101,6 +101,8 @@ if ($errorMessage !== '') {
     echo '<a class="p1cc-nav-card" href="erp-service-operation-readonly-list.php"><span class="p1cc-nav-title">لیست سرویس (M20)</span><span class="p1cc-nav-sub">foundation موجود</span></a>';
     echo '<a class="p1cc-nav-card" href="erp-qc-check.php"><span class="p1cc-nav-title">QC Check (M30)</span><span class="p1cc-nav-sub">foundation موجود</span></a>';
     echo '<a class="p1cc-nav-card" href="erp-delivery-control.php"><span class="p1cc-nav-title">Delivery (M30)</span><span class="p1cc-nav-sub">foundation موجود</span></a>';
+    echo '<a class="p1cc-nav-card" href="erp-jobcard-cost-preview.php"><span class="p1cc-nav-title">هزینه JobCard</span><span class="p1cc-nav-sub">Phase 5 — مالی</span></a>';
+    echo '<a class="p1cc-nav-card" href="erp-finance-control-center.php"><span class="p1cc-nav-title">مرکز کنترل مالی</span><span class="p1cc-nav-sub">Phase 5</span></a>';
     echo '</div></div>';
 }
 

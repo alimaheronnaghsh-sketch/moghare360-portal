@@ -225,6 +225,7 @@ if ($operationCaseId === null) {
     echo '<div class="p2oe-meta-item"><span>JobCard ID</span>' . operation_engine_h($case['jobcard_id'] !== '' ? $case['jobcard_id'] : '—') . '</div>';
     echo '<div class="p2oe-meta-item"><span>Customer ID</span>' . operation_engine_h($case['customer_id'] !== '' ? $case['customer_id'] : '—') . '</div>';
     echo '</div>';
+    echo '<p style="margin-top:0.75rem"><a class="p2oe-link" href="erp-jobcard-cost-preview.php?operation_case_id=' . (int)$operationCaseId . '">هزینه JobCard (Phase 5)</a></p>';
 
     if (($case['reception_summary'] ?? '') !== '') {
         echo '<p class="p1cc-hint" style="margin-top:0.75rem">' . operation_engine_h($case['reception_summary']) . '</p>';
