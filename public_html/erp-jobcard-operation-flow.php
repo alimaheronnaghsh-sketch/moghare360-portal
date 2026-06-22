@@ -158,6 +158,7 @@ operation_engine_render_head('جریان عملیاتی JobCard', $operationCase
 echo '<div class="p2oe-hero">';
 echo '<h1>جریان عملیاتی JobCard</h1>';
 echo '<p>اتصال Phase 1 Customer Core به JobCard / Service / QC / Delivery</p>';
+echo '<p style="margin-top:0.5rem;font-size:0.85rem"><a class="p2oe-link" href="erp-rule-test-console.php" style="color:#fff;text-decoration:underline">کنسول Rule Check (Phase 3)</a></p>';
 echo '</div>';
 
 if ($flashMessage !== '') {
