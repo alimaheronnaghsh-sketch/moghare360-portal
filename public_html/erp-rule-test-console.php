@@ -214,7 +214,18 @@ if ($ranCheck && $results !== []) {
         if (!empty($result['decision_id'])) {
             echo ' · Decision ID: <span class="m360-num">' . rule_engine_h((string)$result['decision_id']) . '</span>';
         }
-        echo '</p></div>';
+        echo '</p>';
+        if (in_array($status, ['INVENTORY_AVAILABLE', 'ALLOWED'], true)) {
+            $reserveUrl = 'erp-part-reserve.php';
+            if (!empty($result['decision_id'])) {
+                $reserveUrl .= '?rule_decision_id=' . rawurlencode((string)$result['decision_id']);
+            }
+            echo '<p><a class="p3re-link" href="' . rule_engine_h($reserveUrl) . '">رفتن به رزرو قطعه (Phase 4)</a></p>';
+        }
+        if ($status === 'PURCHASE_REQUIRED' && !empty($result['decision_id'])) {
+            echo '<p><a class="p3re-link" href="erp-purchase-request-create.php?rule_decision_id=' . rule_engine_h((string)$result['decision_id']) . '">رفتن به درخواست خرید (Phase 4)</a></p>';
+        }
+        echo '</div>';
     }
 
     echo '<p><a class="p3re-link" href="erp-rule-decision-board.php">مشاهده در تابلوی تصمیم‌ها</a></p>';

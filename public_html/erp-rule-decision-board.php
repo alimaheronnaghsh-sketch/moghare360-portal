@@ -75,6 +75,9 @@ if ($errorMessage !== '') {
     echo '<a class="p1cc-nav-card" href="erp-service-approval-request.php"><span class="p1cc-nav-title">درخواست‌های تأیید سرویس</span><span class="p1cc-nav-sub">تأیید / رد داخلی</span></a>';
     echo '<a class="p1cc-nav-card" href="erp-rule-test-console.php"><span class="p1cc-nav-title">کنسول تست قوانین</span><span class="p1cc-nav-sub">اجرای Rule Check داخلی</span></a>';
     echo '<a class="p1cc-nav-card" href="erp-operation-control-center.php"><span class="p1cc-nav-title">مرکز کنترل عملیات</span><span class="p1cc-nav-sub">Phase 2</span></a>';
+    echo '<a class="p1cc-nav-card" href="erp-part-reserve.php"><span class="p1cc-nav-title">رزرو قطعه</span><span class="p1cc-nav-sub">Phase 4 — موجودی</span></a>';
+    echo '<a class="p1cc-nav-card" href="erp-purchase-request-create.php"><span class="p1cc-nav-title">درخواست خرید</span><span class="p1cc-nav-sub">Phase 4 — تامین</span></a>';
+    echo '<a class="p1cc-nav-card" href="erp-stock-board.php"><span class="p1cc-nav-title">تابلو انبار</span><span class="p1cc-nav-sub">Phase 4</span></a>';
     echo '</div></div>';
 
     echo '<div class="p1cc-card"><h2 class="p3re-section-title">آخرین تصمیم‌ها</h2>';
