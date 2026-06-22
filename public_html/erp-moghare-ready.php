@@ -51,6 +51,7 @@ m37_ux_render_release_css_link();
 
     <div class="m37-sr-launch-grid">
       <a class="m360-btn m360-btn-primary" href="erp-soft-run-home.php?role=<?= m37_ux_h(rawurlencode($roleMode)) ?>">Start Soft Run Home</a>
+      <a class="m360-btn m360-btn-secondary" href="erp-product-status.php">Product Status (Phase 8)</a>
       <a class="m360-btn m360-btn-secondary" href="erp-soft-run-flow-test.php?jobcard_id=1&role=<?= m37_ux_h(rawurlencode($roleMode)) ?>">Full Flow Test</a>
       <a class="m360-btn m360-btn-secondary" href="erp-jobcard-workbench.php?role=<?= m37_ux_h(rawurlencode($roleMode)) ?>">JobCard Workbench</a>
       <a class="m360-btn m360-btn-secondary" href="erp-customer-vehicle-workbench.php?role=reception">Customer Vehicle Workbench</a>
