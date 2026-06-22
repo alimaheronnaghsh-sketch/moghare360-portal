@@ -1,0 +1,29 @@
+/**
+ * MOGHARE360 ERP — Phase 9 Business Ready UI
+ */
+
+.p9br-page { margin:0; background:#f4f6f8; font-family:Tahoma,Arial,sans-serif; }
+.p9br-wrap { max-width:1200px; margin:0 auto; padding:1.5rem 1.25rem 2.5rem; }
+.p9br-hero { background:linear-gradient(135deg,#14532d 0%,#15803d 50%,#22c55e 100%); color:#fff; border-radius:14px; padding:1.25rem 1.4rem; margin-bottom:1.25rem; }
+.p9br-hero h1 { margin:0 0 .35rem; font-size:1.4rem; }
+.p9br-readonly-banner { background:#ecfdf5; border:1px solid #a7f3d0; color:#065f46; border-radius:10px; padding:.75rem 1rem; text-align:center; margin-bottom:1rem; font-size:.85rem; font-weight:600; }
+.p9br-warning { background:#fef3c7; border:2px solid #f59e0b; border-radius:12px; padding:1rem; margin-bottom:1rem; color:#92400e; font-weight:600; text-align:center; }
+.p9br-section-title { margin:0 0 .75rem; border-inline-start:3px solid #22c55e; padding-inline-start:.6rem; font-size:1.05rem; }
+.p9br-footer { text-align:center; font-size:.85rem; color:#6b7280; margin-top:1.5rem; }
+.p9br-footer a { color:#15803d; text-decoration:none; }
+.p9br-kpi-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:.75rem; margin-bottom:1.25rem; }
+.p9br-kpi { background:#fff; border:1px solid #d1fae5; border-radius:12px; padding:.85rem; text-align:center; }
+.p9br-kpi .label { font-size:.75rem; color:#6b7280; }
+.p9br-kpi .value { font-size:1.15rem; font-weight:700; color:#166534; }
+.p9br-kpi-highlight { border:2px solid #22c55e; background:#f0fdf4; }
+.p9br-badge { display:inline-block; padding:.15rem .5rem; border-radius:6px; font-size:.72rem; font-weight:600; }
+.p9br-badge-ok { background:#dcfce7; color:#166534; }
+.p9br-badge-warn { background:#fef3c7; color:#92400e; }
+.p9br-badge-fail { background:#fee2e2; color:#991b1b; }
+.p9br-badge-muted { background:#f3f4f6; color:#6b7280; }
+.p9br-boundary-list { list-style:disc; padding-inline-start:1.25rem; margin:0; }
+.p9br-boundary-list li { margin:.35rem 0; font-size:.9rem; }
+
+@media (max-width:640px) {
+  .p9br-wrap { padding:1rem .75rem 2rem; }
+}

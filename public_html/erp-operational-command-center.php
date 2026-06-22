@@ -51,6 +51,8 @@ $quick = [
     ['erp-finance-control-center.php', 'کنترل مالی', 'Finance'],
     ['erp-crm-followup-board.php', 'پیگیری CRM', 'CRM'],
     ['erp-hr-dashboard.php', 'داشبورد HR', 'HR'],
+    ['erp-management-dashboard.php', 'داشبورد مدیریت', 'Phase 9'],
+    ['erp-kpi-report.php', 'گزارش KPI', 'Reporting'],
 ];
 foreach ($quick as [$url, $title, $sub]) {
     if (bl_page_exists($url)) {

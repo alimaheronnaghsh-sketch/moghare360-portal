@@ -345,7 +345,7 @@ function bl_product_status_rows(): array
         ['label' => 'Soft Run Internal ERP', 'value' => 'READY'],
         ['label' => 'Business Execution Layer Phase 1–7', 'value' => 'BUILT'],
         ['label' => 'UI Productization Layer', 'value' => 'BUILT AFTER TEST'],
-        ['label' => 'Business Ready System', 'value' => 'PENDING PHASE 9'],
+        ['label' => 'Business Ready System', 'value' => 'BUILT AFTER TEST'],
         ['label' => 'Commercial Demo Ready', 'value' => 'PENDING PHASE 10'],
         ['label' => 'Production SaaS', 'value' => 'NOT ACTIVE'],
     ];
