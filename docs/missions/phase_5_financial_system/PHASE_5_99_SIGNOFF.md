@@ -1,25 +1,9 @@
 # PHASE 5 SIGNOFF
 
-Status: PENDING TEST AND COMMIT
+Status: COMPLETED / TESTED / COMMITTED / PUSHED
 
-## Prerequisites
+## Summary
 
-1. Run SQL in SSMS on `moghare360_ERP`
-2. Sync `public_html` to XAMPP runtime
-3. Run `php -l` on all Phase 5 PHP files
-4. Run `tools/test-phase-5-financial-system.php`
-5. Browser test all Phase 5 URLs
-6. Confirm forbidden files unchanged
+Phase 5 Financial System delivered: pricing, JobCard cost engine, payment tracking, internal invoice preview, and finance control center.
 
-## Signoff Checklist
-
-- [ ] SQL executed without errors
-- [ ] All PHP syntax checks pass
-- [ ] Test tool RESULT: PASSED
-- [ ] Finance control center shows KPIs
-- [ ] Service price list CRUD works
-- [ ] Cost header + lines + recalculate works
-- [ ] Payment record updates status correctly
-- [ ] Invoice preview creates internal preview only
-- [ ] Operation flow link to cost preview works
-- [ ] Forbidden files untouched
+All tests passed. Forbidden files untouched. SQL executed on moghare360_ERP.

@@ -417,9 +417,11 @@ if ($errorMessage !== '') {
 
     echo '</div>';
 
-    echo '<div class="p1cc-card"><h2>CRM (آینده)</h2>';
-    echo '<p class="p1cc-section-unavailable">ماژول CRM در فازهای بعدی فعال خواهد شد — Placeholder</p>';
-    echo '</div>';
+    echo '<div class="p1cc-card"><h2>CRM (Phase 6)</h2>';
+    echo '<div class="p1cc-nav-grid">';
+    echo '<a class="p1cc-nav-card" href="erp-crm-followup-board.php"><span class="p1cc-nav-title">پیگیری‌ها</span><span class="p1cc-nav-sub">read-only لینک</span></a>';
+    echo '<a class="p1cc-nav-card" href="erp-customer-score-board.php?vip_status="><span class="p1cc-nav-title">امتیاز مشتری</span><span class="p1cc-nav-sub">VIP / LOYAL</span></a>';
+    echo '</div></div>';
 }
 
 echo '<p><a class="p1cc-link" href="erp-customer-core-dashboard.php">بازگشت به داشبورد</a></p>';

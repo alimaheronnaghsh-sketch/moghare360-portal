@@ -76,6 +76,7 @@ echo '<a class="p1cc-nav-card" href="erp-service-price-list.php"><span class="p1
 echo '<a class="p1cc-nav-card" href="erp-jobcard-cost-preview.php"><span class="p1cc-nav-title">هزینه JobCard</span><span class="p1cc-nav-sub">موتور محاسبه هزینه</span></a>';
 echo '<a class="p1cc-nav-card" href="erp-payment-tracking.php"><span class="p1cc-nav-title">پیگیری پرداخت</span><span class="p1cc-nav-sub">ثبت و وضعیت بدهی</span></a>';
 echo '<a class="p1cc-nav-card" href="erp-invoice-preview.php"><span class="p1cc-nav-title">پیش‌نمایش فاکتور</span><span class="p1cc-nav-sub">داخلی — غیر رسمی</span></a>';
+echo '<a class="p1cc-nav-card" href="erp-crm-followup-board.php"><span class="p1cc-nav-title">تابلو پیگیری CRM</span><span class="p1cc-nav-sub">Phase 6</span></a>';
 echo '</div></div>';
 
 pricing_render_foot();
