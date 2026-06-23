@@ -12,7 +12,8 @@ $phases = [
     ['1', 'Customer Core', 'COMPLETED'], ['2', 'Operation Engine', 'COMPLETED'], ['3', 'Rule Engine', 'COMPLETED'],
     ['4', 'Inventory & Purchase', 'COMPLETED'], ['5', 'Financial System', 'COMPLETED'], ['6', 'CRM System', 'COMPLETED'],
     ['7', 'HR & Internal Admin', 'COMPLETED'], ['8', 'UI Productization', 'COMPLETED'], ['9', 'Business Ready', 'COMPLETED'],
-    ['10', 'Commercial System', 'READY AFTER TEST'],
+    ['10', 'Commercial System', 'COMPLETED'],
+    ['11', 'Stabilization Sprint', 'IN PROGRESS / RC1'],
 ];
 
 $statusRows = [
@@ -62,6 +63,7 @@ foreach ($urls as $group => $list) {
 }
 echo '</div>';
 
-echo '<div class="p1cc-card p10cs-final-statement"><p><strong>MOGHARE360 has been converted from Soft Run Internal ERP into a Business-Ready Repair Shop Operating System with Commercial Demo Readiness.</strong></p></div>';
+echo '<div class="p1cc-card p10cs-final-statement"><p><strong>MOGHARE360 has been converted from Soft Run Internal ERP into a Business-Ready Repair Shop Operating System with Commercial Demo Readiness.</strong></p>';
+echo '<p style="margin-top:.75rem">PHASE 11 Stabilization Sprint follows Commercial Release for Local Release Candidate 1 preparation — see <a href="erp-stabilization-dashboard.php">Stabilization Dashboard</a> and <a href="erp-local-release-candidate.php">Local RC1</a>.</p></div>';
 
 cs_render_foot();
