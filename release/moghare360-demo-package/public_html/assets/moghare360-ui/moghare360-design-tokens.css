@@ -1,0 +1,167 @@
+/*
+ * MOGHARE360 ERP — Design Tokens
+ * Mission 31 — Industrial repair shop UI DNA
+ * Scope: Soft Run Internal ERP design foundation only
+ */
+
+:root {
+  /* -------------------------------------------------------------------------
+     Brand — Industrial repair shop
+     ------------------------------------------------------------------------- */
+  --m360-color-primary-900: #0f172a;
+  --m360-color-primary-800: #1e293b;
+  --m360-color-primary-700: #1e3a5f;
+  --m360-color-primary-600: #234876;
+  --m360-color-primary-500: #2d5a8a;
+  --m360-color-primary-100: #dbeafe;
+  --m360-color-primary-50: #eff6ff;
+
+  --m360-color-accent-700: #b45309;
+  --m360-color-accent-600: #d97706;
+  --m360-color-accent-500: #f59e0b;
+  --m360-color-accent-400: #fbbf24;
+  --m360-color-accent-100: #fef3c7;
+
+  /* -------------------------------------------------------------------------
+     Semantic
+     ------------------------------------------------------------------------- */
+  --m360-color-success-700: #15803d;
+  --m360-color-success-600: #16a34a;
+  --m360-color-success-500: #22c55e;
+  --m360-color-success-100: #dcfce7;
+
+  --m360-color-warning-700: #b45309;
+  --m360-color-warning-600: #d97706;
+  --m360-color-warning-500: #f59e0b;
+  --m360-color-warning-100: #fef3c7;
+
+  --m360-color-danger-700: #b91c1c;
+  --m360-color-danger-600: #dc2626;
+  --m360-color-danger-500: #ef4444;
+  --m360-color-danger-100: #fee2e2;
+
+  --m360-color-info-600: #2563eb;
+  --m360-color-info-100: #dbeafe;
+
+  /* -------------------------------------------------------------------------
+     Neutral grayscale
+     ------------------------------------------------------------------------- */
+  --m360-color-neutral-950: #0a0a0a;
+  --m360-color-neutral-900: #171717;
+  --m360-color-neutral-800: #262626;
+  --m360-color-neutral-700: #404040;
+  --m360-color-neutral-600: #525252;
+  --m360-color-neutral-500: #737373;
+  --m360-color-neutral-400: #a3a3a3;
+  --m360-color-neutral-300: #d4d4d4;
+  --m360-color-neutral-200: #e5e5e5;
+  --m360-color-neutral-100: #f5f5f5;
+  --m360-color-neutral-50: #fafafa;
+  --m360-color-white: #ffffff;
+
+  /* -------------------------------------------------------------------------
+     Backgrounds
+     ------------------------------------------------------------------------- */
+  --m360-bg-app: #f1f5f9;
+  --m360-bg-surface: var(--m360-color-white);
+  --m360-bg-surface-muted: var(--m360-color-neutral-50);
+  --m360-bg-surface-elevated: var(--m360-color-white);
+  --m360-bg-sidebar: var(--m360-color-primary-900);
+  --m360-bg-toolbar: var(--m360-color-primary-800);
+  --m360-bg-diagnostic: #fffbeb;
+
+  /* -------------------------------------------------------------------------
+     Borders
+     ------------------------------------------------------------------------- */
+  --m360-border-color: var(--m360-color-neutral-200);
+  --m360-border-color-strong: var(--m360-color-neutral-300);
+  --m360-border-color-focus: var(--m360-color-primary-500);
+  --m360-border-width: 1px;
+  --m360-border-width-thick: 2px;
+
+  /* -------------------------------------------------------------------------
+     Shadows
+     ------------------------------------------------------------------------- */
+  --m360-shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.05);
+  --m360-shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.08), 0 1px 2px rgba(15, 23, 42, 0.04);
+  --m360-shadow-md: 0 4px 12px rgba(15, 23, 42, 0.08);
+  --m360-shadow-lg: 0 10px 24px rgba(15, 23, 42, 0.12);
+  --m360-shadow-card: 0 2px 8px rgba(30, 58, 95, 0.06);
+
+  /* -------------------------------------------------------------------------
+     Radius
+     ------------------------------------------------------------------------- */
+  --m360-radius-xs: 4px;
+  --m360-radius-sm: 6px;
+  --m360-radius-md: 10px;
+  --m360-radius-lg: 14px;
+  --m360-radius-xl: 20px;
+  --m360-radius-pill: 999px;
+
+  /* -------------------------------------------------------------------------
+     Typography scale
+     ------------------------------------------------------------------------- */
+  --m360-font-family-sans: "Vazirmatn", "IRANSans", "Segoe UI", Tahoma, Arial, sans-serif;
+  --m360-font-family-mono: "Cascadia Code", "Consolas", "Courier New", monospace;
+
+  --m360-font-size-xs: 0.75rem;
+  --m360-font-size-sm: 0.875rem;
+  --m360-font-size-md: 1rem;
+  --m360-font-size-lg: 1.125rem;
+  --m360-font-size-xl: 1.25rem;
+  --m360-font-size-2xl: 1.5rem;
+  --m360-font-size-3xl: 1.875rem;
+
+  --m360-font-weight-regular: 400;
+  --m360-font-weight-medium: 500;
+  --m360-font-weight-semibold: 600;
+  --m360-font-weight-bold: 700;
+
+  --m360-line-height-tight: 1.25;
+  --m360-line-height-normal: 1.5;
+  --m360-line-height-relaxed: 1.75;
+
+  --m360-letter-spacing-tight: -0.01em;
+  --m360-letter-spacing-normal: 0;
+  --m360-letter-spacing-wide: 0.02em;
+
+  /* -------------------------------------------------------------------------
+     Spacing scale (4px base)
+     ------------------------------------------------------------------------- */
+  --m360-space-0: 0;
+  --m360-space-1: 0.25rem;
+  --m360-space-2: 0.5rem;
+  --m360-space-3: 0.75rem;
+  --m360-space-4: 1rem;
+  --m360-space-5: 1.25rem;
+  --m360-space-6: 1.5rem;
+  --m360-space-8: 2rem;
+  --m360-space-10: 2.5rem;
+  --m360-space-12: 3rem;
+  --m360-space-16: 4rem;
+
+  /* -------------------------------------------------------------------------
+     Layout
+     ------------------------------------------------------------------------- */
+  --m360-content-max-width: 1280px;
+  --m360-sidebar-width: 260px;
+  --m360-toolbar-height: 56px;
+
+  /* -------------------------------------------------------------------------
+     Z-index
+     ------------------------------------------------------------------------- */
+  --m360-z-base: 0;
+  --m360-z-dropdown: 100;
+  --m360-z-sticky: 200;
+  --m360-z-toolbar: 300;
+  --m360-z-sidebar: 350;
+  --m360-z-modal: 500;
+  --m360-z-toast: 600;
+  --m360-z-diagnostic: 50;
+
+  /* -------------------------------------------------------------------------
+     Transitions
+     ------------------------------------------------------------------------- */
+  --m360-transition-fast: 120ms ease;
+  --m360-transition-normal: 200ms ease;
+}

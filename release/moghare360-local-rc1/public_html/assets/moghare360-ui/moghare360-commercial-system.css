@@ -1,0 +1,30 @@
+/**
+ * MOGHARE360 ERP — Phase 10 Commercial System UI
+ */
+
+.p10cs-page { margin:0; background:#f8fafc; font-family:Tahoma,Arial,sans-serif; }
+.p10cs-wrap { max-width:1200px; margin:0 auto; padding:1.5rem 1.25rem 2.5rem; }
+.p10cs-demo-banner { background:#fef2f2; border:1px solid #fecaca; color:#991b1b; border-radius:10px; padding:.75rem 1rem; text-align:center; margin-bottom:1rem; font-size:.85rem; font-weight:600; }
+.p10cs-hero { background:linear-gradient(135deg,#7c2d12 0%,#c2410c 50%,#ea580c 100%); color:#fff; border-radius:14px; padding:1.25rem 1.4rem; margin-bottom:1.25rem; }
+.p10cs-hero h1 { margin:0 0 .35rem; font-size:1.4rem; }
+.p10cs-warning { background:#fff7ed; border:2px solid #fb923c; border-radius:12px; padding:1rem; margin-bottom:1rem; color:#9a3412; font-weight:600; text-align:center; }
+.p10cs-path { display:flex; flex-wrap:wrap; gap:.5rem; justify-content:center; margin-bottom:1.25rem; font-size:.85rem; color:#475569; }
+.p10cs-path span { background:#fff; border:1px solid #e2e8f0; padding:.35rem .65rem; border-radius:8px; }
+.p10cs-section-title { margin:0 0 .75rem; border-inline-start:3px solid #ea580c; padding-inline-start:.6rem; font-size:1.05rem; }
+.p10cs-sub { margin:1rem 0 .5rem; font-size:.95rem; color:#475569; }
+.p10cs-footer { text-align:center; font-size:.85rem; color:#64748b; margin-top:1.5rem; }
+.p10cs-footer a { color:#c2410c; text-decoration:none; }
+.p10cs-card-grid, .p10cs-package-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:1rem; margin-bottom:1.25rem; }
+.p10cs-card, .p10cs-package-card { background:#fff; border:1px solid #e2e8f0; border-radius:14px; padding:1rem 1.1rem; }
+.p10cs-card h2, .p10cs-package-card h2 { margin:0 0 .5rem; font-size:1rem; }
+.p10cs-meta { font-size:.8rem; color:#64748b; }
+.p10cs-badge { display:inline-block; padding:.15rem .5rem; border-radius:6px; font-size:.72rem; font-weight:600; }
+.p10cs-badge-ok { background:#dcfce7; color:#166534; }
+.p10cs-badge-warn { background:#fef3c7; color:#92400e; }
+.p10cs-badge-fail { background:#fee2e2; color:#991b1b; }
+.p10cs-badge-muted { background:#f1f5f9; color:#64748b; }
+.p10cs-list { margin:0; padding-inline-start:1.25rem; }
+.p10cs-list li { margin:.35rem 0; font-size:.9rem; }
+.p10cs-final-statement { background:#fff7ed; border:2px solid #fdba74; }
+
+@media (max-width:640px) { .p10cs-wrap { padding:1rem .75rem 2rem; } }
