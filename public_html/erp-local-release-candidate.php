@@ -61,6 +61,7 @@ foreach (stabilization_boundary_labels() as $label) {
 echo '</ul></div>';
 
 echo '<p><a class="p1cc-btn p1cc-btn-primary" href="erp-stabilization-dashboard.php">داشبورد پایداری</a> ';
-echo '<a class="p1cc-btn" href="moghare360-final-release-report.php">گزارش Commercial (Phase 10)</a></p>';
+echo '<a class="p1cc-btn" href="moghare360-final-release-report.php">گزارش Commercial (Phase 10)</a> ';
+echo '<a class="p1cc-btn" href="erp-soft-run-pilot-center.php">Soft Run Pilot (Phase 12)</a></p>';
 
 stab_render_foot();

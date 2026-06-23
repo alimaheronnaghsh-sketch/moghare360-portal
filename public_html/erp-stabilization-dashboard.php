@@ -59,6 +59,7 @@ $reports = [
     ['erp-ui-polish-report.php', 'گزارش UI Polish', 'RTL · titles · boundaries'],
     ['erp-db-consistency-check.php', 'بررسی یکپارچگی DB', 'جداول Phase 1–10'],
     ['erp-local-release-candidate.php', 'Local Release Candidate 1', 'MOGHARE360 RC1'],
+    ['erp-soft-run-pilot-center.php', 'Soft Run Pilot Center', 'Phase 12 controlled pilot'],
 ];
 foreach ($reports as [$url, $title, $sub]) {
     echo '<a class="p11st-nav-card" href="' . stabilization_h($url) . '">';
