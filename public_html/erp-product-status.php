@@ -45,6 +45,10 @@ foreach (bl_module_navigation_groups() as $group) {
 }
 echo '</div>';
 
+echo '<div class="p1cc-card"><h2 class="p8bl-section-title">فاز ۱۳ — سخت‌سازی امنیت</h2>';
+echo '<p>وضعیت: <span class="p8bl-badge p8bl-badge-warn">BUILT AFTER TEST</span></p>';
+echo '<p style="margin-bottom:.75rem"><a href="erp-security-hardening-dashboard.php">داشبورد سخت‌سازی امنیت</a> · <a href="erp-write-route-audit.php">ممیزی Write Route</a> · <a href="erp-csrf-audit.php">ممیزی CSRF</a></p></div>';
+
 echo '<div class="p1cc-card"><h2 class="p8bl-section-title">فاز ۱۲.۵ — برند و فارسی‌سازی</h2>';
 echo '<p style="margin-bottom:.75rem"><a href="erp-brand-system.php">سیستم برند</a> · <a href="erp-localization-audit.php">ممیزی فارسی‌سازی</a> · <a href="erp-asset-registry.php">دفتر ثبت دارایی</a> · <a href="moghare360-demo-package.php">بسته نمایشی</a></p></div>';
 
