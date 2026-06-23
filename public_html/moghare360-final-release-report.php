@@ -66,6 +66,7 @@ echo '</div>';
 echo '<div class="p1cc-card p10cs-final-statement"><p><strong>MOGHARE360 has been converted from Soft Run Internal ERP into a Business-Ready Repair Shop Operating System with Commercial Demo Readiness.</strong></p>';
 echo '<p style="margin-top:.75rem">PHASE 11 Stabilization Sprint follows Commercial Release for Local Release Candidate 1 preparation — see <a href="erp-stabilization-dashboard.php">Stabilization Dashboard</a> and <a href="erp-local-release-candidate.php">Local RC1</a>.</p>';
 echo '<p style="margin-top:.5rem">PHASE 12.5 — <a href="erp-brand-system.php">Brand System</a> · <a href="erp-localization-audit.php">Localization Audit</a> · <a href="erp-asset-registry.php">Asset Registry</a> · <a href="moghare360-demo-package.php">Demo Package</a></p>';
-echo '<p style="margin-top:.5rem">PHASE 13 — <a href="erp-security-hardening-dashboard.php">Security Hardening Dashboard</a> · <a href="erp-write-route-audit.php">Write Route Audit</a> · <a href="erp-csrf-audit.php">CSRF Audit</a></p></div>';
+echo '<p style="margin-top:.5rem">PHASE 13 — <a href="erp-security-hardening-dashboard.php">Security Hardening Dashboard</a> · <a href="erp-write-route-audit.php">Write Route Audit</a> · <a href="erp-csrf-audit.php">CSRF Audit</a></p>';
+echo '<p style="margin-top:.5rem">PHASE 14 — <a href="erp-deployment-readiness-dashboard.php">Production Deployment Plan</a> · <a href="erp-production-readiness-checklist.php">Production Readiness Checklist</a></p></div>';
 
 cs_render_foot();

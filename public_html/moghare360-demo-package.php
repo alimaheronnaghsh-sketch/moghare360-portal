@@ -69,6 +69,7 @@ echo '</ul></div>';
 echo '<div class="m125bl-card-dark" style="text-align:center;padding:1.5rem">';
 echo '<span class="m125bl-btn-disabled">آماده‌سازی بسته دانلود</span>';
 echo '<p style="margin-top:.75rem;color:#9aa8b5;font-size:.88rem">بسته دانلودی واقعی در PHASE 15 ساخته می‌شود.</p>';
+echo '<p style="margin-top:.5rem;color:#9aa8b5;font-size:.88rem">PHASE 14 فقط Deployment Plan است — <a href="erp-deployment-readiness-dashboard.php">داشبورد آمادگی استقرار</a></p>';
 echo '</div>';
 
 mogh_loc_render_phase125_nav();

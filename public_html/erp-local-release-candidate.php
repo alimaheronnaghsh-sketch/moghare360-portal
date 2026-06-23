@@ -63,6 +63,7 @@ echo '</ul></div>';
 echo '<p><a class="p1cc-btn p1cc-btn-primary" href="erp-stabilization-dashboard.php">داشبورد پایداری</a> ';
 echo '<a class="p1cc-btn" href="moghare360-final-release-report.php">گزارش Commercial (Phase 10)</a> ';
 echo '<a class="p1cc-btn" href="erp-soft-run-pilot-center.php">Soft Run Pilot (Phase 12)</a></p>';
-echo '<p style="margin-top:.75rem;font-size:.88rem"><a href="erp-brand-system.php">سیستم برند</a> · <a href="erp-localization-audit.php">ممیزی فارسی‌سازی</a> · <a href="erp-asset-registry.php">دفتر ثبت دارایی</a> · <a href="moghare360-demo-package.php">بسته نمایشی</a> · <a href="erp-security-hardening-dashboard.php">داشبورد امنیت (Phase 13)</a></p>';
+echo '<p style="margin-top:.75rem;font-size:.88rem"><a href="erp-brand-system.php">سیستم برند</a> · <a href="erp-localization-audit.php">ممیزی فارسی‌سازی</a> · <a href="erp-asset-registry.php">دفتر ثبت دارایی</a> · <a href="moghare360-demo-package.php">بسته نمایشی</a> · <a href="erp-security-hardening-dashboard.php">داشبورد امنیت (Phase 13)</a> · <a href="erp-deployment-readiness-dashboard.php">استقرار (Phase 14)</a></p>';
+echo '<p style="margin-top:.35rem;font-size:.88rem"><a href="erp-production-readiness-checklist.php">چک‌لیست آمادگی Production</a></p>';
 
 stab_render_foot();
