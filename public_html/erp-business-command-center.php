@@ -25,7 +25,9 @@ echo '</div>';
 echo '<p style="margin-bottom:1.25rem"><a class="p1cc-btn p1cc-btn-primary" href="erp-management-dashboard.php">داشبورد مدیریت (Phase 9)</a> ';
 echo '<a class="p1cc-btn" href="moghare360-commercial-demo.php">Commercial Demo (Phase 10)</a> ';
 echo '<a class="p1cc-btn" href="erp-stabilization-dashboard.php">Stabilization Dashboard (Phase 11)</a> ';
-echo '<a class="p1cc-btn" href="erp-soft-run-pilot-center.php">Soft Run Pilot (Phase 12)</a></p>';
+echo '<a class="p1cc-btn" href="erp-soft-run-pilot-center.php">Soft Run Pilot (Phase 12)</a> ';
+echo '<a class="p1cc-btn" href="moghare360-demo-package.php">بسته نمایشی (Phase 12.5)</a></p>';
+echo '<p style="margin-bottom:1.25rem;font-size:.88rem"><a href="erp-brand-system.php">سیستم برند</a> · <a href="erp-localization-audit.php">ممیزی فارسی‌سازی</a> · <a href="erp-asset-registry.php">دفتر ثبت دارایی</a></p>';
 
 echo '<div class="p8bl-module-grid">';
 foreach (bl_phase_modules() as $mod) {
