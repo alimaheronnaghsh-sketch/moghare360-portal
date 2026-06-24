@@ -567,3 +567,46 @@
 }
 
 .w3c-stat strong { font-size: 1.25rem; }
+
+/* Wave 3D — Authorization closure dashboard */
+.w3d-wrap { max-width: 960px; }
+
+.w3d-banner { background: linear-gradient(135deg, #4c1d95, #7c3aed); }
+
+.w3d-warning {
+  border-right: 4px solid #ca8a04;
+  background: #fffbeb;
+}
+
+.w3d-status-ready { border-right: 4px solid #16a34a; }
+
+.w3d-status-partial { border-right: 4px solid #ca8a04; }
+
+.w3d-status-empty { border-right: 4px solid #64748b; }
+
+.w3d-status-error { border-right: 4px solid #dc2626; }
+
+.w3d-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  gap: 0.75rem;
+}
+
+.w3d-stat {
+  background: #f5f3ff;
+  border: 1px solid #ddd6fe;
+  border-radius: 10px;
+  padding: 0.65rem 0.75rem;
+  text-align: center;
+}
+
+.w3d-stat span {
+  display: block;
+  font-size: 0.75rem;
+  color: #525252;
+  margin-bottom: 0.25rem;
+}
+
+.w3d-stat strong { font-size: 1.25rem; }
+
+.w3d-nav { display: flex; flex-wrap: wrap; gap: 0.5rem; }
