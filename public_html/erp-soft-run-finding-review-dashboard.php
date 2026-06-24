@@ -236,6 +236,7 @@ $statusClass = match ($evaluation['status'] ?? '') {
         <a href="erp-soft-run-finding-board.php">برد یافته‌های Soft Run</a>
         <a href="erp-soft-run-finding-detail.php?finding_id=<?= wave8c_h((string)$sampleFindingId) ?>">جزئیات یافته (نمونه)</a>
         <a href="erp-soft-run-finding-workflow.php?finding_id=<?= wave8c_h((string)$sampleFindingId) ?>">گردش کار یافته (نمونه)</a>
+        <a href="erp-soft-run-finding-final-closure-dashboard.php">داشبورد نهایی بستن یافته‌های Soft Run</a>
         <a href="erp-soft-run-pilot-final-closure-dashboard.php">داشبورد نهایی بستن اجرای پایلوت WAVE 7</a>
         <a href="erp-soft-run-pilot-review-dashboard.php">داشبورد بازبینی اجرای پایلوت WAVE 7</a>
     </nav>
