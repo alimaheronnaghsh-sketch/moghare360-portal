@@ -492,3 +492,13 @@
 .w2f-stat strong { font-size: 1.25rem; }
 
 .w2f-nav { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+
+/* Wave 3A — Contract authorization */
+.w3a-wrap { max-width: 720px; }
+
+.w3a-banner { background: linear-gradient(135deg, #1e3a5f, #2563eb); }
+
+.w3a-warning {
+  border-right: 4px solid #ca8a04;
+  background: #fffbeb;
+}
