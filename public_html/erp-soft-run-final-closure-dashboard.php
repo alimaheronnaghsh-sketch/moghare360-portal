@@ -176,6 +176,8 @@ $statusClass = match ($evaluation['status'] ?? '') {
     <?php endif; ?>
 
     <nav class="w1c-card w1c-links w6d-nav">
+        <a href="erp-soft-run-pilot-execution-create.php">ثبت اجرای پایلوت Soft Run</a>
+        <a href="erp-soft-run-pilot-execution-board.php">برد اجرای پایلوت Soft Run</a>
         <a href="erp-soft-run-control-room.php">اتاق کنترل Soft Run</a>
         <a href="erp-soft-run-scenario-board.php">برد سناریوهای اجرای آزمایشی</a>
         <a href="erp-soft-run-operator-test-pack.php">بسته تست اپراتوری</a>
