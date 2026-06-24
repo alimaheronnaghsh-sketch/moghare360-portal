@@ -92,12 +92,14 @@ $resultCounts = (array)($fetch['counts']['result_status'] ?? []);
                         <th>نتیجه</th>
                         <th>ایجاد</th>
                         <th>جزئیات</th>
+                        <th>گردش کار</th>
                     </tr>
                     </thead>
                     <tbody>
                     <?php foreach ($records as $row): ?>
+                        <?php $rowExecutionId = (string)($row['execution_id'] ?? ''); ?>
                         <tr>
-                            <td><?= wave7a_board_h((string)($row['execution_id'] ?? '')) ?></td>
+                            <td><?= wave7a_board_h($rowExecutionId) ?></td>
                             <td><?= wave7a_board_h((string)($row['execution_code'] ?? '')) ?></td>
                             <td><?= wave7a_board_h((string)($row['jobcard_id'] ?? '—')) ?></td>
                             <td><?= wave7a_board_h((string)($row['scenario_title'] ?? '')) ?></td>
@@ -105,7 +107,10 @@ $resultCounts = (array)($fetch['counts']['result_status'] ?? []);
                             <td><?= wave7a_board_h(moghare360_soft_run_pilot_execution_status_label((string)($row['result_status'] ?? ''))) ?></td>
                             <td><?= wave7a_board_h((string)($row['created_at'] ?? '')) ?></td>
                             <td>
-                                <a href="erp-soft-run-pilot-execution-detail.php?execution_id=<?= wave7a_board_h((string)($row['execution_id'] ?? '')) ?>">مشاهده</a>
+                                <a href="erp-soft-run-pilot-execution-detail.php?execution_id=<?= wave7a_board_h($rowExecutionId) ?>">مشاهده</a>
+                            </td>
+                            <td>
+                                <a href="erp-soft-run-pilot-execution-workflow.php?execution_id=<?= wave7a_board_h($rowExecutionId) ?>">گردش کار</a>
                             </td>
                         </tr>
                     <?php endforeach; ?>

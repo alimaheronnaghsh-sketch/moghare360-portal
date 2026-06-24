@@ -760,3 +760,437 @@ function moghare360_soft_run_pilot_execution_fetch_history(int $executionId): ar
         'message' => 'تاریخچه اجرای پایلوت بازیابی شد.',
     ];
 }
+
+/**
+ * @return array<string, list<string>>
+ */
+function moghare360_soft_run_pilot_execution_allowed_transitions(): array
+{
+    return [
+        'DRAFT' => ['STARTED', 'CANCELLED'],
+        'STARTED' => ['OBSERVED', 'BLOCKED', 'CANCELLED'],
+        'OBSERVED' => ['PASSED', 'FAILED', 'BLOCKED', 'CANCELLED'],
+        'BLOCKED' => ['STARTED', 'CANCELLED'],
+        'FAILED' => ['OBSERVED'],
+        'PASSED' => ['OBSERVED'],
+        'CANCELLED' => [],
+    ];
+}
+
+/**
+ * @return list<string>
+ */
+function moghare360_soft_run_pilot_execution_next_statuses(string $currentStatus): array
+{
+    $key = moghare360_soft_run_pilot_execution_normalize_status($currentStatus);
+
+    return moghare360_soft_run_pilot_execution_allowed_transitions()[$key] ?? [];
+}
+
+/**
+ * @return array{ok: bool, errors: list<array{field: string, rule: string, message: string}>}
+ */
+function moghare360_soft_run_pilot_execution_validate_transition(string $oldStatus, string $newStatus): array
+{
+    $old = moghare360_soft_run_pilot_execution_normalize_status($oldStatus);
+    $new = moghare360_soft_run_pilot_execution_normalize_status($newStatus);
+
+    if ($old === 'CANCELLED') {
+        return [
+            'ok' => false,
+            'errors' => [[
+                'field' => 'new_execution_status',
+                'rule' => 'cancelled_terminal',
+                'message' => 'وضعیت لغو شده (CANCELLED) نهایی است — انتقال مجاز نیست.',
+            ]],
+        ];
+    }
+
+    if (!in_array($old, moghare360_soft_run_pilot_execution_allowed_statuses(), true)) {
+        return [
+            'ok' => false,
+            'errors' => [[
+                'field' => 'new_execution_status',
+                'rule' => 'invalid_old_status',
+                'message' => 'وضعیت اجرای فعلی نامعتبر است.',
+            ]],
+        ];
+    }
+
+    if (!in_array($new, moghare360_soft_run_pilot_execution_allowed_statuses(), true)) {
+        return [
+            'ok' => false,
+            'errors' => [[
+                'field' => 'new_execution_status',
+                'rule' => 'invalid_new_status',
+                'message' => 'وضعیت اجرای جدید نامعتبر است.',
+            ]],
+        ];
+    }
+
+    $allowedNext = moghare360_soft_run_pilot_execution_next_statuses($old);
+
+    if (!in_array($new, $allowedNext, true)) {
+        return [
+            'ok' => false,
+            'errors' => [[
+                'field' => 'new_execution_status',
+                'rule' => 'invalid_transition',
+                'message' => 'انتقال وضعیت از ' . $old . ' به ' . $new . ' مجاز نیست.',
+            ]],
+        ];
+    }
+
+    return ['ok' => true, 'errors' => []];
+}
+
+/**
+ * @param array<string, mixed> $payload
+ * @return array{ok: bool, errors: list<array{field: string, rule: string, message: string}>, clean: array<string, mixed>}
+ */
+function moghare360_soft_run_pilot_execution_validate_workflow_payload(array $payload): array
+{
+    $errors = [];
+    $clean = [];
+
+    $executionIdRaw = trim((string)($payload['execution_id'] ?? ''));
+    if ($executionIdRaw === '' || !ctype_digit($executionIdRaw) || (int)$executionIdRaw < 1) {
+        $errors[] = [
+            'field' => 'execution_id',
+            'rule' => 'required_positive_number',
+            'message' => 'شناسه اجرا الزامی و باید عدد مثبت باشد.',
+        ];
+    } else {
+        $clean['execution_id'] = (int)$executionIdRaw;
+    }
+
+    $newExecutionStatus = moghare360_soft_run_pilot_execution_normalize_status(
+        (string)($payload['new_execution_status'] ?? '')
+    );
+    if ($newExecutionStatus === '' || !in_array($newExecutionStatus, moghare360_soft_run_pilot_execution_allowed_statuses(), true)) {
+        $errors[] = [
+            'field' => 'new_execution_status',
+            'rule' => 'required_allowed_status',
+            'message' => 'وضعیت اجرای جدید الزامی و باید از مقادیر مجاز باشد.',
+        ];
+    } else {
+        $clean['new_execution_status'] = $newExecutionStatus;
+    }
+
+    $evidenceStatus = moghare360_soft_run_pilot_execution_normalize_status(
+        (string)($payload['evidence_status'] ?? '')
+    );
+    if ($evidenceStatus === '' || !in_array($evidenceStatus, moghare360_soft_run_pilot_execution_allowed_evidence_statuses(), true)) {
+        $errors[] = [
+            'field' => 'evidence_status',
+            'rule' => 'required_allowed_evidence_status',
+            'message' => 'وضعیت شواهد الزامی و باید از مقادیر مجاز باشد.',
+        ];
+    } else {
+        $clean['evidence_status'] = $evidenceStatus;
+    }
+
+    $resultStatus = moghare360_soft_run_pilot_execution_normalize_status(
+        (string)($payload['result_status'] ?? '')
+    );
+    if ($resultStatus === '' || !in_array($resultStatus, moghare360_soft_run_pilot_execution_allowed_result_statuses(), true)) {
+        $errors[] = [
+            'field' => 'result_status',
+            'rule' => 'required_allowed_result_status',
+            'message' => 'وضعیت نتیجه الزامی و باید از مقادیر مجاز باشد.',
+        ];
+    } else {
+        $clean['result_status'] = $resultStatus;
+    }
+
+    $changeReason = trim((string)($payload['change_reason'] ?? ''));
+    if ($changeReason === '' || mb_strlen($changeReason) > 1000) {
+        $errors[] = [
+            'field' => 'change_reason',
+            'rule' => 'required_length',
+            'message' => 'دلیل تغییر الزامی است (حداکثر ۱۰۰۰ کاراکتر).',
+        ];
+    } else {
+        $clean['change_reason'] = $changeReason;
+    }
+
+    foreach ([
+        'actual_evidence' => 1000,
+        'blocker_notes' => 1000,
+        'internal_notes' => 1000,
+    ] as $field => $maxLen) {
+        $value = trim((string)($payload[$field] ?? ''));
+        if (mb_strlen($value) > $maxLen) {
+            $errors[] = [
+                'field' => $field,
+                'rule' => 'max_length',
+                'message' => 'فیلد ' . $field . ' حداکثر ' . $maxLen . ' کاراکتر مجاز است.',
+            ];
+        } else {
+            $clean[$field] = $value !== '' ? $value : null;
+        }
+    }
+
+    return [
+        'ok' => $errors === [],
+        'errors' => $errors,
+        'clean' => $clean,
+    ];
+}
+
+/**
+ * @param array<string, mixed> $payload
+ * @return array{
+ *   ok: bool,
+ *   execution_id: int|null,
+ *   execution_code: string|null,
+ *   old_execution_status: string|null,
+ *   new_execution_status: string|null,
+ *   old_result_status: string|null,
+ *   new_result_status: string|null,
+ *   schema_status: string,
+ *   message: string,
+ *   errors: list<array{field: string, rule: string, message: string}>,
+ *   notes: list<string>
+ * }
+ */
+function moghare360_soft_run_pilot_execution_update_workflow(int $executionId, array $payload): array
+{
+    $payload['execution_id'] = $executionId;
+    $validation = moghare360_soft_run_pilot_execution_validate_workflow_payload($payload);
+
+    if (!$validation['ok']) {
+        return [
+            'ok' => false,
+            'execution_id' => null,
+            'execution_code' => null,
+            'old_execution_status' => null,
+            'new_execution_status' => null,
+            'old_result_status' => null,
+            'new_result_status' => null,
+            'schema_status' => MOGHARE360_SOFT_RUN_PILOT_EXECUTION_SCHEMA_BLOCKED,
+            'message' => 'اعتبارسنجی گردش کار اجرای پایلوت ناموفق بود.',
+            'errors' => $validation['errors'],
+            'notes' => [MOGHARE360_SOFT_RUN_PILOT_EXECUTION_INTERNAL_NOTICE],
+        ];
+    }
+
+    $schema = moghare360_soft_run_pilot_execution_schema_status();
+
+    if (($schema['schema_status'] ?? '') !== MOGHARE360_SOFT_RUN_PILOT_EXECUTION_SCHEMA_READY) {
+        return [
+            'ok' => false,
+            'execution_id' => null,
+            'execution_code' => null,
+            'old_execution_status' => null,
+            'new_execution_status' => null,
+            'old_result_status' => null,
+            'new_result_status' => null,
+            'schema_status' => MOGHARE360_SOFT_RUN_PILOT_EXECUTION_SCHEMA_BLOCKED,
+            'message' => MOGHARE360_SOFT_RUN_PILOT_EXECUTION_BLOCK_MESSAGE,
+            'errors' => [],
+            'notes' => array_merge(
+                [MOGHARE360_SOFT_RUN_PILOT_EXECUTION_INTERNAL_NOTICE],
+                $schema['notes'] ?? []
+            ),
+        ];
+    }
+
+    $detail = moghare360_soft_run_pilot_execution_fetch_detail($executionId);
+
+    if (!($detail['ok'] ?? false) || ($detail['record'] ?? null) === null) {
+        return [
+            'ok' => false,
+            'execution_id' => null,
+            'execution_code' => null,
+            'old_execution_status' => null,
+            'new_execution_status' => null,
+            'old_result_status' => null,
+            'new_result_status' => null,
+            'schema_status' => MOGHARE360_SOFT_RUN_PILOT_EXECUTION_SCHEMA_READY,
+            'message' => 'رکورد اجرای پایلوت یافت نشد.',
+            'errors' => [[
+                'field' => 'execution_id',
+                'rule' => 'not_found',
+                'message' => 'رکورد اجرا با این شناسه وجود ندارد.',
+            ]],
+            'notes' => [],
+        ];
+    }
+
+    $record = (array)$detail['record'];
+    $oldExecutionStatus = moghare360_soft_run_pilot_execution_normalize_status(
+        (string)($record['execution_status'] ?? '')
+    );
+    $oldResultStatus = moghare360_soft_run_pilot_execution_normalize_status(
+        (string)($record['result_status'] ?? '')
+    );
+    $clean = $validation['clean'];
+    $newExecutionStatus = (string)$clean['new_execution_status'];
+    $newResultStatus = (string)$clean['result_status'];
+
+    $transitionCheck = moghare360_soft_run_pilot_execution_validate_transition(
+        $oldExecutionStatus,
+        $newExecutionStatus
+    );
+
+    if (!$transitionCheck['ok']) {
+        return [
+            'ok' => false,
+            'execution_id' => $executionId,
+            'execution_code' => (string)($record['execution_code'] ?? ''),
+            'old_execution_status' => $oldExecutionStatus,
+            'new_execution_status' => $newExecutionStatus,
+            'old_result_status' => $oldResultStatus,
+            'new_result_status' => $newResultStatus,
+            'schema_status' => MOGHARE360_SOFT_RUN_PILOT_EXECUTION_SCHEMA_READY,
+            'message' => 'انتقال وضعیت اجرای پایلوت مجاز نیست.',
+            'errors' => $transitionCheck['errors'],
+            'notes' => [MOGHARE360_SOFT_RUN_PILOT_EXECUTION_INTERNAL_NOTICE],
+        ];
+    }
+
+    $connection = customer_core_db();
+    $notes = $schema['notes'] ?? [];
+    $actorUserId = moghare360_soft_run_pilot_execution_resolve_actor_user_id();
+    $now = gmdate('Y-m-d H:i:s');
+
+    $startedAt = trim((string)($record['started_at'] ?? ''));
+    $startedAt = $startedAt !== '' ? $startedAt : null;
+
+    if ($startedAt === null && in_array($newExecutionStatus, ['STARTED', 'OBSERVED', 'PASSED', 'FAILED', 'BLOCKED'], true)) {
+        $startedAt = $now;
+    }
+
+    $completedAt = null;
+    if (in_array($newExecutionStatus, ['PASSED', 'FAILED', 'BLOCKED', 'CANCELLED'], true)) {
+        $completedAt = $now;
+    }
+
+    $actualEvidence = $clean['actual_evidence'] ?? trim((string)($record['actual_evidence'] ?? ''));
+    $actualEvidence = $actualEvidence !== '' && $actualEvidence !== null ? (string)$actualEvidence : null;
+
+    $blockerNotes = $clean['blocker_notes'] ?? trim((string)($record['blocker_notes'] ?? ''));
+    $blockerNotes = $blockerNotes !== '' && $blockerNotes !== null ? (string)$blockerNotes : null;
+
+    $internalNotes = $clean['internal_notes'] ?? trim((string)($record['internal_notes'] ?? ''));
+    $internalNotes = $internalNotes !== '' && $internalNotes !== null ? (string)$internalNotes : null;
+
+    if (!@odbc_autocommit($connection, false)) {
+        return [
+            'ok' => false,
+            'execution_id' => null,
+            'execution_code' => null,
+            'old_execution_status' => $oldExecutionStatus,
+            'new_execution_status' => $newExecutionStatus,
+            'old_result_status' => $oldResultStatus,
+            'new_result_status' => $newResultStatus,
+            'schema_status' => MOGHARE360_SOFT_RUN_PILOT_EXECUTION_SCHEMA_READY,
+            'message' => 'شروع تراکنش به‌روزرسانی گردش کار ناموفق بود.',
+            'errors' => [],
+            'notes' => $notes,
+        ];
+    }
+
+    try {
+        $updateOk = customer_core_execute(
+            $connection,
+            'UPDATE dbo.erp_soft_run_pilot_executions SET
+                execution_status = ?,
+                evidence_status = ?,
+                result_status = ?,
+                actual_evidence = ?,
+                blocker_notes = ?,
+                internal_notes = ?,
+                started_at = ?,
+                completed_at = ?,
+                updated_at = ?,
+                updated_by_user_id = ?
+             WHERE execution_id = ?',
+            [
+                $newExecutionStatus,
+                $clean['evidence_status'],
+                $newResultStatus,
+                $actualEvidence,
+                $blockerNotes,
+                $internalNotes,
+                $startedAt,
+                $completedAt,
+                $now,
+                $actorUserId,
+                $executionId,
+            ]
+        );
+
+        if ($updateOk === false) {
+            throw new RuntimeException('به‌روزرسانی رکورد اجرای پایلوت ناموفق بود.');
+        }
+
+        $historyOk = customer_core_execute(
+            $connection,
+            'INSERT INTO dbo.erp_soft_run_pilot_execution_history (
+                execution_id,
+                old_execution_status,
+                new_execution_status,
+                old_result_status,
+                new_result_status,
+                change_reason,
+                changed_by_user_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            [
+                $executionId,
+                $oldExecutionStatus,
+                $newExecutionStatus,
+                $oldResultStatus,
+                $newResultStatus,
+                $clean['change_reason'],
+                $actorUserId,
+            ]
+        );
+
+        if ($historyOk === false) {
+            throw new RuntimeException('درج تاریخچه گردش کار ناموفق بود.');
+        }
+
+        if (!@odbc_commit($connection)) {
+            throw new RuntimeException('تأیید تراکنش گردش کار ناموفق بود.');
+        }
+
+        @odbc_autocommit($connection, true);
+
+        return [
+            'ok' => true,
+            'execution_id' => $executionId,
+            'execution_code' => (string)($record['execution_code'] ?? ''),
+            'old_execution_status' => $oldExecutionStatus,
+            'new_execution_status' => $newExecutionStatus,
+            'old_result_status' => $oldResultStatus,
+            'new_result_status' => $newResultStatus,
+            'schema_status' => MOGHARE360_SOFT_RUN_PILOT_EXECUTION_SCHEMA_READY,
+            'message' => 'گردش کار اجرای پایلوت Soft Run با موفقیت به‌روزرسانی شد.',
+            'errors' => [],
+            'notes' => array_merge($notes, [MOGHARE360_SOFT_RUN_PILOT_EXECUTION_INTERNAL_NOTICE]),
+        ];
+    } catch (Throwable $exception) {
+        @odbc_rollback($connection);
+        @odbc_autocommit($connection, true);
+
+        return [
+            'ok' => false,
+            'execution_id' => $executionId,
+            'execution_code' => (string)($record['execution_code'] ?? ''),
+            'old_execution_status' => $oldExecutionStatus,
+            'new_execution_status' => $newExecutionStatus,
+            'old_result_status' => $oldResultStatus,
+            'new_result_status' => $newResultStatus,
+            'schema_status' => MOGHARE360_SOFT_RUN_PILOT_EXECUTION_SCHEMA_READY,
+            'message' => 'به‌روزرسانی گردش کار اجرای پایلوت ناموفق بود.',
+            'errors' => [[
+                'field' => 'database',
+                'rule' => 'write_failed',
+                'message' => 'خطای کنترل‌شده در به‌روزرسانی پایگاه داده — جزئیات فنی نمایش داده نمی‌شود.',
+            ]],
+            'notes' => $notes,
+        ];
+    }
+}

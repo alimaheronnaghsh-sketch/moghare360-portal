@@ -1138,3 +1138,60 @@
 .w7a-dl dd { margin: 0; }
 
 .w7a-nav { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+
+/* Wave 7B — Soft Run pilot execution workflow */
+.w7b-wrap { max-width: 1000px; }
+
+.w7b-banner { background: linear-gradient(135deg, #7c2d12, #ea580c); }
+
+.w7b-warning {
+  border-right: 4px solid #ca8a04;
+  background: #fffbeb;
+}
+
+.w7b-form label {
+  display: block;
+  margin: 0.75rem 0 0.25rem;
+  font-size: 0.9rem;
+}
+
+.w7b-form input,
+.w7b-form select,
+.w7b-form textarea {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  padding: 0.45rem 0.5rem;
+  border: 1px solid #d4d4d4;
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: 0.9rem;
+}
+
+.w7b-dl {
+  display: grid;
+  grid-template-columns: minmax(140px, 200px) 1fr;
+  gap: 0.35rem 1rem;
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.w7b-dl dt { color: #525252; margin: 0; }
+
+.w7b-dl dd { margin: 0; }
+
+.w7b-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.w7b-table th,
+.w7b-table td {
+  text-align: right;
+  padding: 0.35rem;
+  border-bottom: 1px solid #e5e5e5;
+  vertical-align: top;
+}
+
+.w7b-nav { display: flex; flex-wrap: wrap; gap: 0.5rem; }

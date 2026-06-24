@@ -139,6 +139,9 @@ $historyRows = ($history !== null && ($history['ok'] ?? false)) ? (array)($histo
 
     <nav class="w1c-card w1c-links w7a-nav">
         <a href="erp-soft-run-pilot-execution-board.php">بازگشت به برد اجرا</a>
+        <?php if ($executionId > 0 && ($detail['ok'] ?? false)): ?>
+            <a href="erp-soft-run-pilot-execution-workflow.php?execution_id=<?= wave7a_detail_h((string)$executionId) ?>">گردش کار اجرا</a>
+        <?php endif; ?>
         <a href="erp-soft-run-pilot-execution-create.php">ثبت اجرای پایلوت جدید</a>
         <a href="erp-soft-run-final-closure-dashboard.php">داشبورد نهایی آمادگی پایلوت</a>
     </nav>
