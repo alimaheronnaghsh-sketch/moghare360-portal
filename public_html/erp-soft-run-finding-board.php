@@ -136,6 +136,7 @@ $correctiveCounts = (array)($fetch['counts']['corrective_action_status'] ?? []);
     </section>
 
     <nav class="w1c-card w1c-links w8a-nav">
+        <a href="erp-soft-run-finding-review-dashboard.php">داشبورد بازبینی یافته‌های Soft Run</a>
         <a href="erp-soft-run-finding-create.php">ثبت یافته Soft Run</a>
         <a href="erp-soft-run-pilot-final-closure-dashboard.php">داشبورد نهایی بستن اجرای پایلوت</a>
         <a href="erp-soft-run-pilot-review-dashboard.php">داشبورد بازبینی اجرای پایلوت</a>
