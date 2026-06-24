@@ -767,3 +767,37 @@
   padding: 0.35rem;
   border-bottom: 1px solid #e5e5e5;
 }
+
+/* Wave 5A — Unified JobCard command center */
+.w5a-wrap { max-width: 900px; }
+
+.w5a-banner { background: linear-gradient(135deg, #0f172a, #334155); }
+
+.w5a-warning {
+  border-right: 4px solid #ca8a04;
+  background: #fffbeb;
+}
+
+.w5a-status-ready { border-right: 4px solid #16a34a; }
+
+.w5a-status-action { border-right: 4px solid #ca8a04; }
+
+.w5a-status-blocked { border-right: 4px solid #dc2626; }
+
+.w5a-status-empty { border-right: 4px solid #64748b; }
+
+.w5a-status-error { border-right: 4px solid #dc2626; }
+
+.w5a-detail-dl {
+  display: grid;
+  grid-template-columns: 160px 1fr;
+  gap: 0.35rem 0.75rem;
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.w5a-detail-dl dt { color: #525252; margin: 0; }
+
+.w5a-detail-dl dd { margin: 0; }
+
+.w5a-nav { display: flex; flex-wrap: wrap; gap: 0.5rem; }
