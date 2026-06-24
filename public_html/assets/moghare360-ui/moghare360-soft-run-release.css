@@ -454,3 +454,41 @@
 .w2e-timeline-dl dt { color: #525252; margin: 0; }
 
 .w2e-timeline-dl dd { margin: 0; word-break: break-all; }
+
+/* Wave 2F — Closure dashboard */
+.w2f-wrap { max-width: 960px; }
+
+.w2f-banner { background: linear-gradient(135deg, #134e4a, #0d9488); }
+
+.w2f-status-ready { border-right: 4px solid #16a34a; }
+
+.w2f-status-partial { border-right: 4px solid #ca8a04; }
+
+.w2f-status-empty { border-right: 4px solid #64748b; }
+
+.w2f-status-error { border-right: 4px solid #dc2626; }
+
+.w2f-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 0.75rem;
+}
+
+.w2f-stat {
+  background: #f0fdfa;
+  border: 1px solid #99f6e4;
+  border-radius: 10px;
+  padding: 0.65rem 0.75rem;
+  text-align: center;
+}
+
+.w2f-stat span {
+  display: block;
+  font-size: 0.75rem;
+  color: #525252;
+  margin-bottom: 0.25rem;
+}
+
+.w2f-stat strong { font-size: 1.25rem; }
+
+.w2f-nav { display: flex; flex-wrap: wrap; gap: 0.5rem; }
