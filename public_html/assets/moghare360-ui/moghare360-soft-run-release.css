@@ -1029,3 +1029,39 @@
 }
 
 .w6c-nav { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+
+/* Wave 6D — Soft Run final closure */
+.w6d-wrap { max-width: 960px; }
+
+.w6d-banner { background: linear-gradient(135deg, #1e3a8a, #2563eb); }
+
+.w6d-warning {
+  border-right: 4px solid #ca8a04;
+  background: #fffbeb;
+}
+
+.w6d-status-ready { border-right: 4px solid #16a34a; }
+
+.w6d-status-review { border-right: 4px solid #ca8a04; }
+
+.w6d-status-blocked { border-right: 4px solid #dc2626; }
+
+.w6d-status-empty { border-right: 4px solid #64748b; }
+
+.w6d-status-error { border-right: 4px solid #dc2626; }
+
+.w6d-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.w6d-table th,
+.w6d-table td {
+  text-align: right;
+  padding: 0.35rem;
+  border-bottom: 1px solid #e5e5e5;
+  vertical-align: top;
+}
+
+.w6d-nav { display: flex; flex-wrap: wrap; gap: 0.5rem; }

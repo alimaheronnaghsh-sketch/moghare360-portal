@@ -139,6 +139,7 @@ $wavePanels = [
     </section>
 
     <nav class="w1c-card w1c-links w6a-nav">
+        <a href="erp-soft-run-final-closure-dashboard.php">داشبورد نهایی آمادگی پایلوت</a>
         <a href="erp-soft-run-scenario-board.php">برد سناریوهای اجرای آزمایشی</a>
         <a href="erp-soft-run-operator-test-pack.php">بسته تست اپراتوری اجرای آزمایشی</a>
         <a href="erp-media-evidence-closure-dashboard.php">داشبورد بستن WAVE 2</a>

@@ -221,6 +221,7 @@ $statusClass = match ($evaluation['status'] ?? '') {
     </section>
 
     <nav class="w1c-card w1c-links w6c-nav">
+        <a href="erp-soft-run-final-closure-dashboard.php">داشبورد نهایی آمادگی پایلوت</a>
         <a href="erp-soft-run-control-room.php">اتاق کنترل Soft Run</a>
         <a href="erp-soft-run-scenario-board.php">برد سناریوهای اجرای آزمایشی</a>
         <a href="erp-jobcard-command-workbench.php">میز فرمان کارت کار</a>
