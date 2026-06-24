@@ -993,3 +993,39 @@
 }
 
 .w6b-nav { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+
+/* Wave 6C — Soft Run operator test pack */
+.w6c-wrap { max-width: 1000px; }
+
+.w6c-banner { background: linear-gradient(135deg, #4c1d95, #7e22ce); }
+
+.w6c-warning {
+  border-right: 4px solid #ca8a04;
+  background: #fffbeb;
+}
+
+.w6c-status-ready { border-right: 4px solid #16a34a; }
+
+.w6c-status-review { border-right: 4px solid #ca8a04; }
+
+.w6c-status-blocked { border-right: 4px solid #dc2626; }
+
+.w6c-status-empty { border-right: 4px solid #64748b; }
+
+.w6c-status-error { border-right: 4px solid #dc2626; }
+
+.w6c-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.w6c-table th,
+.w6c-table td {
+  text-align: right;
+  padding: 0.35rem;
+  border-bottom: 1px solid #e5e5e5;
+  vertical-align: top;
+}
+
+.w6c-nav { display: flex; flex-wrap: wrap; gap: 0.5rem; }
