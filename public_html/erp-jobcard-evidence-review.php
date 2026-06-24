@@ -160,6 +160,7 @@ $lastMediaRows = array_slice($review['media_rows'] ?? [], 0, 10);
     <?php endif; ?>
 
     <nav class="w1c-card w1c-links">
+        <a href="erp-jobcard-evidence-timeline.php?jobcard_id=<?= wave2d_review_h($invalidId ? '1' : (string)$jobcardId) ?>">خط زمانی مدارک</a>
         <a href="erp-jobcard-camera-capture.php">ثبت تصویر دوربین</a>
         <a href="erp-jobcard-media-preview.php?jobcard_id=<?= wave2d_review_h($invalidId ? '1' : (string)$jobcardId) ?>">پیش‌نمایش رسانه</a>
         <a href="erp-jobcard-diagnostic-file.php">ثبت فایل تشخیصی</a>
