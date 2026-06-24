@@ -212,6 +212,8 @@ $statusClass = match ($evaluation['status'] ?? '') {
     <?php endif; ?>
 
     <nav class="w1c-card w1c-links w7c-nav">
+        <a href="erp-soft-run-finding-create.php">ثبت یافته Soft Run</a>
+        <a href="erp-soft-run-finding-board.php">برد یافته‌های Soft Run</a>
         <a href="erp-soft-run-pilot-final-closure-dashboard.php">داشبورد نهایی بستن اجرای پایلوت</a>
         <a href="erp-soft-run-pilot-execution-create.php">ثبت اجرای پایلوت Soft Run</a>
         <a href="erp-soft-run-pilot-execution-board.php">برد اجرای پایلوت</a>
