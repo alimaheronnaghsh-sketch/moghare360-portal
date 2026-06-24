@@ -137,6 +137,8 @@ $statusClass = match ($eligibility['status'] ?? '') {
     <?php endif; ?>
 
     <nav class="w1c-card w1c-links w4b-nav">
+        <a href="erp-jobcard-delivery-clearance.php?jobcard_id=<?= wave4b_h($invalidId ? '1' : (string)$jobcardId) ?>">ثبت Clearance داخلی تحویل</a>
+        <a href="erp-jobcard-delivery-clearance-preview.php?jobcard_id=<?= wave4b_h($invalidId ? '1' : (string)$jobcardId) ?>">سوابق Clearance تحویل</a>
         <a href="erp-jobcard-final-readiness.php?jobcard_id=<?= wave4b_h($invalidId ? '1' : (string)$jobcardId) ?>">آمادگی نهایی</a>
         <a href="erp-jobcard-evidence-review.php?jobcard_id=<?= wave4b_h($invalidId ? '1' : (string)$jobcardId) ?>">بازبینی مدارک</a>
         <a href="erp-jobcard-authorization-gate.php?jobcard_id=<?= wave4b_h($invalidId ? '1' : (string)$jobcardId) ?>">گیت مجوز</a>
