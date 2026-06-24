@@ -195,3 +195,121 @@
     grid-column: 1 / -1;
   }
 }
+
+/* Wave 1C — Critical Forms v2 preview pages */
+.w1c-wrap {
+  max-width: 720px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  font-family: Tahoma, Arial, sans-serif;
+}
+
+.w1c-banner {
+  background: linear-gradient(135deg, #1e3a8a, #2563eb);
+  color: #fff;
+  border-radius: 14px;
+  padding: 1.25rem 1.4rem;
+}
+
+.w1c-banner h1 { margin: 0 0 0.35rem; font-size: 1.25rem; }
+.w1c-banner p { margin: 0; font-size: 0.88rem; opacity: 0.95; }
+
+.w1c-card {
+  background: #fff;
+  border: 1px solid #e5e5e5;
+  border-radius: 12px;
+  padding: 1.1rem 1.2rem;
+}
+
+.w1c-form label {
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin-bottom: 0.35rem;
+  color: #404040;
+}
+
+.w1c-form input,
+.w1c-form select,
+.w1c-form textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid #d4d4d4;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  margin-bottom: 0.85rem;
+  font-family: inherit;
+}
+
+.w1c-form textarea { min-height: 4.5rem; resize: vertical; }
+
+.w1c-plate-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1.2fr 1fr;
+  gap: 0.5rem;
+  margin-bottom: 0.85rem;
+}
+
+.w1c-btn {
+  display: inline-block;
+  padding: 0.6rem 1.1rem;
+  background: #2563eb;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.w1c-btn:hover { background: #1d4ed8; }
+
+.w1c-links { font-size: 0.82rem; display: flex; flex-wrap: wrap; gap: 0.65rem; }
+.w1c-links a { color: #2563eb; }
+
+.w1c-success {
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  color: #047857;
+  padding: 0.85rem 1rem;
+  border-radius: 10px;
+  font-weight: 600;
+}
+
+.w1c-error-box {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 10px;
+  padding: 0.85rem 1rem;
+}
+
+.w1c-payload {
+  background: #f8fafc;
+  border: 1px solid #e5e5e5;
+  border-radius: 8px;
+  padding: 0.75rem;
+  font-size: 0.8rem;
+  direction: ltr;
+  text-align: left;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.w1c-note {
+  font-size: 0.82rem;
+  color: #525252;
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  border-radius: 8px;
+  padding: 0.65rem 0.85rem;
+}
+
+.moghare360-validation-errors {
+  margin: 0.5rem 0 0;
+  padding-right: 1.25rem;
+}
