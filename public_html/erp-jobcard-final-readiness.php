@@ -154,6 +154,7 @@ $authRuleLabels = moghare360_contract_authorization_gate_rule_labels();
     <?php endif; ?>
 
     <nav class="w1c-card w1c-links w4a-nav">
+        <a href="erp-jobcard-delivery-eligibility.php?jobcard_id=<?= wave4a_h($invalidId ? '1' : (string)$jobcardId) ?>">بررسی صلاحیت تحویل</a>
         <a href="erp-jobcard-evidence-review.php?jobcard_id=<?= wave4a_h($invalidId ? '1' : (string)$jobcardId) ?>">بازبینی مدارک</a>
         <a href="erp-jobcard-authorization-gate.php?jobcard_id=<?= wave4a_h($invalidId ? '1' : (string)$jobcardId) ?>">گیت مجوز</a>
         <a href="erp-jobcard-contract-authorization-preview.php?jobcard_id=<?= wave4a_h($invalidId ? '1' : (string)$jobcardId) ?>">پیش‌نمایش مجوزها</a>

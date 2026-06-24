@@ -644,3 +644,37 @@
 .w4a-detail-dl dd { margin: 0; }
 
 .w4a-nav { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+
+/* Wave 4B — Delivery eligibility */
+.w4b-wrap { max-width: 800px; }
+
+.w4b-banner { background: linear-gradient(135deg, #115e59, #0d9488); }
+
+.w4b-warning {
+  border-right: 4px solid #ca8a04;
+  background: #fffbeb;
+}
+
+.w4b-status-eligible { border-right: 4px solid #16a34a; }
+
+.w4b-status-review { border-right: 4px solid #ca8a04; }
+
+.w4b-status-not-eligible { border-right: 4px solid #dc2626; }
+
+.w4b-status-empty { border-right: 4px solid #64748b; }
+
+.w4b-status-error { border-right: 4px solid #dc2626; }
+
+.w4b-detail-dl {
+  display: grid;
+  grid-template-columns: 150px 1fr;
+  gap: 0.35rem 0.75rem;
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.w4b-detail-dl dt { color: #525252; margin: 0; }
+
+.w4b-detail-dl dd { margin: 0; }
+
+.w4b-nav { display: flex; flex-wrap: wrap; gap: 0.5rem; }
