@@ -69,6 +69,7 @@ $methodLabels = moghare360_contract_authorization_method_labels();
                         <th style="text-align:right;padding:0.35rem;">مشتری</th>
                         <th style="text-align:right;padding:0.35rem;">موبایل</th>
                         <th style="text-align:right;padding:0.35rem;">زمان</th>
+                        <th style="text-align:right;padding:0.35rem;">گردش کار</th>
                     </tr>
                     </thead>
                     <tbody>
@@ -86,6 +87,9 @@ $methodLabels = moghare360_contract_authorization_method_labels();
                             <td style="padding:0.35rem;"><?= wave3a_preview_h((string)($row['customer_name'] ?? '')) ?></td>
                             <td style="padding:0.35rem;"><?= wave3a_preview_h((string)($row['customer_mobile'] ?? '')) ?></td>
                             <td style="padding:0.35rem;"><?= wave3a_preview_h((string)($row['created_at'] ?? '')) ?></td>
+                            <td style="padding:0.35rem;">
+                                <a href="erp-jobcard-contract-authorization-workflow.php?authorization_id=<?= wave3a_preview_h((string)($row['authorization_id'] ?? '')) ?>">گردش کار</a>
+                            </td>
                         </tr>
                     <?php endforeach; ?>
                     </tbody>
