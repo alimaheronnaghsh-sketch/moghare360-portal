@@ -957,3 +957,39 @@
 .w6a-stat strong { font-size: 1.1rem; }
 
 .w6a-nav { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+
+/* Wave 6B — Soft Run scenario board */
+.w6b-wrap { max-width: 1000px; }
+
+.w6b-banner { background: linear-gradient(135deg, #164e63, #0891b2); }
+
+.w6b-warning {
+  border-right: 4px solid #ca8a04;
+  background: #fffbeb;
+}
+
+.w6b-status-ready { border-right: 4px solid #16a34a; }
+
+.w6b-status-review { border-right: 4px solid #ca8a04; }
+
+.w6b-status-blocked { border-right: 4px solid #dc2626; }
+
+.w6b-status-empty { border-right: 4px solid #64748b; }
+
+.w6b-status-error { border-right: 4px solid #dc2626; }
+
+.w6b-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.w6b-table th,
+.w6b-table td {
+  text-align: right;
+  padding: 0.35rem;
+  border-bottom: 1px solid #e5e5e5;
+  vertical-align: top;
+}
+
+.w6b-nav { display: flex; flex-wrap: wrap; gap: 0.5rem; }
