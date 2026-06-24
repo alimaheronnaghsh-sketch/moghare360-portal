@@ -218,6 +218,8 @@ $statusClass = match ($evaluation['status'] ?? '') {
     <?php endif; ?>
 
     <nav class="w1c-card w1c-links w9a-nav">
+        <a href="erp-executive-go-no-go-decision-create.php">ثبت تصمیم مدیریتی Go/No-Go</a>
+        <a href="erp-executive-go-no-go-decision-board.php">برد تصمیم‌های مدیریتی Go/No-Go</a>
         <a href="erp-soft-run-control-room.php">اتاق کنترل Soft Run</a>
         <a href="erp-soft-run-final-closure-dashboard.php">داشبورد نهایی آمادگی پایلوت WAVE 6</a>
         <a href="erp-soft-run-pilot-final-closure-dashboard.php">داشبورد نهایی بستن اجرای پایلوت WAVE 7</a>

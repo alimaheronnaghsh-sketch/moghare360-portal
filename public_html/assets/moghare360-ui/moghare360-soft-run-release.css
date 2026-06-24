@@ -1623,3 +1623,71 @@
 }
 
 .w9a-nav { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+
+/* WAVE 9B — Executive Go/No-Go Decision Log */
+.w9b-wrap { max-width: 1000px; }
+
+.w9b-banner { background: linear-gradient(135deg, #134e4a, #14b8a6); }
+
+.w9b-warning {
+  border-right: 4px solid #14b8a6;
+  background: #f0fdfa;
+}
+
+.w9b-dl {
+  display: grid;
+  grid-template-columns: minmax(8rem, 40%) 1fr;
+  gap: 0.35rem 1rem;
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.w9b-dl dt { color: #525252; margin: 0; }
+
+.w9b-dl dd { margin: 0; }
+
+.w9b-count-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(7rem, 1fr));
+  gap: 0.5rem;
+}
+
+.w9b-count-item {
+  background: #fafafa;
+  border: 1px solid #e5e5e5;
+  border-radius: 0.35rem;
+  padding: 0.5rem;
+  text-align: center;
+}
+
+.w9b-count-label { display: block; color: #525252; margin-bottom: 0.25rem; font-size: 0.8rem; }
+
+.w9b-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.w9b-table th,
+.w9b-table td {
+  text-align: right;
+  padding: 0.35rem;
+  border-bottom: 1px solid #e5e5e5;
+  vertical-align: top;
+}
+
+.w9b-nav { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+
+.w9b-form label { display: block; margin: 0.75rem 0 0.25rem; font-size: 0.9rem; }
+
+.w9b-form input,
+.w9b-form select,
+.w9b-form textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.45rem;
+  border: 1px solid #d4d4d4;
+  border-radius: 0.35rem;
+  font-family: inherit;
+  font-size: 0.9rem;
+}
