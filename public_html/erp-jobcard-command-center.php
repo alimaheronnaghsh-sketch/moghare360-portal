@@ -193,6 +193,7 @@ function wave5a_item_label(array $labels, string $item): string
     <?php endif; ?>
 
     <nav class="w1c-card w1c-links w5a-nav">
+        <a href="erp-jobcard-command-workbench.php">بازگشت به میز فرمان کارت کار</a>
         <a href="erp-jobcard-final-readiness.php?jobcard_id=<?= wave5a_h($invalidId ? '1' : (string)$jobcardId) ?>">آمادگی نهایی</a>
         <a href="erp-jobcard-delivery-eligibility.php?jobcard_id=<?= wave5a_h($invalidId ? '1' : (string)$jobcardId) ?>">صلاحیت تحویل</a>
         <a href="erp-jobcard-delivery-clearance.php?jobcard_id=<?= wave5a_h($invalidId ? '1' : (string)$jobcardId) ?>">ثبت Clearance</a>
