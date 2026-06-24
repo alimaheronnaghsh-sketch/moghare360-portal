@@ -390,3 +390,16 @@
   padding: 0.85rem 1rem;
   font-size: 0.88rem;
 }
+
+/* Wave 2D — Evidence review gate */
+.w2d-wrap { max-width: 860px; }
+
+.w2d-banner { background: linear-gradient(135deg, #14532d, #16a34a); }
+
+.w2d-status-complete { border-right: 4px solid #16a34a; }
+
+.w2d-status-partial { border-right: 4px solid #ca8a04; }
+
+.w2d-status-empty { border-right: 4px solid #64748b; }
+
+.w2d-status-error { border-right: 4px solid #dc2626; }
