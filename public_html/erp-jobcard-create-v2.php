@@ -23,11 +23,11 @@ header('X-Robots-Tag: noindex, nofollow');
 <div class="w1c-wrap">
     <header class="w1c-banner">
         <h1>ثبت کارت کار — Critical Form v2</h1>
-        <p>Critical Form v2 — Validation First · نوشتن در پایگاه داده در Wave 1C غیرفعال است</p>
+        <p>Critical Form v2 — Validation First · Wave 1F DB Write فعال</p>
     </header>
 
     <section class="w1c-card w1c-note">
-        پیش‌نمایش Wave 1C — شناسه مشتری و خودرو به‌صورت عددی دستی وارد می‌شود؛ بدون جستجوی پایگاه داده.
+        ثبت کارت کار v2 — پس از اعتبارسنجی، درج در erp_jobcards انجام می‌شود. شناسه مشتری و خودرو باید در DB موجود باشند و رابطه فعال داشته باشند.
     </section>
 
     <section class="w1c-card">
@@ -53,7 +53,7 @@ header('X-Robots-Tag: noindex, nofollow');
             <input type="hidden" name="jobcard_type" value="repair">
             <input type="hidden" name="service_category" value="mechanical">
 
-            <button type="submit" class="w1c-btn">اعتبارسنجی و پیش‌نمایش</button>
+            <button type="submit" class="w1c-btn">اعتبارسنجی و ثبت</button>
         </form>
     </section>
 
