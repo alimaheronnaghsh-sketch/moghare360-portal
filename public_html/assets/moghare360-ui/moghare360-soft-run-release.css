@@ -918,3 +918,42 @@
   padding: 0.35rem;
   border-bottom: 1px solid #e5e5e5;
 }
+
+/* Wave 6A — Soft Run Control Room */
+.w6a-wrap { max-width: 960px; }
+
+.w6a-banner { background: linear-gradient(135deg, #134e4a, #0d9488); }
+
+.w6a-warning {
+  border-right: 4px solid #ca8a04;
+  background: #fffbeb;
+}
+
+.w6a-status-ready { border-right: 4px solid #16a34a; }
+
+.w6a-status-review { border-right: 4px solid #ca8a04; }
+
+.w6a-status-blocked { border-right: 4px solid #dc2626; }
+
+.w6a-status-empty { border-right: 4px solid #64748b; }
+
+.w6a-status-error { border-right: 4px solid #dc2626; }
+
+.w6a-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 0.75rem;
+}
+
+.w6a-stat {
+  background: #fafafa;
+  border-radius: 6px;
+  padding: 0.5rem 0.65rem;
+  font-size: 0.85rem;
+}
+
+.w6a-stat span { display: block; color: #525252; margin-bottom: 0.2rem; }
+
+.w6a-stat strong { font-size: 1.1rem; }
+
+.w6a-nav { display: flex; flex-wrap: wrap; gap: 0.5rem; }
