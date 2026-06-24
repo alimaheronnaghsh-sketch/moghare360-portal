@@ -1393,3 +1393,57 @@
 }
 
 .w8a-nav { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+
+/* WAVE 8B — Soft Run Findings Workflow */
+.w8b-wrap { max-width: 960px; }
+
+.w8b-banner { background: linear-gradient(135deg, #115e59, #14b8a6); }
+
+.w8b-warning {
+  border-right: 4px solid #14b8a6;
+  background: #f0fdfa;
+}
+
+.w8b-dl {
+  display: grid;
+  grid-template-columns: minmax(140px, 35%) 1fr;
+  gap: 0.35rem 1rem;
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.w8b-dl dt { color: #525252; margin: 0; }
+
+.w8b-dl dd { margin: 0; }
+
+.w8b-form label { display: block; margin: 0.75rem 0 0.25rem; font-size: 0.9rem; }
+
+.w8b-form input,
+.w8b-form select,
+.w8b-form textarea {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  padding: 0.45rem 0.5rem;
+  border: 1px solid #d4d4d4;
+  border-radius: 4px;
+  font-family: inherit;
+}
+
+.w8b-btn { margin-top: 1rem; }
+
+.w8b-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.w8b-table th,
+.w8b-table td {
+  text-align: right;
+  padding: 0.35rem;
+  border-bottom: 1px solid #e5e5e5;
+  vertical-align: top;
+}
+
+.w8b-nav { display: flex; flex-wrap: wrap; gap: 0.5rem; }

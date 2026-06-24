@@ -142,6 +142,9 @@ $historyRows = ($history !== null && ($history['ok'] ?? false)) ? (array)($histo
 
     <nav class="w1c-card w1c-links w8a-nav">
         <a href="erp-soft-run-finding-board.php">بازگشت به برد یافته‌ها</a>
+        <?php if ($findingId > 0 && ($detail['ok'] ?? false)): ?>
+            <a href="erp-soft-run-finding-workflow.php?finding_id=<?= wave8a_detail_h((string)$findingId) ?>">گردش کار یافته</a>
+        <?php endif; ?>
         <a href="erp-soft-run-finding-create.php">ثبت یافته جدید</a>
         <a href="erp-soft-run-pilot-final-closure-dashboard.php">داشبورد نهایی بستن اجرای پایلوت</a>
         <a href="erp-soft-run-pilot-review-dashboard.php">داشبورد بازبینی اجرای پایلوت</a>

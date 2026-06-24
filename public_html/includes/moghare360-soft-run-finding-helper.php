@@ -895,3 +895,575 @@ function moghare360_soft_run_finding_fetch_history(int $findingId): array
         'message' => 'تاریخچه یافته بازیابی شد.',
     ];
 }
+
+/**
+ * @return array<string, list<string>>
+ */
+function moghare360_soft_run_finding_allowed_transitions(): array
+{
+    return [
+        'OPEN' => ['UNDER_REVIEW', 'ACTION_REQUIRED', 'CANCELLED'],
+        'UNDER_REVIEW' => ['ACTION_REQUIRED', 'RESOLVED', 'CANCELLED'],
+        'ACTION_REQUIRED' => ['UNDER_REVIEW', 'RESOLVED', 'CANCELLED'],
+        'RESOLVED' => ['CLOSED', 'ACTION_REQUIRED'],
+        'CLOSED' => ['UNDER_REVIEW'],
+        'CANCELLED' => [],
+    ];
+}
+
+/**
+ * @return array<string, list<string>>
+ */
+function moghare360_soft_run_finding_allowed_corrective_transitions(): array
+{
+    return [
+        'NOT_STARTED' => ['IN_PROGRESS', 'NOT_REQUIRED', 'BLOCKED'],
+        'IN_PROGRESS' => ['DONE', 'BLOCKED', 'NOT_REQUIRED'],
+        'BLOCKED' => ['IN_PROGRESS', 'NOT_REQUIRED'],
+        'DONE' => ['IN_PROGRESS'],
+        'NOT_REQUIRED' => ['IN_PROGRESS'],
+    ];
+}
+
+/**
+ * @return list<string>
+ */
+function moghare360_soft_run_finding_next_statuses(string $currentStatus): array
+{
+    $key = moghare360_soft_run_finding_normalize($currentStatus);
+
+    return moghare360_soft_run_finding_allowed_transitions()[$key] ?? [];
+}
+
+/**
+ * @return list<string>
+ */
+function moghare360_soft_run_finding_next_corrective_statuses(string $currentStatus): array
+{
+    $key = moghare360_soft_run_finding_normalize($currentStatus);
+    $transitions = moghare360_soft_run_finding_allowed_corrective_transitions();
+    $next = $transitions[$key] ?? [];
+
+    return array_values(array_unique(array_merge([$key], $next)));
+}
+
+/**
+ * @return array{ok: bool, errors: list<array{field: string, rule: string, message: string}>}
+ */
+function moghare360_soft_run_finding_validate_transition(string $oldStatus, string $newStatus): array
+{
+    $old = moghare360_soft_run_finding_normalize($oldStatus);
+    $new = moghare360_soft_run_finding_normalize($newStatus);
+
+    if ($old === 'CANCELLED') {
+        return [
+            'ok' => false,
+            'errors' => [[
+                'field' => 'new_finding_status',
+                'rule' => 'cancelled_terminal',
+                'message' => 'وضعیت لغو شده (CANCELLED) نهایی است — انتقال مجاز نیست.',
+            ]],
+        ];
+    }
+
+    if (!in_array($old, moghare360_soft_run_finding_allowed_statuses(), true)) {
+        return [
+            'ok' => false,
+            'errors' => [[
+                'field' => 'new_finding_status',
+                'rule' => 'invalid_old_status',
+                'message' => 'وضعیت یافته فعلی نامعتبر است.',
+            ]],
+        ];
+    }
+
+    if (!in_array($new, moghare360_soft_run_finding_allowed_statuses(), true)) {
+        return [
+            'ok' => false,
+            'errors' => [[
+                'field' => 'new_finding_status',
+                'rule' => 'invalid_new_status',
+                'message' => 'وضعیت یافته جدید نامعتبر است.',
+            ]],
+        ];
+    }
+
+    if ($old === $new) {
+        return ['ok' => true, 'errors' => []];
+    }
+
+    $allowedNext = moghare360_soft_run_finding_next_statuses($old);
+
+    if (!in_array($new, $allowedNext, true)) {
+        return [
+            'ok' => false,
+            'errors' => [[
+                'field' => 'new_finding_status',
+                'rule' => 'invalid_transition',
+                'message' => 'انتقال وضعیت یافته از ' . $old . ' به ' . $new . ' مجاز نیست.',
+            ]],
+        ];
+    }
+
+    return ['ok' => true, 'errors' => []];
+}
+
+/**
+ * @return array{ok: bool, errors: list<array{field: string, rule: string, message: string}>}
+ */
+function moghare360_soft_run_finding_validate_corrective_transition(string $oldStatus, string $newStatus): array
+{
+    $old = moghare360_soft_run_finding_normalize($oldStatus);
+    $new = moghare360_soft_run_finding_normalize($newStatus);
+
+    if (!in_array($old, moghare360_soft_run_finding_allowed_corrective_statuses(), true)) {
+        return [
+            'ok' => false,
+            'errors' => [[
+                'field' => 'corrective_action_status',
+                'rule' => 'invalid_old_status',
+                'message' => 'وضعیت اقدام اصلاحی فعلی نامعتبر است.',
+            ]],
+        ];
+    }
+
+    if (!in_array($new, moghare360_soft_run_finding_allowed_corrective_statuses(), true)) {
+        return [
+            'ok' => false,
+            'errors' => [[
+                'field' => 'corrective_action_status',
+                'rule' => 'invalid_new_status',
+                'message' => 'وضعیت اقدام اصلاحی جدید نامعتبر است.',
+            ]],
+        ];
+    }
+
+    if ($old === $new) {
+        return ['ok' => true, 'errors' => []];
+    }
+
+    $allowedNext = moghare360_soft_run_finding_allowed_corrective_transitions()[$old] ?? [];
+
+    if (!in_array($new, $allowedNext, true)) {
+        return [
+            'ok' => false,
+            'errors' => [[
+                'field' => 'corrective_action_status',
+                'rule' => 'invalid_corrective_transition',
+                'message' => 'انتقال وضعیت اقدام اصلاحی از ' . $old . ' به ' . $new . ' مجاز نیست.',
+            ]],
+        ];
+    }
+
+    return ['ok' => true, 'errors' => []];
+}
+
+/**
+ * @param array<string, mixed> $payload
+ * @return array{ok: bool, errors: list<array{field: string, rule: string, message: string}>, clean: array<string, mixed>}
+ */
+function moghare360_soft_run_finding_validate_workflow_payload(array $payload): array
+{
+    $errors = [];
+    $clean = [];
+
+    $findingIdRaw = trim((string)($payload['finding_id'] ?? ''));
+    if ($findingIdRaw === '' || !ctype_digit($findingIdRaw) || (int)$findingIdRaw < 1) {
+        $errors[] = [
+            'field' => 'finding_id',
+            'rule' => 'required_positive_number',
+            'message' => 'شناسه یافته الزامی و باید عدد مثبت باشد.',
+        ];
+    } else {
+        $clean['finding_id'] = (int)$findingIdRaw;
+    }
+
+    $newFindingStatus = moghare360_soft_run_finding_normalize((string)($payload['new_finding_status'] ?? ''));
+    if ($newFindingStatus === '' || !in_array($newFindingStatus, moghare360_soft_run_finding_allowed_statuses(), true)) {
+        $errors[] = [
+            'field' => 'new_finding_status',
+            'rule' => 'required_allowed_status',
+            'message' => 'وضعیت یافته جدید الزامی و باید از مقادیر مجاز باشد.',
+        ];
+    } else {
+        $clean['new_finding_status'] = $newFindingStatus;
+    }
+
+    $correctiveStatus = moghare360_soft_run_finding_normalize((string)($payload['corrective_action_status'] ?? ''));
+    if ($correctiveStatus === '' || !in_array($correctiveStatus, moghare360_soft_run_finding_allowed_corrective_statuses(), true)) {
+        $errors[] = [
+            'field' => 'corrective_action_status',
+            'rule' => 'required_allowed_corrective_status',
+            'message' => 'وضعیت اقدام اصلاحی الزامی و باید از مقادیر مجاز باشد.',
+        ];
+    } else {
+        $clean['corrective_action_status'] = $correctiveStatus;
+    }
+
+    $changeReason = trim((string)($payload['change_reason'] ?? ''));
+    if ($changeReason === '' || mb_strlen($changeReason) > 1000) {
+        $errors[] = [
+            'field' => 'change_reason',
+            'rule' => 'required_length',
+            'message' => 'دلیل تغییر الزامی است (حداکثر ۱۰۰۰ کاراکتر).',
+        ];
+    } else {
+        $clean['change_reason'] = $changeReason;
+    }
+
+    $correctiveAction = trim((string)($payload['corrective_action'] ?? ''));
+    $clean['corrective_action'] = $correctiveAction === '' ? null : mb_substr($correctiveAction, 0, 1500);
+
+    $ownerRaw = trim((string)($payload['owner_user_id'] ?? ''));
+    if ($ownerRaw === '') {
+        $clean['owner_user_id'] = null;
+        $clean['owner_user_id_provided'] = false;
+    } elseif (!ctype_digit($ownerRaw) || (int)$ownerRaw < 1) {
+        $errors[] = [
+            'field' => 'owner_user_id',
+            'rule' => 'optional_positive_number',
+            'message' => 'شناسه مسئول باید عدد مثبت باشد یا خالی بماند.',
+        ];
+    } else {
+        $clean['owner_user_id'] = (int)$ownerRaw;
+        $clean['owner_user_id_provided'] = true;
+    }
+
+    $dueRaw = trim((string)($payload['due_at'] ?? ''));
+    if ($dueRaw === '') {
+        $clean['due_at'] = null;
+        $clean['due_at_provided'] = false;
+    } else {
+        $timestamp = strtotime($dueRaw);
+        if ($timestamp === false) {
+            $errors[] = [
+                'field' => 'due_at',
+                'rule' => 'datetime',
+                'message' => 'مهلت انجام باید تاریخ/زمان معتبر باشد یا خالی بماند.',
+            ];
+        } else {
+            $clean['due_at'] = gmdate('Y-m-d H:i:s', $timestamp);
+            $clean['due_at_provided'] = true;
+        }
+    }
+
+    $resolvedRaw = trim((string)($payload['resolved_at'] ?? ''));
+    if ($resolvedRaw === '') {
+        $clean['resolved_at'] = null;
+        $clean['resolved_at_provided'] = false;
+    } else {
+        $timestamp = strtotime($resolvedRaw);
+        if ($timestamp === false) {
+            $errors[] = [
+                'field' => 'resolved_at',
+                'rule' => 'datetime',
+                'message' => 'زمان رفع باید تاریخ/زمان معتبر باشد یا خالی بماند.',
+            ];
+        } else {
+            $clean['resolved_at'] = gmdate('Y-m-d H:i:s', $timestamp);
+            $clean['resolved_at_provided'] = true;
+        }
+    }
+
+    return [
+        'ok' => $errors === [],
+        'errors' => $errors,
+        'clean' => $clean,
+    ];
+}
+
+/**
+ * @param array<string, mixed> $payload
+ * @return array{
+ *   ok: bool,
+ *   finding_id: int|null,
+ *   finding_code: string|null,
+ *   old_finding_status: string|null,
+ *   new_finding_status: string|null,
+ *   old_corrective_action_status: string|null,
+ *   new_corrective_action_status: string|null,
+ *   schema_status: string,
+ *   message: string,
+ *   errors: list<array{field: string, rule: string, message: string}>,
+ *   notes: list<string>
+ * }
+ */
+function moghare360_soft_run_finding_update_workflow(int $findingId, array $payload): array
+{
+    $payload['finding_id'] = $findingId;
+    $validation = moghare360_soft_run_finding_validate_workflow_payload($payload);
+
+    if (!$validation['ok']) {
+        return [
+            'ok' => false,
+            'finding_id' => null,
+            'finding_code' => null,
+            'old_finding_status' => null,
+            'new_finding_status' => null,
+            'old_corrective_action_status' => null,
+            'new_corrective_action_status' => null,
+            'schema_status' => MOGHARE360_SOFT_RUN_FINDING_SCHEMA_BLOCKED,
+            'message' => 'اعتبارسنجی گردش کار یافته ناموفق بود.',
+            'errors' => $validation['errors'],
+            'notes' => [MOGHARE360_SOFT_RUN_FINDING_INTERNAL_NOTICE],
+        ];
+    }
+
+    $schema = moghare360_soft_run_finding_schema_status();
+
+    if (($schema['schema_status'] ?? '') !== MOGHARE360_SOFT_RUN_FINDING_SCHEMA_READY) {
+        return [
+            'ok' => false,
+            'finding_id' => null,
+            'finding_code' => null,
+            'old_finding_status' => null,
+            'new_finding_status' => null,
+            'old_corrective_action_status' => null,
+            'new_corrective_action_status' => null,
+            'schema_status' => MOGHARE360_SOFT_RUN_FINDING_SCHEMA_BLOCKED,
+            'message' => MOGHARE360_SOFT_RUN_FINDING_BLOCK_MESSAGE,
+            'errors' => [],
+            'notes' => array_merge(
+                [MOGHARE360_SOFT_RUN_FINDING_INTERNAL_NOTICE],
+                $schema['notes'] ?? []
+            ),
+        ];
+    }
+
+    $detail = moghare360_soft_run_finding_fetch_detail($findingId);
+
+    if (!($detail['ok'] ?? false) || ($detail['record'] ?? null) === null) {
+        return [
+            'ok' => false,
+            'finding_id' => null,
+            'finding_code' => null,
+            'old_finding_status' => null,
+            'new_finding_status' => null,
+            'old_corrective_action_status' => null,
+            'new_corrective_action_status' => null,
+            'schema_status' => MOGHARE360_SOFT_RUN_FINDING_SCHEMA_READY,
+            'message' => 'رکورد یافته یافت نشد.',
+            'errors' => [[
+                'field' => 'finding_id',
+                'rule' => 'not_found',
+                'message' => 'رکورد یافته با این شناسه وجود ندارد.',
+            ]],
+            'notes' => [],
+        ];
+    }
+
+    $record = (array)$detail['record'];
+    $oldFindingStatus = moghare360_soft_run_finding_normalize((string)($record['finding_status'] ?? ''));
+    $oldCorrectiveStatus = moghare360_soft_run_finding_normalize((string)($record['corrective_action_status'] ?? ''));
+    $clean = $validation['clean'];
+    $newFindingStatus = (string)$clean['new_finding_status'];
+    $newCorrectiveStatus = (string)$clean['corrective_action_status'];
+
+    $transitionCheck = moghare360_soft_run_finding_validate_transition($oldFindingStatus, $newFindingStatus);
+
+    if (!$transitionCheck['ok']) {
+        return [
+            'ok' => false,
+            'finding_id' => $findingId,
+            'finding_code' => (string)($record['finding_code'] ?? ''),
+            'old_finding_status' => $oldFindingStatus,
+            'new_finding_status' => $newFindingStatus,
+            'old_corrective_action_status' => $oldCorrectiveStatus,
+            'new_corrective_action_status' => $newCorrectiveStatus,
+            'schema_status' => MOGHARE360_SOFT_RUN_FINDING_SCHEMA_READY,
+            'message' => 'انتقال وضعیت یافته مجاز نیست.',
+            'errors' => $transitionCheck['errors'],
+            'notes' => [MOGHARE360_SOFT_RUN_FINDING_INTERNAL_NOTICE],
+        ];
+    }
+
+    $correctiveCheck = moghare360_soft_run_finding_validate_corrective_transition(
+        $oldCorrectiveStatus,
+        $newCorrectiveStatus
+    );
+
+    if (!$correctiveCheck['ok']) {
+        return [
+            'ok' => false,
+            'finding_id' => $findingId,
+            'finding_code' => (string)($record['finding_code'] ?? ''),
+            'old_finding_status' => $oldFindingStatus,
+            'new_finding_status' => $newFindingStatus,
+            'old_corrective_action_status' => $oldCorrectiveStatus,
+            'new_corrective_action_status' => $newCorrectiveStatus,
+            'schema_status' => MOGHARE360_SOFT_RUN_FINDING_SCHEMA_READY,
+            'message' => 'انتقال وضعیت اقدام اصلاحی مجاز نیست.',
+            'errors' => $correctiveCheck['errors'],
+            'notes' => [MOGHARE360_SOFT_RUN_FINDING_INTERNAL_NOTICE],
+        ];
+    }
+
+    if (
+        $oldFindingStatus === $newFindingStatus
+        && $oldCorrectiveStatus === $newCorrectiveStatus
+        && $clean['corrective_action'] === null
+        && !($clean['owner_user_id_provided'] ?? false)
+        && !($clean['due_at_provided'] ?? false)
+        && !($clean['resolved_at_provided'] ?? false)
+    ) {
+        return [
+            'ok' => false,
+            'finding_id' => $findingId,
+            'finding_code' => (string)($record['finding_code'] ?? ''),
+            'old_finding_status' => $oldFindingStatus,
+            'new_finding_status' => $newFindingStatus,
+            'old_corrective_action_status' => $oldCorrectiveStatus,
+            'new_corrective_action_status' => $newCorrectiveStatus,
+            'schema_status' => MOGHARE360_SOFT_RUN_FINDING_SCHEMA_READY,
+            'message' => 'حداقل یک تغییر کنترل‌شده در گردش کار الزامی است.',
+            'errors' => [[
+                'field' => 'workflow',
+                'rule' => 'no_change',
+                'message' => 'وضعیت‌ها و فیلدهای اختیاری بدون تغییر هستند — به‌روزرسانی مجاز نیست.',
+            ]],
+            'notes' => [MOGHARE360_SOFT_RUN_FINDING_INTERNAL_NOTICE],
+        ];
+    }
+
+    $connection = customer_core_db();
+    $notes = $schema['notes'] ?? [];
+    $actorUserId = moghare360_soft_run_finding_resolve_actor_user_id();
+    $now = gmdate('Y-m-d H:i:s');
+
+    $correctiveAction = $clean['corrective_action'] ?? trim((string)($record['corrective_action'] ?? ''));
+    $correctiveAction = $correctiveAction !== '' && $correctiveAction !== null ? (string)$correctiveAction : null;
+
+    $ownerUserId = ($clean['owner_user_id_provided'] ?? false)
+        ? $clean['owner_user_id']
+        : (($record['owner_user_id'] ?? null) !== null ? (int)$record['owner_user_id'] : null);
+
+    $dueAt = ($clean['due_at_provided'] ?? false)
+        ? $clean['due_at']
+        : (trim((string)($record['due_at'] ?? '')) !== '' ? (string)$record['due_at'] : null);
+
+    $existingResolvedAt = trim((string)($record['resolved_at'] ?? ''));
+    $resolvedAt = $existingResolvedAt !== '' ? $existingResolvedAt : null;
+
+    if (($clean['resolved_at_provided'] ?? false) && $clean['resolved_at'] !== null) {
+        $resolvedAt = (string)$clean['resolved_at'];
+    } elseif (
+        $resolvedAt === null
+        && in_array($newFindingStatus, ['RESOLVED', 'CLOSED'], true)
+    ) {
+        $resolvedAt = $now;
+    }
+
+    if (!@odbc_autocommit($connection, false)) {
+        return [
+            'ok' => false,
+            'finding_id' => null,
+            'finding_code' => null,
+            'old_finding_status' => $oldFindingStatus,
+            'new_finding_status' => $newFindingStatus,
+            'old_corrective_action_status' => $oldCorrectiveStatus,
+            'new_corrective_action_status' => $newCorrectiveStatus,
+            'schema_status' => MOGHARE360_SOFT_RUN_FINDING_SCHEMA_READY,
+            'message' => 'شروع تراکنش به‌روزرسانی گردش کار ناموفق بود.',
+            'errors' => [],
+            'notes' => $notes,
+        ];
+    }
+
+    try {
+        $updateOk = customer_core_execute(
+            $connection,
+            'UPDATE dbo.erp_soft_run_findings SET
+                finding_status = ?,
+                corrective_action_status = ?,
+                corrective_action = ?,
+                owner_user_id = ?,
+                due_at = ?,
+                resolved_at = ?,
+                updated_at = ?,
+                updated_by_user_id = ?
+             WHERE finding_id = ?',
+            [
+                $newFindingStatus,
+                $newCorrectiveStatus,
+                $correctiveAction,
+                $ownerUserId,
+                $dueAt,
+                $resolvedAt,
+                $now,
+                $actorUserId,
+                $findingId,
+            ]
+        );
+
+        if ($updateOk === false) {
+            throw new RuntimeException('به‌روزرسانی رکورد یافته ناموفق بود.');
+        }
+
+        $historyOk = customer_core_execute(
+            $connection,
+            'INSERT INTO dbo.erp_soft_run_finding_history (
+                finding_id,
+                old_finding_status,
+                new_finding_status,
+                old_corrective_action_status,
+                new_corrective_action_status,
+                change_reason,
+                changed_by_user_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            [
+                $findingId,
+                $oldFindingStatus,
+                $newFindingStatus,
+                $oldCorrectiveStatus,
+                $newCorrectiveStatus,
+                $clean['change_reason'],
+                $actorUserId,
+            ]
+        );
+
+        if ($historyOk === false) {
+            throw new RuntimeException('درج تاریخچه گردش کار یافته ناموفق بود.');
+        }
+
+        if (!@odbc_commit($connection)) {
+            throw new RuntimeException('تأیید تراکنش به‌روزرسانی گردش کار ناموفق بود.');
+        }
+
+        @odbc_autocommit($connection, true);
+
+        return [
+            'ok' => true,
+            'finding_id' => $findingId,
+            'finding_code' => (string)($record['finding_code'] ?? ''),
+            'old_finding_status' => $oldFindingStatus,
+            'new_finding_status' => $newFindingStatus,
+            'old_corrective_action_status' => $oldCorrectiveStatus,
+            'new_corrective_action_status' => $newCorrectiveStatus,
+            'schema_status' => MOGHARE360_SOFT_RUN_FINDING_SCHEMA_READY,
+            'message' => 'گردش کار یافته Soft Run با موفقیت به‌روزرسانی شد.',
+            'errors' => [],
+            'notes' => array_merge($notes, [MOGHARE360_SOFT_RUN_FINDING_INTERNAL_NOTICE]),
+        ];
+    } catch (Throwable $exception) {
+        @odbc_rollback($connection);
+        @odbc_autocommit($connection, true);
+
+        return [
+            'ok' => false,
+            'finding_id' => $findingId,
+            'finding_code' => (string)($record['finding_code'] ?? ''),
+            'old_finding_status' => $oldFindingStatus,
+            'new_finding_status' => $newFindingStatus,
+            'old_corrective_action_status' => $oldCorrectiveStatus,
+            'new_corrective_action_status' => $newCorrectiveStatus,
+            'schema_status' => MOGHARE360_SOFT_RUN_FINDING_SCHEMA_READY,
+            'message' => 'به‌روزرسانی گردش کار یافته ناموفق بود.',
+            'errors' => [[
+                'field' => 'database',
+                'rule' => 'write_failed',
+                'message' => 'خطای کنترل‌شده در به‌روزرسانی پایگاه داده — جزئیات فنی نمایش داده نمی‌شود.',
+            ]],
+            'notes' => $notes,
+        ];
+    }
+}

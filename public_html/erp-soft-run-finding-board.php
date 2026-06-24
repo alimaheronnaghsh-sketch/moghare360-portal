@@ -106,6 +106,7 @@ $correctiveCounts = (array)($fetch['counts']['corrective_action_status'] ?? []);
                         <th>عنوان</th>
                         <th>ایجاد</th>
                         <th>جزئیات</th>
+                        <th>گردش کار</th>
                     </tr>
                     </thead>
                     <tbody>
@@ -122,6 +123,9 @@ $correctiveCounts = (array)($fetch['counts']['corrective_action_status'] ?? []);
                             <td><?= wave8a_board_h((string)($row['created_at'] ?? '')) ?></td>
                             <td>
                                 <a href="erp-soft-run-finding-detail.php?finding_id=<?= wave8a_board_h($rowFindingId) ?>">مشاهده</a>
+                            </td>
+                            <td>
+                                <a href="erp-soft-run-finding-workflow.php?finding_id=<?= wave8a_board_h($rowFindingId) ?>">گردش کار</a>
                             </td>
                         </tr>
                     <?php endforeach; ?>
