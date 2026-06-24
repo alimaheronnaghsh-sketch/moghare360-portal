@@ -116,6 +116,7 @@ $methodLabels = moghare360_contract_authorization_method_labels();
 
     <nav class="w1c-card w1c-links">
         <a href="erp-jobcard-contract-authorization.php">ثبت مجوز/قرارداد جدید</a>
+        <a href="erp-jobcard-authorization-gate.php?jobcard_id=<?= wave3a_preview_h($invalidId ? '1' : (string)$jobcardId) ?>">گیت مجوزهای جاب‌کارت</a>
         <a href="erp-media-evidence-closure-dashboard.php">داشبورد بستن WAVE 2</a>
     </nav>
 </div>

@@ -524,3 +524,46 @@
 .w3b-detail-dl dt { color: #525252; margin: 0; }
 
 .w3b-detail-dl dd { margin: 0; }
+
+/* Wave 3C — Authorization gate */
+.w3c-wrap { max-width: 800px; }
+
+.w3c-banner { background: linear-gradient(135deg, #14532d, #16a34a); }
+
+.w3c-warning {
+  border-right: 4px solid #ca8a04;
+  background: #fffbeb;
+}
+
+.w3c-status-ready { border-right: 4px solid #16a34a; }
+
+.w3c-status-partial { border-right: 4px solid #ca8a04; }
+
+.w3c-status-blocked { border-right: 4px solid #dc2626; }
+
+.w3c-status-empty { border-right: 4px solid #64748b; }
+
+.w3c-status-error { border-right: 4px solid #dc2626; }
+
+.w3c-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 0.75rem;
+}
+
+.w3c-stat {
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 10px;
+  padding: 0.65rem 0.75rem;
+  text-align: center;
+}
+
+.w3c-stat span {
+  display: block;
+  font-size: 0.75rem;
+  color: #525252;
+  margin-bottom: 0.25rem;
+}
+
+.w3c-stat strong { font-size: 1.25rem; }
