@@ -610,3 +610,37 @@
 .w3d-stat strong { font-size: 1.25rem; }
 
 .w3d-nav { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+
+/* Wave 4A — Final readiness gate */
+.w4a-wrap { max-width: 800px; }
+
+.w4a-banner { background: linear-gradient(135deg, #0f766e, #14b8a6); }
+
+.w4a-warning {
+  border-right: 4px solid #ca8a04;
+  background: #fffbeb;
+}
+
+.w4a-status-ready { border-right: 4px solid #16a34a; }
+
+.w4a-status-partial { border-right: 4px solid #ca8a04; }
+
+.w4a-status-blocked { border-right: 4px solid #dc2626; }
+
+.w4a-status-empty { border-right: 4px solid #64748b; }
+
+.w4a-status-error { border-right: 4px solid #dc2626; }
+
+.w4a-detail-dl {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  gap: 0.35rem 0.75rem;
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.w4a-detail-dl dt { color: #525252; margin: 0; }
+
+.w4a-detail-dl dd { margin: 0; }
+
+.w4a-nav { display: flex; flex-wrap: wrap; gap: 0.5rem; }
