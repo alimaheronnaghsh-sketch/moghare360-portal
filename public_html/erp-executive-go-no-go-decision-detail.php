@@ -134,6 +134,9 @@ $historyRows = (array)($history['history'] ?? []);
 
     <nav class="w1c-card w1c-links w9b-nav">
         <a href="erp-executive-go-no-go-decision-board.php">بازگشت به برد تصمیم‌ها</a>
+        <?php if (($detail['ok'] ?? false) && $decisionId > 0): ?>
+            <a href="erp-executive-go-no-go-decision-workflow.php?decision_id=<?= wave9b_detail_h((string)$decisionId) ?>">گردش کار تصمیم</a>
+        <?php endif; ?>
         <a href="erp-executive-go-no-go-decision-create.php">ثبت تصمیم جدید</a>
         <a href="erp-executive-soft-run-readiness-dashboard.php">داشبورد آمادگی مدیریتی Soft Run</a>
     </nav>

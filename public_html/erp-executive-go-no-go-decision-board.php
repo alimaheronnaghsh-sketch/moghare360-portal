@@ -105,6 +105,7 @@ $readinessCounts = (array)($fetch['counts']['executive_readiness_status'] ?? [])
                         <th>آمادگی مدیریتی</th>
                         <th>ایجاد</th>
                         <th>جزئیات</th>
+                        <th>گردش کار</th>
                     </tr>
                     </thead>
                     <tbody>
@@ -121,6 +122,13 @@ $readinessCounts = (array)($fetch['counts']['executive_readiness_status'] ?? [])
                             <td>
                                 <?php if ($id > 0): ?>
                                     <a href="erp-executive-go-no-go-decision-detail.php?decision_id=<?= wave9b_board_h((string)$id) ?>">مشاهده</a>
+                                <?php else: ?>
+                                    —
+                                <?php endif; ?>
+                            </td>
+                            <td>
+                                <?php if ($id > 0): ?>
+                                    <a href="erp-executive-go-no-go-decision-workflow.php?decision_id=<?= wave9b_board_h((string)$id) ?>">گردش کار</a>
                                 <?php else: ?>
                                     —
                                 <?php endif; ?>

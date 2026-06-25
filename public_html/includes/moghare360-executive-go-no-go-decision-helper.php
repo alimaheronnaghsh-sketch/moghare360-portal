@@ -905,3 +905,451 @@ function moghare360_executive_go_no_go_decision_fetch_history(int $decisionId): 
         'message' => 'تاریخچه تصمیم مدیریتی بازیابی شد.',
     ];
 }
+
+/**
+ * @return array<string, list<string>>
+ */
+function moghare360_executive_go_no_go_decision_allowed_transitions(): array
+{
+    return [
+        'RECORDED' => ['UNDER_REVIEW', 'ACTION_REQUIRED', 'ACCEPTED', 'CANCELLED'],
+        'UNDER_REVIEW' => ['ACTION_REQUIRED', 'ACCEPTED', 'CANCELLED'],
+        'ACTION_REQUIRED' => ['UNDER_REVIEW', 'ACCEPTED', 'CANCELLED'],
+        'ACCEPTED' => ['CLOSED', 'ACTION_REQUIRED'],
+        'CLOSED' => ['UNDER_REVIEW'],
+        'CANCELLED' => [],
+    ];
+}
+
+/**
+ * @return list<string>
+ */
+function moghare360_executive_go_no_go_decision_next_statuses(string $currentStatus): array
+{
+    $key = moghare360_executive_go_no_go_decision_normalize($currentStatus);
+
+    return moghare360_executive_go_no_go_decision_allowed_transitions()[$key] ?? [];
+}
+
+/**
+ * @return array{ok: bool, errors: list<array{field: string, rule: string, message: string}>}
+ */
+function moghare360_executive_go_no_go_decision_validate_transition(string $oldStatus, string $newStatus): array
+{
+    $old = moghare360_executive_go_no_go_decision_normalize($oldStatus);
+    $new = moghare360_executive_go_no_go_decision_normalize($newStatus);
+
+    if ($old === 'CANCELLED') {
+        return [
+            'ok' => false,
+            'errors' => [[
+                'field' => 'new_decision_status',
+                'rule' => 'cancelled_terminal',
+                'message' => 'وضعیت لغو شده (CANCELLED) نهایی است — انتقال مجاز نیست.',
+            ]],
+        ];
+    }
+
+    if (!in_array($old, moghare360_executive_go_no_go_decision_allowed_statuses(), true)) {
+        return [
+            'ok' => false,
+            'errors' => [[
+                'field' => 'new_decision_status',
+                'rule' => 'invalid_old_status',
+                'message' => 'وضعیت تصمیم فعلی نامعتبر است.',
+            ]],
+        ];
+    }
+
+    if (!in_array($new, moghare360_executive_go_no_go_decision_allowed_statuses(), true)) {
+        return [
+            'ok' => false,
+            'errors' => [[
+                'field' => 'new_decision_status',
+                'rule' => 'invalid_new_status',
+                'message' => 'وضعیت تصمیم جدید نامعتبر است.',
+            ]],
+        ];
+    }
+
+    if ($old === $new) {
+        return ['ok' => true, 'errors' => []];
+    }
+
+    $allowedNext = moghare360_executive_go_no_go_decision_next_statuses($old);
+
+    if (!in_array($new, $allowedNext, true)) {
+        return [
+            'ok' => false,
+            'errors' => [[
+                'field' => 'new_decision_status',
+                'rule' => 'invalid_transition',
+                'message' => 'انتقال وضعیت تصمیم از ' . $old . ' به ' . $new . ' مجاز نیست.',
+            ]],
+        ];
+    }
+
+    return ['ok' => true, 'errors' => []];
+}
+
+/**
+ * @param array<string, mixed> $payload
+ * @return array{ok: bool, errors: list<array{field: string, rule: string, message: string}>, clean: array<string, mixed>}
+ */
+function moghare360_executive_go_no_go_decision_validate_workflow_payload(array $payload): array
+{
+    $errors = [];
+    $clean = [];
+
+    $decisionIdRaw = trim((string)($payload['decision_id'] ?? ''));
+    if ($decisionIdRaw === '' || !ctype_digit($decisionIdRaw) || (int)$decisionIdRaw < 1) {
+        $errors[] = [
+            'field' => 'decision_id',
+            'rule' => 'required_positive_number',
+            'message' => 'شناسه تصمیم الزامی و باید عدد مثبت باشد.',
+        ];
+    } else {
+        $clean['decision_id'] = (int)$decisionIdRaw;
+    }
+
+    $newStatus = moghare360_executive_go_no_go_decision_normalize((string)($payload['new_decision_status'] ?? ''));
+    if ($newStatus === '' || !in_array($newStatus, moghare360_executive_go_no_go_decision_allowed_statuses(), true)) {
+        $errors[] = [
+            'field' => 'new_decision_status',
+            'rule' => 'required_allowed_status',
+            'message' => 'وضعیت تصمیم جدید الزامی و باید از مقادیر مجاز باشد.',
+        ];
+    } else {
+        $clean['new_decision_status'] = $newStatus;
+    }
+
+    $typeRaw = trim((string)($payload['decision_type'] ?? ''));
+    if ($typeRaw === '') {
+        $clean['decision_type'] = null;
+        $clean['decision_type_provided'] = false;
+    } else {
+        $type = moghare360_executive_go_no_go_decision_normalize($typeRaw);
+        if (!in_array($type, moghare360_executive_go_no_go_decision_allowed_types(), true)) {
+            $errors[] = [
+                'field' => 'decision_type',
+                'rule' => 'allowed_type',
+                'message' => 'نوع تصمیم نامعتبر است.',
+            ];
+        } else {
+            $clean['decision_type'] = $type;
+            $clean['decision_type_provided'] = true;
+        }
+    }
+
+    $changeReason = trim((string)($payload['change_reason'] ?? ''));
+    if ($changeReason === '' || mb_strlen($changeReason) > 1000) {
+        $errors[] = [
+            'field' => 'change_reason',
+            'rule' => 'required_length',
+            'message' => 'دلیل تغییر الزامی است (حداکثر ۱۰۰۰ کاراکتر).',
+        ];
+    } else {
+        $clean['change_reason'] = $changeReason;
+    }
+
+    $managementReviewNote = trim((string)($payload['management_review_note'] ?? ''));
+    $clean['management_review_note'] = $managementReviewNote === ''
+        ? null
+        : mb_substr($managementReviewNote, 0, 1500);
+    $clean['management_review_note_provided'] = $managementReviewNote !== '';
+
+    $summary = trim((string)($payload['decision_summary'] ?? ''));
+    $clean['decision_summary'] = $summary === '' ? null : mb_substr($summary, 0, 1500);
+    $clean['decision_summary_provided'] = $summary !== '';
+
+    $actionSummary = trim((string)($payload['required_action_summary'] ?? ''));
+    $clean['required_action_summary'] = $actionSummary === '' ? null : mb_substr($actionSummary, 0, 1500);
+    $clean['required_action_summary_provided'] = $actionSummary !== '';
+
+    $riskNote = trim((string)($payload['risk_note'] ?? ''));
+    $clean['risk_note'] = $riskNote === '' ? null : mb_substr($riskNote, 0, 1500);
+    $clean['risk_note_provided'] = $riskNote !== '';
+
+    return [
+        'ok' => $errors === [],
+        'errors' => $errors,
+        'clean' => $clean,
+    ];
+}
+
+/**
+ * @param array<string, mixed> $payload
+ * @return array{
+ *   ok: bool,
+ *   decision_id: int|null,
+ *   decision_code: string|null,
+ *   old_decision_status: string|null,
+ *   new_decision_status: string|null,
+ *   old_decision_type: string|null,
+ *   new_decision_type: string|null,
+ *   schema_status: string,
+ *   message: string,
+ *   errors: list<array{field: string, rule: string, message: string}>,
+ *   notes: list<string>
+ * }
+ */
+function moghare360_executive_go_no_go_decision_update_workflow(int $decisionId, array $payload): array
+{
+    $payload['decision_id'] = $decisionId;
+    $validation = moghare360_executive_go_no_go_decision_validate_workflow_payload($payload);
+
+    if (!$validation['ok']) {
+        return [
+            'ok' => false,
+            'decision_id' => null,
+            'decision_code' => null,
+            'old_decision_status' => null,
+            'new_decision_status' => null,
+            'old_decision_type' => null,
+            'new_decision_type' => null,
+            'schema_status' => MOGHARE360_EXECUTIVE_GO_NO_GO_SCHEMA_BLOCKED,
+            'message' => 'اعتبارسنجی گردش کار تصمیم ناموفق بود.',
+            'errors' => $validation['errors'],
+            'notes' => [MOGHARE360_EXECUTIVE_GO_NO_GO_INTERNAL_NOTICE],
+        ];
+    }
+
+    $schema = moghare360_executive_go_no_go_decision_schema_status();
+
+    if (($schema['schema_status'] ?? '') !== MOGHARE360_EXECUTIVE_GO_NO_GO_SCHEMA_READY) {
+        return [
+            'ok' => false,
+            'decision_id' => null,
+            'decision_code' => null,
+            'old_decision_status' => null,
+            'new_decision_status' => null,
+            'old_decision_type' => null,
+            'new_decision_type' => null,
+            'schema_status' => MOGHARE360_EXECUTIVE_GO_NO_GO_SCHEMA_BLOCKED,
+            'message' => MOGHARE360_EXECUTIVE_GO_NO_GO_BLOCK_MESSAGE,
+            'errors' => [],
+            'notes' => array_merge(
+                [MOGHARE360_EXECUTIVE_GO_NO_GO_INTERNAL_NOTICE],
+                $schema['notes'] ?? []
+            ),
+        ];
+    }
+
+    $detail = moghare360_executive_go_no_go_decision_fetch_detail($decisionId);
+
+    if (!($detail['ok'] ?? false) || ($detail['record'] ?? null) === null) {
+        return [
+            'ok' => false,
+            'decision_id' => null,
+            'decision_code' => null,
+            'old_decision_status' => null,
+            'new_decision_status' => null,
+            'old_decision_type' => null,
+            'new_decision_type' => null,
+            'schema_status' => MOGHARE360_EXECUTIVE_GO_NO_GO_SCHEMA_READY,
+            'message' => 'رکورد تصمیم یافت نشد.',
+            'errors' => [[
+                'field' => 'decision_id',
+                'rule' => 'not_found',
+                'message' => 'رکورد تصمیم با این شناسه وجود ندارد.',
+            ]],
+            'notes' => [],
+        ];
+    }
+
+    $record = (array)$detail['record'];
+    $oldStatus = moghare360_executive_go_no_go_decision_normalize((string)($record['decision_status'] ?? ''));
+    $oldType = moghare360_executive_go_no_go_decision_normalize((string)($record['decision_type'] ?? ''));
+    $clean = $validation['clean'];
+    $newStatus = (string)$clean['new_decision_status'];
+    $newType = ($clean['decision_type_provided'] ?? false)
+        ? (string)$clean['decision_type']
+        : $oldType;
+
+    $transitionCheck = moghare360_executive_go_no_go_decision_validate_transition($oldStatus, $newStatus);
+
+    if (!$transitionCheck['ok']) {
+        return [
+            'ok' => false,
+            'decision_id' => $decisionId,
+            'decision_code' => (string)($record['decision_code'] ?? ''),
+            'old_decision_status' => $oldStatus,
+            'new_decision_status' => $newStatus,
+            'old_decision_type' => $oldType,
+            'new_decision_type' => $newType,
+            'schema_status' => MOGHARE360_EXECUTIVE_GO_NO_GO_SCHEMA_READY,
+            'message' => 'انتقال وضعیت تصمیم مجاز نیست.',
+            'errors' => $transitionCheck['errors'],
+            'notes' => [MOGHARE360_EXECUTIVE_GO_NO_GO_INTERNAL_NOTICE],
+        ];
+    }
+
+    $decisionSummary = ($clean['decision_summary_provided'] ?? false)
+        ? $clean['decision_summary']
+        : (trim((string)($record['decision_summary'] ?? '')) !== ''
+            ? (string)$record['decision_summary']
+            : null);
+
+    $requiredActionSummary = ($clean['required_action_summary_provided'] ?? false)
+        ? $clean['required_action_summary']
+        : (trim((string)($record['required_action_summary'] ?? '')) !== ''
+            ? (string)$record['required_action_summary']
+            : null);
+
+    if (($clean['management_review_note_provided'] ?? false) && $clean['management_review_note'] !== null) {
+        $requiredActionSummary = $requiredActionSummary === null
+            ? (string)$clean['management_review_note']
+            : $requiredActionSummary . "\n" . (string)$clean['management_review_note'];
+        $requiredActionSummary = mb_substr($requiredActionSummary, 0, 1500);
+    }
+
+    $riskNote = ($clean['risk_note_provided'] ?? false)
+        ? $clean['risk_note']
+        : (trim((string)($record['risk_note'] ?? '')) !== ''
+            ? (string)$record['risk_note']
+            : null);
+
+    if (
+        $oldStatus === $newStatus
+        && $oldType === $newType
+        && !($clean['decision_summary_provided'] ?? false)
+        && !($clean['required_action_summary_provided'] ?? false)
+        && !($clean['management_review_note_provided'] ?? false)
+        && !($clean['risk_note_provided'] ?? false)
+    ) {
+        return [
+            'ok' => false,
+            'decision_id' => $decisionId,
+            'decision_code' => (string)($record['decision_code'] ?? ''),
+            'old_decision_status' => $oldStatus,
+            'new_decision_status' => $newStatus,
+            'old_decision_type' => $oldType,
+            'new_decision_type' => $newType,
+            'schema_status' => MOGHARE360_EXECUTIVE_GO_NO_GO_SCHEMA_READY,
+            'message' => 'حداقل یک تغییر کنترل‌شده در گردش کار الزامی است.',
+            'errors' => [[
+                'field' => 'workflow',
+                'rule' => 'no_change',
+                'message' => 'وضعیت، نوع یا یادداشت‌های بازبینی بدون تغییر هستند — به‌روزرسانی مجاز نیست.',
+            ]],
+            'notes' => [MOGHARE360_EXECUTIVE_GO_NO_GO_INTERNAL_NOTICE],
+        ];
+    }
+
+    $connection = customer_core_db();
+    $notes = $schema['notes'] ?? [];
+    $actorUserId = moghare360_executive_go_no_go_decision_resolve_actor_user_id();
+    $now = gmdate('Y-m-d H:i:s');
+
+    if (!@odbc_autocommit($connection, false)) {
+        return [
+            'ok' => false,
+            'decision_id' => null,
+            'decision_code' => null,
+            'old_decision_status' => $oldStatus,
+            'new_decision_status' => $newStatus,
+            'old_decision_type' => $oldType,
+            'new_decision_type' => $newType,
+            'schema_status' => MOGHARE360_EXECUTIVE_GO_NO_GO_SCHEMA_READY,
+            'message' => 'شروع تراکنش به‌روزرسانی گردش کار ناموفق بود.',
+            'errors' => [],
+            'notes' => $notes,
+        ];
+    }
+
+    try {
+        $updateOk = customer_core_execute(
+            $connection,
+            'UPDATE dbo.erp_executive_soft_run_decisions SET
+                decision_status = ?,
+                decision_type = ?,
+                decision_summary = ?,
+                required_action_summary = ?,
+                risk_note = ?,
+                updated_at = ?,
+                updated_by_user_id = ?
+             WHERE decision_id = ?',
+            [
+                $newStatus,
+                $newType,
+                $decisionSummary,
+                $requiredActionSummary,
+                $riskNote,
+                $now,
+                $actorUserId,
+                $decisionId,
+            ]
+        );
+
+        if ($updateOk === false) {
+            throw new RuntimeException('به‌روزرسانی رکورد تصمیم ناموفق بود.');
+        }
+
+        $historyOk = customer_core_execute(
+            $connection,
+            'INSERT INTO dbo.erp_executive_soft_run_decision_history (
+                decision_id,
+                old_decision_status,
+                new_decision_status,
+                old_decision_type,
+                new_decision_type,
+                change_reason,
+                changed_by_user_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            [
+                $decisionId,
+                $oldStatus,
+                $newStatus,
+                $oldType,
+                $newType,
+                (string)$clean['change_reason'],
+                $actorUserId,
+            ]
+        );
+
+        if ($historyOk === false) {
+            throw new RuntimeException('درج تاریخچه تصمیم ناموفق بود.');
+        }
+
+        if (!@odbc_commit($connection)) {
+            throw new RuntimeException('تأیید تراکنش گردش کار تصمیم ناموفق بود.');
+        }
+
+        @odbc_autocommit($connection, true);
+
+        return [
+            'ok' => true,
+            'decision_id' => $decisionId,
+            'decision_code' => (string)($record['decision_code'] ?? ''),
+            'old_decision_status' => $oldStatus,
+            'new_decision_status' => $newStatus,
+            'old_decision_type' => $oldType,
+            'new_decision_type' => $newType,
+            'schema_status' => MOGHARE360_EXECUTIVE_GO_NO_GO_SCHEMA_READY,
+            'message' => 'گردش کار تصمیم مدیریتی Go/No-Go با موفقیت به‌روزرسانی شد.',
+            'errors' => [],
+            'notes' => array_merge($notes, [MOGHARE360_EXECUTIVE_GO_NO_GO_INTERNAL_NOTICE]),
+        ];
+    } catch (Throwable $exception) {
+        @odbc_rollback($connection);
+        @odbc_autocommit($connection, true);
+
+        return [
+            'ok' => false,
+            'decision_id' => $decisionId,
+            'decision_code' => (string)($record['decision_code'] ?? ''),
+            'old_decision_status' => $oldStatus,
+            'new_decision_status' => $newStatus,
+            'old_decision_type' => $oldType,
+            'new_decision_type' => $newType,
+            'schema_status' => MOGHARE360_EXECUTIVE_GO_NO_GO_SCHEMA_READY,
+            'message' => 'به‌روزرسانی گردش کار تصمیم ناموفق بود.',
+            'errors' => [[
+                'field' => 'database',
+                'rule' => 'write_failed',
+                'message' => 'خطای کنترل‌شده در به‌روزرسانی پایگاه داده — جزئیات فنی نمایش داده نمی‌شود.',
+            ]],
+            'notes' => $notes,
+        ];
+    }
+}

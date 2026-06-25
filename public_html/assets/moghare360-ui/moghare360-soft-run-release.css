@@ -1691,3 +1691,58 @@
   font-family: inherit;
   font-size: 0.9rem;
 }
+
+/* WAVE 9C — Executive Go/No-Go Decision Workflow */
+.w9c-wrap { max-width: 1000px; }
+
+.w9c-banner { background: linear-gradient(135deg, #1e3a5f, #3b82f6); }
+
+.w9c-warning {
+  border-right: 4px solid #3b82f6;
+  background: #eff6ff;
+}
+
+.w9c-dl {
+  display: grid;
+  grid-template-columns: minmax(8rem, 40%) 1fr;
+  gap: 0.35rem 1rem;
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.w9c-dl dt { color: #525252; margin: 0; }
+
+.w9c-dl dd { margin: 0; }
+
+.w9c-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.w9c-table th,
+.w9c-table td {
+  text-align: right;
+  padding: 0.35rem;
+  border: 1px solid #e5e5e5;
+}
+
+.w9c-nav { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+
+.w9c-form label { display: block; margin: 0.75rem 0 0.25rem; font-size: 0.9rem; }
+
+.w9c-form input,
+.w9c-form select,
+.w9c-form textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.45rem;
+  border: 1px solid #d4d4d4;
+  border-radius: 0.35rem;
+  font-family: inherit;
+  font-size: 0.9rem;
+}
+
+.w9c-btn { background: #1e40af; }
+
+.w9c-btn:hover { background: #1e3a8a; }
