@@ -1,0 +1,63 @@
+/**
+ * MOGHARE360 ERP — Phase 8 Business Layer UI
+ */
+
+.p8bl-page { margin:0; background:#f4f6f8; font-family:Tahoma,Arial,sans-serif; }
+.p8bl-wrap { max-width:1200px; margin:0 auto; padding:1.5rem 1.25rem 2.5rem; }
+.p8bl-hero { background:linear-gradient(135deg,#0f172a 0%,#1e3a8a 50%,#2563eb 100%); color:#fff; border-radius:14px; padding:1.25rem 1.4rem; margin-bottom:1.25rem; }
+.p8bl-hero h1 { margin:0 0 .35rem; font-size:1.4rem; }
+.p8bl-hero p { margin:0; font-size:.9rem; opacity:.92; }
+.p8bl-section-title { margin:0 0 .75rem; border-inline-start:3px solid #2563eb; padding-inline-start:.6rem; font-size:1.05rem; }
+.p8bl-subsection { margin:1rem 0 .5rem; font-size:.95rem; color:#374151; }
+.p8bl-footer { text-align:center; font-size:.85rem; color:#6b7280; margin-top:1.5rem; }
+.p8bl-footer a { color:#1d4ed8; text-decoration:none; }
+
+.p8bl-badge { display:inline-block; padding:.15rem .5rem; border-radius:6px; font-size:.72rem; font-weight:600; }
+.p8bl-badge-ok { background:#dcfce7; color:#166534; }
+.p8bl-badge-foundation { background:#e0e7ff; color:#3730a3; }
+.p8bl-badge-pending { background:#fef3c7; color:#92400e; }
+.p8bl-badge-muted { background:#f3f4f6; color:#6b7280; }
+.p8bl-badge-missing { background:#fee2e2; color:#991b1b; }
+.p8bl-badge-new { background:#dbeafe; color:#1e40af; }
+
+.p8bl-phase-summary { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:.75rem; margin-bottom:1.25rem; }
+.p8bl-summary-card { background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:.85rem; text-align:center; }
+.p8bl-summary-card .label { display:block; font-size:.75rem; color:#6b7280; }
+.p8bl-summary-card .value { display:block; font-size:.95rem; font-weight:700; color:#1d4ed8; margin-top:.25rem; }
+
+.p8bl-module-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:1rem; }
+.p8bl-module-card { background:#fff; border:1px solid #e5e7eb; border-radius:14px; padding:1rem 1.1rem; }
+.p8bl-module-head { display:flex; justify-content:space-between; align-items:flex-start; gap:.5rem; margin-bottom:.5rem; }
+.p8bl-module-head h2 { margin:0; font-size:1rem; }
+.p8bl-module-desc { font-size:.85rem; color:#4b5563; margin:0 0 .35rem; }
+.p8bl-module-phase { font-size:.75rem; color:#9ca3af; margin:0 0 .75rem; }
+.p8bl-main-link { margin-bottom:.75rem; display:inline-block; }
+.p8bl-sub-links, .p8bl-nav-list, .p8bl-boundary-list, .p8bl-url-checklist { list-style:none; margin:0; padding:0; }
+.p8bl-link-item { padding:.35rem 0; border-bottom:1px solid #f3f4f6; font-size:.85rem; }
+.p8bl-link-item a { color:#1d4ed8; text-decoration:none; }
+.p8bl-nav-group { margin-bottom:1rem; }
+
+.p8bl-blueprint-flow { display:flex; flex-direction:column; align-items:center; gap:.5rem; margin-bottom:1.25rem; }
+.p8bl-blueprint-node { background:#fff; border:1px solid #dbeafe; border-radius:12px; padding:1rem; width:100%; max-width:520px; }
+.p8bl-node-header { margin-bottom:.35rem; }
+.p8bl-node-meta { font-size:.8rem; color:#6b7280; margin-bottom:.5rem; }
+.p8bl-node-link { font-size:.85rem; color:#1d4ed8; }
+.p8bl-blueprint-arrow { font-size:1.25rem; color:#93c5fd; }
+.p8bl-pending-note p { margin:.5rem 0; font-size:.9rem; }
+.p8bl-hint { font-size:.8rem; color:#9ca3af; }
+
+.p8bl-kpi-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:.75rem; margin-bottom:1.25rem; }
+.p8bl-kpi { background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:.85rem; border-inline-start:3px solid #2563eb; }
+.p8bl-kpi .label { font-size:.75rem; color:#6b7280; }
+.p8bl-kpi .value { font-size:1.2rem; font-weight:700; color:#1e3a8a; }
+
+.p8bl-demo-warning { background:#fff7ed; border:1px solid #fed7aa; border-radius:10px; padding:.85rem 1rem; margin-bottom:1rem; font-size:.85rem; font-weight:600; color:#9a3412; }
+.p8bl-role-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:1rem; }
+.p8bl-role-card { margin:0; }
+.p8bl-role-en { font-size:.8rem; color:#6b7280; margin:-.5rem 0 .75rem; }
+.p8bl-layer-code { font-size:.75rem; color:#9ca3af; font-weight:normal; }
+
+@media (max-width:640px) {
+  .p8bl-wrap { padding:1rem .75rem 2rem; }
+  .p8bl-module-grid { grid-template-columns:1fr; }
+}

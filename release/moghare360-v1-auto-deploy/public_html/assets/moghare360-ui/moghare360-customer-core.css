@@ -1,0 +1,277 @@
+/**
+ * MOGHARE360 ERP — Phase 1 Customer Core System UI
+ * RTL Persian-first, aligned with Soft Run release styling.
+ */
+
+.p1cc-page {
+  margin: 0;
+  background: #f4f6f8;
+  color: #1f2937;
+  font-family: var(--m360-font-family-sans, Tahoma, Arial, sans-serif);
+  line-height: 1.6;
+}
+
+.p1cc-wrap {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 1.5rem 1.25rem 2.5rem;
+}
+
+.p1cc-readonly-banner {
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  color: #9a3412;
+  border-radius: 10px;
+  padding: 0.75rem 1rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-align: center;
+  margin-bottom: 1rem;
+}
+
+.p1cc-hero {
+  background: linear-gradient(135deg, #1e3a8a 0%, #1d4ed8 55%, #2563eb 100%);
+  color: #fff;
+  border-radius: 14px;
+  padding: 1.25rem 1.4rem;
+  margin-bottom: 1.25rem;
+}
+
+.p1cc-hero h1 {
+  margin: 0 0 0.35rem;
+  font-size: 1.4rem;
+}
+
+.p1cc-hero p {
+  margin: 0;
+  font-size: 0.9rem;
+  opacity: 0.92;
+}
+
+.p1cc-flash {
+  background: #ecfdf5;
+  border: 1px solid #6ee7b7;
+  color: #065f46;
+  border-radius: 10px;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+}
+
+.p1cc-card {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 1.1rem 1.2rem;
+  margin-bottom: 1rem;
+}
+
+.p1cc-card h2 {
+  margin: 0 0 0.75rem;
+  font-size: 1.05rem;
+}
+
+.p1cc-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.75rem;
+}
+
+.p1cc-kpi {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 0.85rem;
+  border-inline-start: 3px solid #2563eb;
+}
+
+.p1cc-kpi-label {
+  font-size: 0.72rem;
+  color: #737373;
+}
+
+.p1cc-kpi-value {
+  font-size: 1.35rem;
+  font-weight: 700;
+  margin-top: 0.2rem;
+  direction: ltr;
+  unicode-bidi: embed;
+  display: inline-block;
+}
+
+.p1cc-nav-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 0.75rem;
+}
+
+.p1cc-nav-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 1rem;
+  border-radius: 12px;
+  border: 1px solid #e5e7eb;
+  background: #fff;
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.p1cc-nav-card:hover {
+  border-color: #2563eb;
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.1);
+}
+
+.p1cc-nav-title {
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+
+.p1cc-nav-sub {
+  font-size: 0.75rem;
+  color: #737373;
+}
+
+.p1cc-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 0.85rem 1rem;
+}
+
+.p1cc-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.p1cc-form-group.full {
+  grid-column: 1 / -1;
+}
+
+.p1cc-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.p1cc-input,
+.p1cc-select,
+.p1cc-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  padding: 0.55rem 0.7rem;
+  font-size: 0.9rem;
+  background: #fff;
+}
+
+.p1cc-textarea {
+  min-height: 90px;
+  resize: vertical;
+}
+
+.p1cc-input-ltr {
+  direction: ltr;
+  text-align: left;
+}
+
+.p1cc-hint {
+  font-size: 0.78rem;
+  color: #6b7280;
+}
+
+.p1cc-btn-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-top: 1rem;
+}
+
+.p1cc-btn {
+  display: inline-block;
+  border: none;
+  border-radius: 8px;
+  padding: 0.55rem 1rem;
+  font-size: 0.9rem;
+  cursor: pointer;
+  text-decoration: none;
+  text-align: center;
+}
+
+.p1cc-btn-primary {
+  background: #2563eb;
+  color: #fff;
+}
+
+.p1cc-btn-ghost {
+  background: #f3f4f6;
+  color: #1f2937;
+  border: 1px solid #d1d5db;
+}
+
+.p1cc-badge {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.p1cc-badge-open { background: #dbeafe; color: #1d4ed8; }
+.p1cc-badge-draft { background: #f3f4f6; color: #374151; }
+.p1cc-badge-active { background: #d1fae5; color: #065f46; }
+.p1cc-badge-accepted { background: #ccfbf1; color: #0f766e; }
+.p1cc-badge-duplicate { background: #fef3c7; color: #92400e; }
+.p1cc-badge-new { background: #ede9fe; color: #5b21b6; }
+
+.p1cc-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.p1cc-table th,
+.p1cc-table td {
+  border: 1px solid #e5e7eb;
+  padding: 0.5rem 0.65rem;
+  text-align: right;
+  vertical-align: top;
+}
+
+.p1cc-table th {
+  background: #f9fafb;
+}
+
+.p1cc-error {
+  border-color: #fecaca;
+  background: #fef2f2;
+}
+
+.p1cc-link {
+  color: #1d4ed8;
+  text-decoration: none;
+}
+
+.p1cc-link:hover {
+  text-decoration: underline;
+}
+
+.p1cc-section-unavailable {
+  color: #6b7280;
+  font-size: 0.85rem;
+  font-style: italic;
+}
+
+.p1cc-photo-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 0.5rem;
+}
+
+.p1cc-photo-item {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+}

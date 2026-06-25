@@ -1,0 +1,13 @@
+/**
+ * MOGHARE360 ERP — Phase 4 Inventory & Purchase UI
+ */
+
+.p4ip-page { margin:0; background:#f4f6f8; font-family:Tahoma,Arial,sans-serif; }
+.p4ip-wrap { max-width:1200px; margin:0 auto; padding:1.5rem 1.25rem 2.5rem; }
+.p4ip-hero { background:linear-gradient(135deg,#92400e 0%,#b45309 50%,#d97706 100%); color:#fff; border-radius:14px; padding:1.25rem 1.4rem; margin-bottom:1.25rem; }
+.p4ip-hero h1 { margin:0 0 .35rem; font-size:1.4rem; }
+.p4ip-readonly-banner { background:#fff7ed; border:1px solid #fed7aa; color:#9a3412; border-radius:10px; padding:.75rem 1rem; text-align:center; margin-bottom:1rem; font-size:.85rem; font-weight:600; }
+.p4ip-section-title { margin:0 0 .75rem; border-inline-start:3px solid #d97706; padding-inline-start:.6rem; font-size:1.05rem; }
+.p4ip-footer { text-align:center; font-size:.85rem; color:#6b7280; margin-top:1.5rem; }
+.p4ip-footer a { color:#b45309; text-decoration:none; }
+.p4ip-form-inline { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:.75rem; align-items:end; }

@@ -1,0 +1,207 @@
+/**
+ * MOGHARE360 Finance Preview UX — Mission 36
+ */
+
+.m36-fin-board {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.m36-fin-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 1rem;
+}
+
+.m36-fin-kpi {
+  background: var(--m360-surface, #fff);
+  border: 1px solid var(--m360-border, #e5e5e5);
+  border-radius: 12px;
+  padding: 1rem;
+  border-inline-start: 4px solid #15803d;
+}
+
+.m36-fin-kpi.is-count { border-inline-start-color: #2563eb; }
+.m36-fin-kpi.is-jobcard { border-inline-start-color: #8b5cf6; }
+.m36-fin-kpi.is-preview { border-inline-start-color: #d97706; }
+
+.m36-fin-kpi-label { font-size: 0.8rem; color: #737373; }
+.m36-fin-kpi-value { font-size: 1.4rem; font-weight: 700; }
+
+.m36-fin-warning {
+  padding: 0.85rem 1rem;
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  border-radius: 10px;
+  font-size: 0.85rem;
+}
+
+.m36-fin-boundary {
+  padding: 0.85rem 1rem;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 10px;
+  font-size: 0.85rem;
+  color: #991b1b;
+}
+
+.m36-fin-table-wrap {
+  overflow-x: auto;
+  border: 1px solid #e5e5e5;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.m36-fin-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.m36-fin-table th,
+.m36-fin-table td {
+  padding: 0.7rem 0.9rem;
+  border-bottom: 1px solid #e5e5e5;
+  text-align: start;
+}
+
+.m36-fin-table th { background: #fafafa; font-weight: 600; }
+
+.m36-fin-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.75rem;
+}
+
+.m36-fin-summary-item {
+  padding: 0.75rem;
+  background: #fafafa;
+  border-radius: 8px;
+  border: 1px solid #e5e5e5;
+}
+
+.m36-fin-summary-label { font-size: 0.7rem; color: #737373; }
+.m36-fin-summary-value { font-weight: 700; font-size: 1rem; }
+
+.m36-fin-balance-card {
+  background: linear-gradient(135deg, #f0fdf4 0%, #fff 100%);
+  border: 1px solid #86efac;
+  border-radius: 12px;
+  padding: 1rem 1.1rem;
+}
+
+.m36-fin-balance-card.is-outstanding {
+  background: linear-gradient(135deg, #fffbeb 0%, #fff 100%);
+  border-color: #fcd34d;
+}
+
+.m36-fin-payment-card {
+  background: #fff;
+  border: 1px solid #e5e5e5;
+  border-radius: 10px;
+  padding: 0.85rem 1rem;
+}
+
+.m36-fin-timeline {
+  border-inline-start: 2px solid #e5e5e5;
+  padding-inline-start: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.m36-fin-timeline-item {
+  position: relative;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid #e5e5e5;
+  border-radius: 8px;
+  background: #fff;
+  font-size: 0.85rem;
+}
+
+.m36-fin-timeline-item::before {
+  content: '';
+  position: absolute;
+  inset-inline-start: -1.4rem;
+  top: 0.9rem;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #15803d;
+}
+
+.m36-fin-invoice-mock {
+  background: #fff;
+  border: 2px dashed #d4d4d4;
+  border-radius: 12px;
+  padding: 1.25rem;
+  max-width: 720px;
+}
+
+.m36-fin-invoice-header {
+  border-bottom: 1px solid #e5e5e5;
+  padding-bottom: 1rem;
+  margin-bottom: 1rem;
+}
+
+.m36-fin-invoice-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin: 0 0 0.25rem;
+}
+
+.m36-fin-invoice-sub {
+  font-size: 0.8rem;
+  color: #737373;
+  margin: 0;
+}
+
+.m36-fin-invoice-lines {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  margin-bottom: 1rem;
+}
+
+.m36-fin-invoice-lines th,
+.m36-fin-invoice-lines td {
+  padding: 0.5rem 0.65rem;
+  border-bottom: 1px solid #e5e5e5;
+  text-align: start;
+}
+
+.m36-fin-disabled-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.m36-fin-btn-disabled {
+  padding: 0.5rem 0.85rem;
+  border-radius: 8px;
+  border: 1px solid #d4d4d4;
+  background: #f5f5f5;
+  color: #a3a3a3;
+  font-size: 0.8rem;
+  cursor: not-allowed;
+  opacity: 0.85;
+}
+
+.m36-fin-page-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.m36-fin-empty {
+  padding: 1.25rem;
+  text-align: center;
+  color: #737373;
+  border: 1px dashed #d4d4d4;
+  border-radius: 12px;
+}
+
+@media (max-width: 768px) {
+  .m36-fin-kpi-value { font-size: 1.2rem; }
+}

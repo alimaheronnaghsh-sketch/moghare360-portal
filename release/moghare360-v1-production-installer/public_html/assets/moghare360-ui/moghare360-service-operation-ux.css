@@ -1,0 +1,220 @@
+/**
+ * MOGHARE360 Service Operation UX — Mission 35
+ */
+
+.m35-so-board {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.m35-so-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 1rem;
+}
+
+.m35-so-kpi {
+  background: var(--m360-surface, #fff);
+  border: 1px solid var(--m360-border, #e5e5e5);
+  border-radius: 12px;
+  padding: 1rem;
+  border-inline-start: 4px solid var(--m360-primary, #1d4ed8);
+}
+
+.m35-so-kpi.is-progress { border-inline-start-color: #2563eb; }
+.m35-so-kpi.is-waiting { border-inline-start-color: #d97706; }
+.m35-so-kpi.is-done { border-inline-start-color: #15803d; }
+
+.m35-so-kpi-label { font-size: 0.8rem; color: var(--m360-text-muted, #737373); }
+.m35-so-kpi-value { font-size: 1.6rem; font-weight: 700; }
+
+.m35-so-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--m360-border, #e5e5e5);
+  border-radius: 12px;
+  background: #fff;
+}
+
+.m35-so-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.m35-so-table th,
+.m35-so-table td {
+  padding: 0.7rem 0.9rem;
+  border-bottom: 1px solid var(--m360-border, #e5e5e5);
+  text-align: start;
+}
+
+.m35-so-table th { background: #fafafa; font-weight: 600; }
+
+.m35-so-progress-rail {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+  padding: 0.75rem;
+  background: #fafafa;
+  border-radius: 10px;
+  border: 1px solid var(--m360-border, #e5e5e5);
+}
+
+.m35-so-progress-step {
+  font-size: 0.7rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 999px;
+  background: #fff;
+  border: 1px solid #e5e5e5;
+  color: #737373;
+}
+
+.m35-so-progress-step.is-current {
+  background: var(--m360-primary, #1d4ed8);
+  border-color: var(--m360-primary, #1d4ed8);
+  color: #fff;
+}
+
+.m35-so-progress-step.is-past {
+  background: #ecfdf5;
+  border-color: #86efac;
+  color: #166534;
+}
+
+.m35-so-kanban {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 0.75rem;
+  align-items: start;
+}
+
+.m35-so-kanban-col {
+  background: #f8fafc;
+  border: 1px solid var(--m360-border, #e5e5e5);
+  border-radius: 12px;
+  min-height: 120px;
+}
+
+.m35-so-kanban-col-header {
+  padding: 0.65rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--m360-border, #e5e5e5);
+  background: #fff;
+  border-radius: 12px 12px 0 0;
+}
+
+.m35-so-kanban-cards {
+  padding: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.m35-so-kanban-card {
+  background: #fff;
+  border: 1px solid var(--m360-border, #e5e5e5);
+  border-radius: 8px;
+  padding: 0.65rem 0.75rem;
+  font-size: 0.8rem;
+}
+
+.m35-so-kanban-card-title { font-weight: 700; margin: 0 0 0.25rem; }
+.m35-so-kanban-card-meta { color: #737373; font-size: 0.75rem; }
+
+.m35-so-detail-panel {
+  background: #fff;
+  border: 1px solid var(--m360-border, #e5e5e5);
+  border-radius: 12px;
+  padding: 1rem 1.1rem;
+}
+
+.m35-so-detail-panel.is-jobcard {
+  border-inline-start: 4px solid #8b5cf6;
+}
+
+.m35-so-binding-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem;
+}
+
+.m35-so-tech-card {
+  background: linear-gradient(135deg, #eff6ff 0%, #fff 100%);
+  border: 1px solid #bfdbfe;
+  border-radius: 12px;
+  padding: 0.9rem 1rem;
+}
+
+.m35-so-tech-card.is-waiting {
+  border-color: #fcd34d;
+  background: linear-gradient(135deg, #fffbeb 0%, #fff 100%);
+}
+
+.m35-so-tech-card-title { font-weight: 700; margin: 0 0 0.35rem; font-size: 0.95rem; }
+.m35-so-tech-card-meta { font-size: 0.8rem; color: #525252; margin: 0 0 0.5rem; }
+
+.m35-so-action-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.65rem;
+}
+
+.m35-so-action-card {
+  display: block;
+  padding: 0.8rem 0.9rem;
+  border-radius: 10px;
+  border: 1px solid var(--m360-border, #e5e5e5);
+  text-decoration: none;
+  color: inherit;
+  background: #fff;
+  font-size: 0.85rem;
+}
+
+.m35-so-action-card:hover { border-color: var(--m360-primary, #1d4ed8); }
+
+.m35-so-linked-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.m35-so-linked-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+}
+
+.m35-so-page-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.m35-so-empty {
+  padding: 1rem;
+  text-align: center;
+  color: #737373;
+  font-size: 0.85rem;
+}
+
+.m35-so-placeholder-note {
+  padding: 0.75rem 1rem;
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  border-radius: 10px;
+  font-size: 0.85rem;
+}
+
+@media (max-width: 768px) {
+  .m35-so-kanban {
+    grid-template-columns: 1fr;
+  }
+}

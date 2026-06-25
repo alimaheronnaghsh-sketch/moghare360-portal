@@ -1,0 +1,413 @@
+/**
+ * MOGHARE360 JobCard UX — Mission 33
+ * Board, status flow, timeline, customer/vehicle cards, technician panel, action cards
+ */
+
+/* JobCard board */
+.m33-jc-board {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.m33-jc-board-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.m33-jc-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1rem;
+}
+
+.m33-jc-kpi {
+  background: var(--m360-surface, #fff);
+  border: 1px solid var(--m360-border, #e5e5e5);
+  border-radius: 12px;
+  padding: 1rem 1.1rem;
+  border-inline-start: 4px solid var(--m360-primary, #1d4ed8);
+}
+
+.m33-jc-kpi.is-warning { border-inline-start-color: #d97706; }
+.m33-jc-kpi.is-accent { border-inline-start-color: #7c3aed; }
+.m33-jc-kpi.is-success { border-inline-start-color: #15803d; }
+
+.m33-jc-kpi-label {
+  font-size: 0.8rem;
+  color: var(--m360-text-muted, #737373);
+  margin-bottom: 0.35rem;
+}
+
+.m33-jc-kpi-value {
+  font-size: 1.75rem;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+/* JobCard list table */
+.m33-jc-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--m360-border, #e5e5e5);
+  border-radius: 12px;
+  background: var(--m360-surface, #fff);
+}
+
+.m33-jc-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.m33-jc-table th,
+.m33-jc-table td {
+  padding: 0.75rem 1rem;
+  text-align: start;
+  border-bottom: 1px solid var(--m360-border, #e5e5e5);
+  vertical-align: middle;
+}
+
+.m33-jc-table th {
+  background: var(--m360-surface-muted, #fafafa);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.m33-jc-table tr:last-child td {
+  border-bottom: none;
+}
+
+.m33-jc-table tr:hover td {
+  background: #f8fafc;
+}
+
+/* Status flow visualization */
+.m33-jc-status-flow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  padding: 1rem;
+  background: var(--m360-surface-muted, #fafafa);
+  border-radius: 12px;
+  border: 1px solid var(--m360-border, #e5e5e5);
+}
+
+.m33-jc-flow-step {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.65rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: #fff;
+  border: 1px solid var(--m360-border, #e5e5e5);
+  color: var(--m360-text-muted, #737373);
+}
+
+.m33-jc-flow-step.is-current {
+  background: var(--m360-primary, #1d4ed8);
+  border-color: var(--m360-primary, #1d4ed8);
+  color: #fff;
+}
+
+.m33-jc-flow-step.is-past {
+  background: #ecfdf5;
+  border-color: #86efac;
+  color: #166534;
+}
+
+.m33-jc-flow-arrow {
+  color: var(--m360-text-muted, #a3a3a3);
+  font-size: 0.85rem;
+}
+
+/* Customer / vehicle binding card */
+.m33-jc-binding-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1rem;
+}
+
+.m33-jc-binding-card {
+  background: var(--m360-surface, #fff);
+  border: 1px solid var(--m360-border, #e5e5e5);
+  border-radius: 12px;
+  padding: 1rem 1.1rem;
+}
+
+.m33-jc-binding-card.is-vehicle {
+  border-inline-start: 4px solid #0ea5e9;
+}
+
+.m33-jc-binding-card.is-customer {
+  border-inline-start: 4px solid #8b5cf6;
+}
+
+.m33-jc-binding-title {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--m360-text-muted, #737373);
+  margin: 0 0 0.5rem;
+}
+
+.m33-jc-binding-name {
+  font-size: 1.1rem;
+  font-weight: 700;
+  margin: 0 0 0.35rem;
+}
+
+.m33-jc-binding-meta {
+  font-size: 0.85rem;
+  color: var(--m360-text-muted, #525252);
+  margin: 0;
+}
+
+/* Technician readiness panel */
+.m33-jc-tech-panel {
+  background: linear-gradient(135deg, #f0f9ff 0%, #fff 100%);
+  border: 1px solid #bae6fd;
+  border-radius: 12px;
+  padding: 1rem 1.1rem;
+}
+
+.m33-jc-tech-panel-title {
+  font-weight: 700;
+  margin: 0 0 0.75rem;
+}
+
+.m33-jc-tech-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.m33-jc-tech-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+}
+
+/* Operational action cards */
+.m33-jc-action-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 0.75rem;
+}
+
+.m33-jc-action-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.9rem 1rem;
+  border-radius: 12px;
+  border: 1px solid var(--m360-border, #e5e5e5);
+  background: var(--m360-surface, #fff);
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.m33-jc-action-card:hover {
+  border-color: var(--m360-primary, #1d4ed8);
+  box-shadow: 0 4px 12px rgba(29, 78, 216, 0.08);
+}
+
+.m33-jc-action-card-title {
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+
+.m33-jc-action-card-desc {
+  font-size: 0.8rem;
+  color: var(--m360-text-muted, #737373);
+}
+
+.m33-jc-action-card.is-controlled {
+  border-inline-start: 3px solid #f59e0b;
+}
+
+/* Timeline */
+.m33-jc-timeline {
+  position: relative;
+  padding-inline-start: 1.5rem;
+  border-inline-start: 2px solid var(--m360-border, #e5e5e5);
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.m33-jc-timeline-item {
+  position: relative;
+  padding: 0.85rem 1rem;
+  background: var(--m360-surface, #fff);
+  border: 1px solid var(--m360-border, #e5e5e5);
+  border-radius: 10px;
+}
+
+.m33-jc-timeline-item::before {
+  content: '';
+  position: absolute;
+  inset-inline-start: -1.62rem;
+  top: 1rem;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--m360-primary, #1d4ed8);
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 2px var(--m360-primary, #1d4ed8);
+}
+
+.m33-jc-timeline-source {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--m360-text-muted, #737373);
+  margin-bottom: 0.25rem;
+}
+
+.m33-jc-timeline-action {
+  font-weight: 700;
+  margin: 0 0 0.25rem;
+}
+
+.m33-jc-timeline-meta {
+  font-size: 0.8rem;
+  color: var(--m360-text-muted, #525252);
+}
+
+/* Create flow guide */
+.m33-jc-create-flow {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem;
+  counter-reset: step;
+}
+
+.m33-jc-create-step {
+  position: relative;
+  padding: 1rem;
+  border-radius: 12px;
+  border: 1px dashed var(--m360-border, #d4d4d4);
+  background: var(--m360-surface-muted, #fafafa);
+}
+
+.m33-jc-create-step::before {
+  counter-increment: step;
+  content: counter(step);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 50%;
+  background: var(--m360-primary, #1d4ed8);
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.85rem;
+  margin-bottom: 0.5rem;
+}
+
+.m33-jc-create-step h4 {
+  margin: 0 0 0.35rem;
+  font-size: 0.95rem;
+}
+
+.m33-jc-create-step p {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--m360-text-muted, #525252);
+}
+
+.m33-jc-mock-form {
+  border: 1px solid var(--m360-border, #e5e5e5);
+  border-radius: 12px;
+  padding: 1.25rem;
+  background: var(--m360-surface, #fff);
+}
+
+.m33-jc-mock-field {
+  margin-bottom: 0.85rem;
+}
+
+.m33-jc-mock-field label {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+}
+
+.m33-jc-mock-field input,
+.m33-jc-mock-field select,
+.m33-jc-mock-field textarea {
+  width: 100%;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--m360-border, #d4d4d4);
+  border-radius: 8px;
+  background: #f5f5f5;
+  pointer-events: none;
+  opacity: 0.85;
+}
+
+.m33-jc-page-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.m33-jc-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.75rem;
+}
+
+.m33-jc-summary-item {
+  padding: 0.65rem 0.75rem;
+  background: var(--m360-surface-muted, #fafafa);
+  border-radius: 8px;
+}
+
+.m33-jc-summary-label {
+  font-size: 0.7rem;
+  color: var(--m360-text-muted, #737373);
+}
+
+.m33-jc-summary-value {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.m33-jc-empty {
+  padding: 1.5rem;
+  text-align: center;
+  color: var(--m360-text-muted, #737373);
+  border: 1px dashed var(--m360-border, #d4d4d4);
+  border-radius: 12px;
+}
+
+@media (max-width: 768px) {
+  .m33-jc-status-flow {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .m33-jc-flow-arrow {
+    display: none;
+  }
+
+  .m33-jc-table th,
+  .m33-jc-table td {
+    padding: 0.55rem 0.65rem;
+    font-size: 0.8rem;
+  }
+}

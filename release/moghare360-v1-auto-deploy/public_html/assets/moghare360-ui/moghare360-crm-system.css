@@ -1,0 +1,17 @@
+/**
+ * MOGHARE360 ERP — Phase 6 CRM System UI
+ */
+
+.p6crm-page { margin:0; background:#f4f6f8; font-family:Tahoma,Arial,sans-serif; }
+.p6crm-wrap { max-width:1200px; margin:0 auto; padding:1.5rem 1.25rem 2.5rem; }
+.p6crm-hero { background:linear-gradient(135deg,#1e3a8a 0%,#2563eb 50%,#3b82f6 100%); color:#fff; border-radius:14px; padding:1.25rem 1.4rem; margin-bottom:1.25rem; }
+.p6crm-hero h1 { margin:0 0 .35rem; font-size:1.4rem; }
+.p6crm-readonly-banner { background:#eff6ff; border:1px solid #bfdbfe; color:#1e40af; border-radius:10px; padding:.75rem 1rem; text-align:center; margin-bottom:1rem; font-size:.85rem; font-weight:600; }
+.p6crm-section-title { margin:0 0 .75rem; border-inline-start:3px solid #3b82f6; padding-inline-start:.6rem; font-size:1.05rem; }
+.p6crm-footer { text-align:center; font-size:.85rem; color:#6b7280; margin-top:1.5rem; }
+.p6crm-footer a { color:#2563eb; text-decoration:none; }
+.p6crm-kpi-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:.75rem; }
+.p6crm-kpi { background:#fff; border:1px solid #dbeafe; border-radius:12px; padding:.85rem; text-align:center; }
+.p6crm-kpi .label { font-size:.75rem; color:#6b7280; }
+.p6crm-kpi .value { font-size:1.2rem; font-weight:700; color:#1e40af; }
+.p6crm-internal-note { background:#fef3c7; border:1px solid #fcd34d; border-radius:10px; padding:.75rem 1rem; margin-bottom:1rem; color:#92400e; font-size:.85rem; }

@@ -1,0 +1,78 @@
+/* MOGHARE360 — Phase 15 Release Package */
+.p15rel-page {
+  background: #0f1419;
+  color: #e8ecef;
+  min-height: 100vh;
+  font-family: Vazirmatn, Tahoma, "Segoe UI", Arial, sans-serif;
+}
+.p15rel-wrap { max-width: 1180px; margin: 0 auto; padding: 1.25rem 1rem 2.5rem; }
+.p15rel-banner {
+  background: linear-gradient(90deg, #0a1410, #1a2e22);
+  border: 1px solid #2d5a3d;
+  color: #7cfc7c;
+  text-align: center;
+  padding: .65rem 1rem;
+  font-size: .85rem;
+  border-radius: 8px;
+  margin-bottom: 1.25rem;
+}
+.p15rel-hero { margin-bottom: 1.25rem; }
+.p15rel-hero h1 { margin: 0 0 .35rem; font-size: 1.65rem; color: #f0f4f8; }
+.p15rel-hero p { margin: 0; color: #9aa8b5; }
+.p15rel-section-title { margin: 0 0 1rem; font-size: 1.12rem; color: #c5d4e0; }
+.p15rel-kpi-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: .75rem; margin-bottom: 1.25rem;
+}
+.p15rel-kpi {
+  background: #1a222c; border: 1px solid #2a3540;
+  border-radius: 10px; padding: .85rem 1rem;
+}
+.p15rel-kpi .label { font-size: .76rem; color: #8a9aab; margin-bottom: .2rem; }
+.p15rel-kpi .value { font-size: .95rem; font-weight: 600; color: #f0f4f8; }
+.p15rel-nav-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: .75rem; margin-bottom: 1.25rem; }
+.p15rel-nav-card {
+  display: block; padding: 1rem; background: #1a222c;
+  border: 1px solid #2a3540; border-radius: 10px;
+  text-decoration: none; color: #e8ecef;
+}
+.p15rel-nav-card:hover { border-color: #39ff14; }
+.p15rel-nav-title { display: block; font-weight: 600; margin-bottom: .2rem; }
+.p15rel-nav-sub { display: block; font-size: .8rem; color: #8a9aab; }
+.p15rel-badge {
+  display: inline-block; padding: .18rem .5rem; border-radius: 999px;
+  font-size: .72rem; font-weight: 600;
+}
+.p15rel-badge-ok { background: #1a3d2a; color: #7cfc7c; border: 1px solid #2d5a2d; }
+.p15rel-badge-warn { background: #3d3520; color: #ffd966; border: 1px solid #6b5a20; }
+.p15rel-badge-fail { background: #3d2020; color: #ff8a8a; border: 1px solid #6b2020; }
+.p15rel-badge-muted { background: #2a3540; color: #9aa8b5; }
+.p15rel-warning-box {
+  background: #2a1818; border: 1px solid #5a3030;
+  border-radius: 8px; padding: .75rem 1rem; margin-bottom: 1rem; font-size: .88rem;
+}
+.p15rel-card-dark {
+  background: #1a222c; border: 1px solid #2a3540;
+  border-radius: 10px; padding: 1rem 1.15rem; margin-bottom: 1rem;
+}
+.p15rel-manifest-list { margin: 0; padding-right: 1.2rem; }
+.p15rel-manifest-list li { margin-bottom: .35rem; }
+.p15rel-path-block {
+  background: #12181f; border: 1px solid #2a3540;
+  border-radius: 6px; padding: .65rem .85rem; margin: .5rem 0;
+  font-size: .85rem;
+}
+.p15rel-download-btn {
+  display: inline-block; padding: .55rem 1.1rem;
+  background: #1a3d2a; color: #7cfc7c; border: 1px solid #2d5a2d;
+  border-radius: 8px; text-decoration: none; font-weight: 600;
+}
+.p15rel-download-btn:hover { background: #2d5a2d; }
+.p15rel-download-disabled {
+  display: inline-block; padding: .55rem 1.1rem;
+  background: #2a3540; color: #6a7a8a; border-radius: 8px; cursor: not-allowed;
+}
+.p15rel-footer { margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #2a3540; font-size: .86rem; }
+.p15rel-footer a { color: #7cfc7c; text-decoration: none; }
+.p15rel-footer a:hover { text-decoration: underline; }
+@media (max-width: 640px) { .p15rel-kpi-grid { grid-template-columns: repeat(2, 1fr); } }

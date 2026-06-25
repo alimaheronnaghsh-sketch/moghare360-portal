@@ -4,3 +4,22 @@ private/erp-config.php
 .env
 .env.*
 !.env.example
+
+# Release ZIP binaries (build output — not source truth)
+release/*.zip
+public_html/release/*.zip
+*.zip
+!package.zip
+
+# Runtime storage and backups (never commit)
+storage/
+private/backups/
+uploads/
+logs/
+backups/
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

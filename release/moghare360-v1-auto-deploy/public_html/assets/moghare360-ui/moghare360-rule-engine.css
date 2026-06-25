@@ -1,0 +1,107 @@
+/**
+ * MOGHARE360 ERP — Phase 3 Rule Engine UI
+ */
+
+.p3re-page {
+  margin: 0;
+  background: #f4f6f8;
+  color: #1f2937;
+  font-family: var(--m360-font-family-sans, Tahoma, Arial, sans-serif);
+  line-height: 1.6;
+}
+
+.p3re-wrap {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 1.5rem 1.25rem 2.5rem;
+}
+
+.p3re-readonly-banner {
+  background: #faf5ff;
+  border: 1px solid #e9d5ff;
+  color: #6b21a8;
+  border-radius: 10px;
+  padding: 0.75rem 1rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-align: center;
+  margin-bottom: 1rem;
+}
+
+.p3re-hero {
+  background: linear-gradient(135deg, #581c87 0%, #7c3aed 55%, #8b5cf6 100%);
+  color: #fff;
+  border-radius: 14px;
+  padding: 1.25rem 1.4rem;
+  margin-bottom: 1.25rem;
+}
+
+.p3re-hero h1 {
+  margin: 0 0 0.35rem;
+  font-size: 1.4rem;
+}
+
+.p3re-hero p {
+  margin: 0;
+  font-size: 0.9rem;
+  opacity: 0.92;
+}
+
+.p3re-section-title {
+  margin: 0 0 0.75rem;
+  font-size: 1.05rem;
+  border-inline-start: 3px solid #7c3aed;
+  padding-inline-start: 0.6rem;
+}
+
+.p3re-link {
+  color: #7c3aed;
+  text-decoration: none;
+}
+
+.p3re-link:hover {
+  text-decoration: underline;
+}
+
+.p3re-footer-nav {
+  margin-top: 1.5rem;
+  font-size: 0.85rem;
+  text-align: center;
+  color: #6b7280;
+}
+
+.p3re-result-box {
+  border-radius: 12px;
+  padding: 1rem 1.1rem;
+  margin-bottom: 1rem;
+  border: 1px solid #e5e7eb;
+  background: #fff;
+}
+
+.p3re-result-box.allowed {
+  border-color: #6ee7b7;
+  background: #ecfdf5;
+}
+
+.p3re-result-box.blocked {
+  border-color: #fecaca;
+  background: #fef2f2;
+}
+
+.p3re-result-box.review {
+  border-color: #fde68a;
+  background: #fffbeb;
+}
+
+.p3re-form-inline {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 0.75rem;
+  align-items: end;
+}
+
+.p3re-internal-note {
+  font-size: 0.78rem;
+  color: #6b7280;
+  margin-top: 0.5rem;
+}

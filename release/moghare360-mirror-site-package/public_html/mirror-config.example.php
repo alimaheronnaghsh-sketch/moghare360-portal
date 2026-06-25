@@ -7,7 +7,7 @@ declare(strict_types=1);
  */
 
 return [
-    'MASTER_SERVER_BASE_URL' => 'https://YOUR-MASTER-SERVER-URL.example',
+    'MASTER_SERVER_BASE_URL' => 'http://localhost:8080/moghare360',
     'MIRROR_MODE' => true,
     'LOCAL_STORAGE_ALLOWED' => false,
     'HOST_DATABASE_ALLOWED' => false,
