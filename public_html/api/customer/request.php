@@ -19,7 +19,7 @@ $name = mogh_api_sanitize_string(
 );
 $mobile = mogh_api_sanitize_string($body['mobile'] ?? $body['phone'] ?? '', 30);
 $plate = mogh_api_sanitize_string(
-    $body['vehicle_plate'] ?? $body['plate_number'] ?? $body['plate'] ?? '',
+    $body['vehicle_plate'] ?? $body['plate_display'] ?? $body['plate_number'] ?? $body['plate'] ?? '',
     50
 );
 
@@ -28,21 +28,57 @@ $description = mogh_api_sanitize_string(
     2000
 );
 
+$plateParts = $body['plate_parts'] ?? null;
+if (!is_array($plateParts)) {
+    $plateParts = array_filter([
+        'left_2' => mogh_api_sanitize_string($body['plate_left_2_digits'] ?? '', 4),
+        'letter' => mogh_api_sanitize_string($body['plate_letter'] ?? '', 4),
+        'middle_3' => mogh_api_sanitize_string($body['plate_middle_3_digits'] ?? '', 4),
+        'region_2' => mogh_api_sanitize_string($body['plate_region_2_digits'] ?? '', 4),
+    ], static fn($v) => $v !== '');
+}
+
 $extra = [
     'national_id' => mogh_api_sanitize_string($body['national_id'] ?? $body['national_code'] ?? '', 20),
+    'province' => mogh_api_sanitize_string($body['province'] ?? '', 80),
+    'city' => mogh_api_sanitize_string($body['city'] ?? '', 80),
     'brand' => mogh_api_sanitize_string($body['brand'] ?? $body['vehicle_brand'] ?? '', 80),
+    'vehicle_brand' => mogh_api_sanitize_string($body['vehicle_brand'] ?? $body['brand'] ?? '', 80),
     'model' => mogh_api_sanitize_string($body['model'] ?? $body['vehicle_model'] ?? '', 80),
-    'vehicle_class' => mogh_api_sanitize_string($body['vehicle_class'] ?? '', 40),
+    'vehicle_class' => mogh_api_sanitize_string($body['vehicle_class'] ?? '', 80),
+    'vehicle_year_pair' => mogh_api_sanitize_string($body['vehicle_year_pair'] ?? '', 20),
     'vin' => mogh_api_sanitize_string($body['vin'] ?? '', 30),
     'odometer_km' => mogh_api_sanitize_string((string)($body['odometer_km'] ?? ''), 20),
     'request_type' => mogh_api_sanitize_string($body['request_type'] ?? '', 80),
-    'city' => mogh_api_sanitize_string($body['city'] ?? '', 80),
+    'visit_date' => mogh_api_sanitize_string($body['visit_date'] ?? '', 20),
+    'plate_display' => mogh_api_sanitize_string($body['plate_display'] ?? $plate, 50),
     'address' => mogh_api_sanitize_string($body['address'] ?? $body['postal_address'] ?? '', 300),
     'extra_contact_info' => mogh_api_sanitize_string($body['extra_contact_info'] ?? '', 500),
     'job_title' => mogh_api_sanitize_string($body['job_title'] ?? '', 100),
     'birth_date' => mogh_api_sanitize_string($body['birth_date'] ?? '', 20),
     'source' => mogh_api_sanitize_string($body['source'] ?? 'MIRROR', 80),
 ];
+
+$payloadData = array_merge(
+    ['customer_name' => $name, 'mobile' => $mobile, 'vehicle_plate' => $plate, 'service_note' => $description],
+    array_filter($extra, static fn($v) => $v !== '')
+);
+if ($plateParts !== []) {
+    $payloadData['plate_parts'] = $plateParts;
+}
+
+$plateDigitKeys = [
+    'plate_first_digit_1', 'plate_first_digit_2',
+    'plate_middle_digit_1', 'plate_middle_digit_2', 'plate_middle_digit_3',
+    'plate_region_digit_1', 'plate_region_digit_2',
+];
+foreach ($plateDigitKeys as $digitKey) {
+    $val = mogh_api_sanitize_string($body[$digitKey] ?? '', 4);
+    if ($val !== '') {
+        $extra[$digitKey] = $val;
+        $payloadData[$digitKey] = $val;
+    }
+}
 
 $noteParts = [];
 if ($description !== '') {
@@ -60,10 +96,7 @@ if ($extraLines !== []) {
 $note = mogh_api_sanitize_string(implode("\n\n", $noteParts), 2000);
 $requestType = mogh_api_sanitize_string($body['request_type'] ?? '', 80);
 $sourceChannel = mogh_api_sanitize_string($body['source_channel'] ?? $extra['source'] ?? 'MIRROR', 80);
-$payloadJson = json_encode(array_merge(
-    ['customer_name' => $name, 'mobile' => $mobile, 'vehicle_plate' => $plate, 'service_note' => $description],
-    array_filter($extra, static fn($v) => $v !== '')
-), JSON_UNESCAPED_UNICODE);
+$payloadJson = json_encode($payloadData, JSON_UNESCAPED_UNICODE);
 if ($payloadJson === false) {
     $payloadJson = '{}';
 }

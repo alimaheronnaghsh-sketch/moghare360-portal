@@ -1,0 +1,246 @@
+/**
+ * MOGHARE360 Mirror — Luxury Industrial Persian ERP UI
+ * RTL · No CDN · No external fonts
+ */
+:root {
+  --m360-bg: #0f1714;
+  --m360-surface: #16221d;
+  --m360-card: #1c2b24;
+  --m360-border: #2d4036;
+  --m360-text: #f3f4f6;
+  --m360-muted: #9ca3af;
+  --m360-accent: #22c55e;
+  --m360-accent-dark: #15803d;
+  --m360-gold: #d4af37;
+  --m360-danger: #ef4444;
+  --m360-radius: 14px;
+  --m360-shadow: 0 18px 40px rgba(0, 0, 0, 0.35);
+  --m360-font: Vazirmatn, Tahoma, "Segoe UI", Arial, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: radial-gradient(ellipse at top, #1a2e26 0%, var(--m360-bg) 55%);
+  color: var(--m360-text);
+  font-family: var(--m360-font);
+  line-height: 1.6;
+  min-height: 100vh;
+}
+
+.m360-wrap {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 1.25rem;
+}
+
+.m360-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  padding: 1rem 1.25rem;
+  background: linear-gradient(135deg, #122019, var(--m360-card));
+  border: 1px solid var(--m360-border);
+  border-radius: var(--m360-radius);
+  box-shadow: var(--m360-shadow);
+}
+
+.m360-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+}
+
+.m360-brand img {
+  width: 52px;
+  height: 52px;
+  object-fit: contain;
+  border-radius: 10px;
+  background: #0b120f;
+}
+
+.m360-brand h1 {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+
+.m360-brand p {
+  margin: 0.15rem 0 0;
+  font-size: 0.82rem;
+  color: var(--m360-muted);
+}
+
+.m360-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.m360-nav a {
+  color: var(--m360-text);
+  text-decoration: none;
+  padding: 0.45rem 0.85rem;
+  border-radius: 999px;
+  border: 1px solid var(--m360-border);
+  font-size: 0.85rem;
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.m360-nav a:hover,
+.m360-nav a.active {
+  border-color: var(--m360-accent);
+  background: rgba(34, 197, 94, 0.12);
+}
+
+.m360-hero {
+  padding: 1.5rem;
+  border-radius: var(--m360-radius);
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.12), rgba(212, 175, 55, 0.08));
+  border: 1px solid var(--m360-border);
+  margin-bottom: 1.25rem;
+}
+
+.m360-hero h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1.35rem;
+}
+
+.m360-hero p {
+  margin: 0;
+  color: var(--m360-muted);
+}
+
+.m360-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 1rem;
+}
+
+.m360-card {
+  background: var(--m360-card);
+  border: 1px solid var(--m360-border);
+  border-radius: var(--m360-radius);
+  padding: 1.1rem;
+  box-shadow: var(--m360-shadow);
+}
+
+.m360-card h3 {
+  margin: 0 0 0.65rem;
+  font-size: 1rem;
+}
+
+.m360-stat {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--m360-accent);
+}
+
+.m360-badge {
+  display: inline-block;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  border: 1px solid var(--m360-border);
+}
+
+.m360-badge-ok { border-color: var(--m360-accent); color: var(--m360-accent); }
+.m360-badge-warn { border-color: var(--m360-gold); color: var(--m360-gold); }
+.m360-badge-danger { border-color: var(--m360-danger); color: var(--m360-danger); }
+
+.m360-form label {
+  display: block;
+  margin: 0.75rem 0 0.35rem;
+  font-size: 0.9rem;
+}
+
+.m360-form input,
+.m360-form select,
+.m360-form textarea {
+  width: 100%;
+  padding: 0.6rem 0.75rem;
+  border-radius: 10px;
+  border: 1px solid var(--m360-border);
+  background: #0f1613;
+  color: var(--m360-text);
+  font-family: inherit;
+  font-size: 0.92rem;
+}
+
+.m360-form textarea { min-height: 110px; resize: vertical; }
+
+.m360-plate-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1.2fr 1fr;
+  gap: 0.5rem;
+}
+
+.m360-btn {
+  display: inline-block;
+  margin-top: 1rem;
+  padding: 0.65rem 1.25rem;
+  border: none;
+  border-radius: 10px;
+  background: linear-gradient(135deg, var(--m360-accent), var(--m360-accent-dark));
+  color: #041008;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  text-decoration: none;
+  transition: transform 0.15s ease, filter 0.15s ease;
+}
+
+.m360-btn:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.04);
+}
+
+.m360-btn-secondary {
+  background: transparent;
+  color: var(--m360-text);
+  border: 1px solid var(--m360-border);
+}
+
+.m360-alert {
+  padding: 0.85rem 1rem;
+  border-radius: 10px;
+  margin-bottom: 1rem;
+  border: 1px solid var(--m360-border);
+}
+
+.m360-alert-info { background: rgba(34, 197, 94, 0.08); }
+.m360-alert-error { background: rgba(239, 68, 68, 0.12); border-color: #7f1d1d; }
+.m360-alert-warn { background: rgba(212, 175, 55, 0.1); }
+
+.m360-footer {
+  margin-top: 2rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--m360-border);
+  font-size: 0.8rem;
+  color: var(--m360-muted);
+  text-align: center;
+}
+
+.m360-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+}
+
+.m360-table th,
+.m360-table td {
+  text-align: right;
+  padding: 0.5rem;
+  border-bottom: 1px solid var(--m360-border);
+}
+
+@media (max-width: 768px) {
+  .m360-header { flex-direction: column; align-items: stretch; }
+  .m360-nav { justify-content: center; }
+  .m360-plate-row { grid-template-columns: 1fr 1fr; }
+}

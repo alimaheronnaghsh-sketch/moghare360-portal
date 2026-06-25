@@ -5,6 +5,7 @@ require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 
 
 $result = null;
 $username = '';
+$otpEnabled = mirror_sms_otp_enabled();
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     $username = trim((string)($_POST['username'] ?? ''));
@@ -16,19 +17,20 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     ]);
 }
 
-mirror_render_head('ورود پرسنل — MOGHARE360', 'staff');
+mirror_render_head('ورود پرسنل', 'staff');
 ?>
 <section class="m360-hero">
     <h2>ورود پرسنل</h2>
-    <p>احراز هویت از Master Server — بدون ذخیره رمز یا session حساس روی هاست.</p>
+    <p>لطفاً نام کاربری و رمز عبور خود را وارد کنید.</p>
 </section>
+
+<?php if (!$otpEnabled): ?>
+    <p class="m360-otp-note">ورود با رمز فعال است. ورود پیامکی پس از فعال‌سازی پیامک در دسترس خواهد بود.</p>
+<?php endif; ?>
 
 <?php if ($result !== null): ?>
     <div class="m360-alert <?= ($result['ok'] ?? false) ? 'm360-alert-info' : 'm360-alert-error' ?>">
         <?= mirror_h((string)($result['message'] ?? '')) ?>
-        <?php if (!($result['ok'] ?? false)): ?>
-            <p style="margin:0.5rem 0 0;font-size:0.85rem">Master API endpoint implementation required on local server</p>
-        <?php endif; ?>
     </div>
 <?php endif; ?>
 
@@ -38,7 +40,11 @@ mirror_render_head('ورود پرسنل — MOGHARE360', 'staff');
         <input type="text" id="username" name="username" required autocomplete="username" value="<?= mirror_h($username) ?>">
         <label for="password">رمز عبور</label>
         <input type="password" id="password" name="password" required autocomplete="current-password">
-        <button type="submit" class="m360-btn">ورود از طریق Master Server</button>
+        <?php if ($otpEnabled): ?>
+            <p class="m360-otp-note">ورود پیامکی نیز فعال است — از پنل مدیریت راهنمای ورود را ببینید.</p>
+        <?php endif; ?>
+        <button type="submit" class="m360-btn">ورود</button>
     </form>
+    <p class="m360-mgmt-link"><a href="owner-login.php">ورود مدیریتی</a></p>
 </section>
 <?php mirror_render_foot(); ?>

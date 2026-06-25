@@ -69,29 +69,35 @@ function mirror_render_head(string $title, string $activeNav = ''): void
     echo '<link rel="manifest" href="manifest.webmanifest">';
     echo '<title>' . mirror_h($title) . '</title>';
     echo '<link rel="stylesheet" href="assets/css/mirror.css">';
-    echo '</head><body><div class="m360-wrap">';
+    echo '</head><body class="m360-public-shell"><div class="m360-wrap">';
 
-    echo '<header class="m360-header"><div class="m360-brand">';
+    echo '<header class="m360-public-header">';
+    echo '<div class="m360-public-header__inner">';
+    echo '<a href="index.php" class="m360-public-brand">';
     if ($logo !== '') {
-        echo '<img src="' . mirror_h($logo) . '" alt="' . mirror_h($brand) . '">';
+        echo '<img class="m360-public-brand__logo" src="' . mirror_h($logo) . '" alt="">';
     }
-    echo '<div><h1>' . mirror_h($brand) . '</h1>';
-    echo '<p class="m360-tagline">پورتال یکپارچه خدمات خودرو</p></div></div>';
-    echo '<nav class="m360-nav">';
+    echo '<span class="m360-public-brand__text">';
+    echo '<span class="m360-public-brand__title">' . mirror_h($brand) . '</span>';
+    echo '<span class="m360-public-brand__tagline">پورتال یکپارچه خدمات خودرو</span>';
+    echo '</span></a>';
+    echo '<nav class="m360-public-nav" aria-label="منوی اصلی">';
     $links = [
         'index' => ['index.php', 'خانه'],
         'customer' => ['customer-request.php', 'مشتری'],
         'staff' => ['staff-login.php', 'پرسنل'],
     ];
     foreach ($links as $key => [$href, $label]) {
-        $cls = ($activeNav === $key) ? ' class="active"' : '';
-        echo '<a href="' . mirror_h($href) . '"' . $cls . '>' . mirror_h($label) . '</a>';
+        $cls = 'm360-public-nav__link' . ($activeNav === $key ? ' is-active' : '');
+        echo '<a class="' . $cls . '" href="' . mirror_h($href) . '">' . mirror_h($label) . '</a>';
     }
-    echo '</nav></header>';
+    echo '</nav></div></header>';
+    echo '<main class="m360-public-main">';
 }
 
 function mirror_render_foot(): void
 {
+    echo '</main>';
     echo '<footer class="m360-footer">';
     echo '© ' . mirror_h(mirror_brand_name()) . ' — تمامی حقوق محفوظ است.';
     echo '<div class="m360-install-hint">برای نصب اپلیکیشن: از منوی مرورگر «افزودن به صفحه اصلی» را انتخاب کنید.</div>';

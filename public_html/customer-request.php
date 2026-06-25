@@ -44,6 +44,24 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     foreach (array_keys($input) as $key) {
         $input[$key] = trim((string)($_POST[$key] ?? ''));
     }
+    $digitKeys = [
+        'plate_first_digit_1', 'plate_first_digit_2',
+        'plate_middle_digit_1', 'plate_middle_digit_2', 'plate_middle_digit_3',
+        'plate_region_digit_1', 'plate_region_digit_2',
+    ];
+    foreach ($digitKeys as $key) {
+        $input[$key] = trim((string)($_POST[$key] ?? ''));
+    }
+
+    if ($input['plate_left_2_digits'] === '' && $input['plate_first_digit_1'] !== '' && $input['plate_first_digit_2'] !== '') {
+        $input['plate_left_2_digits'] = $input['plate_first_digit_1'] . $input['plate_first_digit_2'];
+    }
+    if ($input['plate_middle_3_digits'] === '' && $input['plate_middle_digit_1'] !== '' && $input['plate_middle_digit_2'] !== '' && $input['plate_middle_digit_3'] !== '') {
+        $input['plate_middle_3_digits'] = $input['plate_middle_digit_1'] . $input['plate_middle_digit_2'] . $input['plate_middle_digit_3'];
+    }
+    if ($input['plate_region_2_digits'] === '' && $input['plate_region_digit_1'] !== '' && $input['plate_region_digit_2'] !== '') {
+        $input['plate_region_2_digits'] = $input['plate_region_digit_1'] . $input['plate_region_digit_2'];
+    }
 
     if ($input['plate_display'] === '') {
         $l = $input['plate_left_2_digits'];
@@ -71,6 +89,13 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         'plate_middle_3_digits' => $input['plate_middle_3_digits'],
         'plate_region_2_digits' => $input['plate_region_2_digits'],
         'plate_display' => $input['plate_display'],
+        'plate_first_digit_1' => $input['plate_first_digit_1'] ?? '',
+        'plate_first_digit_2' => $input['plate_first_digit_2'] ?? '',
+        'plate_middle_digit_1' => $input['plate_middle_digit_1'] ?? '',
+        'plate_middle_digit_2' => $input['plate_middle_digit_2'] ?? '',
+        'plate_middle_digit_3' => $input['plate_middle_digit_3'] ?? '',
+        'plate_region_digit_1' => $input['plate_region_digit_1'] ?? '',
+        'plate_region_digit_2' => $input['plate_region_digit_2'] ?? '',
         'plate_number' => $input['plate_display'],
         'vehicle_plate' => $input['plate_display'],
         'plate_parts' => [
@@ -78,6 +103,13 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             'letter' => $input['plate_letter'],
             'middle_3' => $input['plate_middle_3_digits'],
             'region_2' => $input['plate_region_2_digits'],
+            'first_digit_1' => $input['plate_first_digit_1'] ?? '',
+            'first_digit_2' => $input['plate_first_digit_2'] ?? '',
+            'middle_digit_1' => $input['plate_middle_digit_1'] ?? '',
+            'middle_digit_2' => $input['plate_middle_digit_2'] ?? '',
+            'middle_digit_3' => $input['plate_middle_digit_3'] ?? '',
+            'region_digit_1' => $input['plate_region_digit_1'] ?? '',
+            'region_digit_2' => $input['plate_region_digit_2'] ?? '',
         ],
         'vin' => $input['vin'],
         'odometer_km' => $input['odometer_km'],
@@ -184,21 +216,67 @@ mirror_render_head('ثبت درخواست مشتری', 'customer');
         </select>
 
         <label>پلاک خودرو <span class="m360-req">*</span></label>
-        <div class="m360-plate-widget" dir="ltr">
-            <div class="m360-plate-iran">
-                <span class="m360-plate-iran-label">ایران</span>
-                <select id="plate_region_2_digits" name="plate_region_2_digits" required aria-label="کد منطقه"></select>
+        <div class="iran-plate-widget" aria-label="پلاک خودرو">
+            <div class="iran-plate-ir-band" aria-hidden="true"><span>IR</span><span>🇮🇷</span></div>
+            <div class="iran-plate-main">
+                <select class="plate-digit-select" id="plate_first_digit_1" name="plate_first_digit_1" required aria-label="رقم اول پلاک">
+                    <option value="">-</option>
+                    <?php for ($d = 1; $d <= 9; $d++): ?>
+                        <option value="<?= $d ?>"><?= $d ?></option>
+                    <?php endfor; ?>
+                </select>
+                <select class="plate-digit-select" id="plate_first_digit_2" name="plate_first_digit_2" required aria-label="رقم دوم پلاک">
+                    <option value="">-</option>
+                    <?php for ($d = 1; $d <= 9; $d++): ?>
+                        <option value="<?= $d ?>"><?= $d ?></option>
+                    <?php endfor; ?>
+                </select>
+                <select class="plate-letter-select" id="plate_letter" name="plate_letter" required aria-label="حرف پلاک">
+                    <option value="">حرف</option>
+                    <?php foreach ($plateLetters as $letter): ?>
+                        <option value="<?= mirror_h($letter) ?>" <?= $input['plate_letter'] === $letter ? 'selected' : '' ?>><?= mirror_h($letter) ?></option>
+                    <?php endforeach; ?>
+                </select>
+                <select class="plate-digit-select" id="plate_middle_digit_1" name="plate_middle_digit_1" required aria-label="رقم اول سه‌رقمی">
+                    <option value="">-</option>
+                    <?php for ($d = 1; $d <= 9; $d++): ?>
+                        <option value="<?= $d ?>"><?= $d ?></option>
+                    <?php endfor; ?>
+                </select>
+                <select class="plate-digit-select" id="plate_middle_digit_2" name="plate_middle_digit_2" required aria-label="رقم دوم سه‌رقمی">
+                    <option value="">-</option>
+                    <?php for ($d = 1; $d <= 9; $d++): ?>
+                        <option value="<?= $d ?>"><?= $d ?></option>
+                    <?php endfor; ?>
+                </select>
+                <select class="plate-digit-select" id="plate_middle_digit_3" name="plate_middle_digit_3" required aria-label="رقم سوم سه‌رقمی">
+                    <option value="">-</option>
+                    <?php for ($d = 1; $d <= 9; $d++): ?>
+                        <option value="<?= $d ?>"><?= $d ?></option>
+                    <?php endfor; ?>
+                </select>
             </div>
-            <select id="plate_middle_3_digits" name="plate_middle_3_digits" required aria-label="سه رقم وسط"></select>
-            <select id="plate_letter" name="plate_letter" required aria-label="حرف پلاک">
-                <option value="">حرف</option>
-                <?php foreach ($plateLetters as $letter): ?>
-                    <option value="<?= mirror_h($letter) ?>" <?= $input['plate_letter'] === $letter ? 'selected' : '' ?>><?= mirror_h($letter) ?></option>
-                <?php endforeach; ?>
-            </select>
-            <select id="plate_left_2_digits" name="plate_left_2_digits" required aria-label="دو رقم"></select>
-            <div class="m360-plate-flag" aria-hidden="true">IR</div>
+            <div class="iran-plate-region-box">
+                <span class="iran-plate-region-box__label">ایران</span>
+                <div class="iran-plate-region-box__digits">
+                    <select class="plate-digit-select" id="plate_region_digit_1" name="plate_region_digit_1" required aria-label="رقم اول منطقه">
+                        <option value="">-</option>
+                        <?php for ($d = 1; $d <= 9; $d++): ?>
+                            <option value="<?= $d ?>"><?= $d ?></option>
+                        <?php endfor; ?>
+                    </select>
+                    <select class="plate-digit-select" id="plate_region_digit_2" name="plate_region_digit_2" required aria-label="رقم دوم منطقه">
+                        <option value="">-</option>
+                        <?php for ($d = 1; $d <= 9; $d++): ?>
+                            <option value="<?= $d ?>"><?= $d ?></option>
+                        <?php endfor; ?>
+                    </select>
+                </div>
+            </div>
         </div>
+        <input type="hidden" id="plate_left_2_digits" name="plate_left_2_digits" value="<?= mirror_h($input['plate_left_2_digits']) ?>">
+        <input type="hidden" id="plate_middle_3_digits" name="plate_middle_3_digits" value="<?= mirror_h($input['plate_middle_3_digits']) ?>">
+        <input type="hidden" id="plate_region_2_digits" name="plate_region_2_digits" value="<?= mirror_h($input['plate_region_2_digits']) ?>">
         <input type="hidden" id="plate_display" name="plate_display" value="<?= mirror_h($input['plate_display']) ?>">
 
         <label for="vin">شماره شاسی (VIN)</label>
@@ -220,7 +298,10 @@ mirror_render_head('ثبت درخواست مشتری', 'customer');
         <label for="visit_date">تاریخ مراجعه <span class="m360-req">*</span></label>
         <input type="hidden" id="visit_date" name="visit_date" required value="<?= mirror_h($input['visit_date']) ?>">
         <div id="visit_date_display" class="m360-muted"><?= $input['visit_date'] !== '' ? 'تاریخ انتخاب‌شده: ' . mirror_h($input['visit_date']) : 'روز مورد نظر را از تقویم انتخاب کنید.' ?></div>
+        <div id="visit_cal_toolbar" class="m360-cal-toolbar" aria-label="ناوبری تقویم"></div>
+        <div id="visit_cal_weekdays" class="m360-cal-weekdays" aria-hidden="true"></div>
         <div id="visit_date_grid" class="m360-cal-grid" aria-label="تقویم شمسی"></div>
+        <p id="visit_booking_hint" class="m360-booking-hint">انتخاب نوبت فقط از فردا تا ۷ روز آینده فعال است.</p>
         <p id="visit_time_hint" class="m360-visit-hint" style="display:none">ساعت حضور الزاما بین 8:30 الی 11:30 می‌باشد.</p>
 
         <label for="request_description">شرح درخواست <span class="m360-req">*</span></label>

@@ -2,6 +2,7 @@
 private/erp-config.php
 private/production-users.json
 private/production-site-config.json
+public_html/mirror-config.php
 *.local.php
 .env
 .env.*

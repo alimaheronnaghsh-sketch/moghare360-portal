@@ -1,0 +1,254 @@
+@import url("moghare360-v1-luxury-ui.css");
+
+.m360-tagline {
+  font-size: 0.85rem;
+  color: var(--m360-muted);
+  margin-top: 0.35rem;
+}
+
+.m360-muted {
+  color: var(--m360-muted);
+  font-size: 0.88rem;
+}
+
+.m360-req {
+  color: var(--m360-danger);
+}
+
+.m360-section-title {
+  margin-top: 1.25rem;
+}
+
+.m360-role-grid-dual {
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+.m360-role-card-static {
+  padding: 0;
+}
+
+.m360-role-card-link {
+  display: block;
+  padding: 1rem;
+  text-decoration: none;
+  color: inherit;
+}
+
+.m360-mgmt-link {
+  margin: 0;
+  padding: 0 1rem 0.85rem;
+  font-size: 0.78rem;
+  text-align: left;
+}
+
+.m360-mgmt-link a {
+  color: var(--m360-muted);
+  text-decoration: none;
+}
+
+.m360-mgmt-link a:hover {
+  text-decoration: underline;
+}
+
+.m360-otp-note {
+  text-align: center;
+  font-size: 0.86rem;
+  color: var(--m360-muted);
+  margin: 0 0 1rem;
+}
+
+.m360-role-grid a.m360-role-card {
+  display: block;
+  text-decoration: none;
+  color: inherit;
+  transition: transform 0.15s, border-color 0.15s;
+}
+
+.m360-role-grid a.m360-role-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--m360-accent);
+}
+
+.m360-install-hint {
+  font-size: 0.82rem;
+  color: var(--m360-muted);
+  margin-top: 0.5rem;
+}
+
+.iran-plate-widget {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  direction: ltr;
+  unicode-bidi: isolate;
+  gap: 0.3rem;
+  background: #fff;
+  border: 2px solid #111;
+  border-radius: 10px;
+  padding: 0.45rem 0.5rem;
+  max-width: 100%;
+  width: min(100%, 480px);
+  margin-bottom: 0.75rem;
+  color: #111;
+}
+
+.iran-plate-ir-band {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(180deg, #003399, #002266);
+  color: #fff;
+  border-radius: 6px;
+  padding: 0.35rem 0.4rem;
+  min-width: 2.4rem;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+
+.iran-plate-main {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.25rem;
+  flex: 1;
+}
+
+.iran-plate-region-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 0.2rem 0.25rem;
+  min-width: 3.2rem;
+}
+
+.iran-plate-region-box__label {
+  font-size: 0.62rem;
+  color: #334155;
+  line-height: 1;
+  direction: rtl;
+}
+
+.iran-plate-region-box__digits {
+  display: flex;
+  gap: 0.2rem;
+  margin-top: 0.15rem;
+}
+
+.plate-digit-select,
+.plate-letter-select {
+  min-width: 2.35rem;
+  max-width: 2.8rem;
+  padding: 0.35rem 0.15rem;
+  text-align: center;
+  font-size: 0.95rem;
+  border: 1px solid #94a3b8;
+  border-radius: 6px;
+  background: #fff;
+  color: #111;
+}
+
+.plate-letter-select {
+  min-width: 2.6rem;
+  direction: rtl;
+}
+
+.m360-cal-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  max-width: 420px;
+  margin: 0.5rem 0;
+}
+
+.m360-cal-toolbar button {
+  border: 1px solid var(--m360-border);
+  background: var(--m360-card);
+  color: var(--m360-text);
+  border-radius: 8px;
+  padding: 0.35rem 0.65rem;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.82rem;
+}
+
+.m360-cal-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0.25rem;
+  max-width: 420px;
+  margin-bottom: 0.25rem;
+  font-size: 0.72rem;
+  color: var(--m360-muted);
+  text-align: center;
+}
+
+.m360-cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0.3rem;
+  max-width: 420px;
+  margin: 0.25rem 0 0.75rem;
+}
+
+.m360-cal-title {
+  grid-column: 1 / -1;
+  text-align: center;
+  font-weight: 700;
+  margin-bottom: 0.15rem;
+}
+
+.m360-cal-day {
+  border: 1px solid #cbd5e1;
+  background: #f1f5f9;
+  color: #64748b;
+  border-radius: 6px;
+  padding: 0.35rem 0;
+  cursor: not-allowed;
+  font-size: 0.85rem;
+}
+
+.m360-cal-day.available {
+  background: #ecfdf5;
+  color: #065f46;
+  border-color: #6ee7b7;
+  cursor: pointer;
+}
+
+.m360-cal-day.available:hover {
+  background: #d1fae5;
+}
+
+.m360-cal-day.selected {
+  background: var(--m360-accent, #22c55e);
+  color: #fff;
+  border-color: transparent;
+}
+
+.m360-cal-day.outside-month {
+  opacity: 0.45;
+}
+
+.m360-booking-hint {
+  font-size: 0.86rem;
+  color: var(--m360-muted);
+  margin: 0 0 0.75rem;
+}
+
+.m360-visit-hint {
+  color: #b45309;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.88rem;
+  margin: 0 0 1rem;
+}

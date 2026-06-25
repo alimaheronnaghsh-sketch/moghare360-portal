@@ -29,6 +29,15 @@ v1mc_render_head('MOGHARE360 — ورود نرم‌افزار مادر');
 <div class="v1mc-grid">
   <article class="v1mc-card">
     <span class="v1mc-badge v1mc-badge-ready">READY</span>
+    <h3>سایت عمومی</h3>
+    <p>ثبت درخواست مشتری و ورود پرسنل.</p>
+    <div class="v1mc-links">
+      <a href="customer-request.php">مشتری</a>
+      <a href="staff-login.php">پرسنل</a>
+    </div>
+  </article>
+  <article class="v1mc-card">
+    <span class="v1mc-badge v1mc-badge-ready">READY</span>
     <h3>شروع سریع</h3>
     <p>نمای واحدهای ERP، لینک صفحات اصلی، وضعیت تقریبی و مسیر تست.</p>
     <div class="v1mc-links">
@@ -46,14 +55,13 @@ v1mc_render_head('MOGHARE360 — ورود نرم‌افزار مادر');
   </article>
   <article class="v1mc-card">
     <span class="v1mc-badge v1mc-badge-check">CHECK</span>
-    <h3>ورود پرسنل / مالک</h3>
-    <p>مسیرهای ورود موجود در پروژه — ایجاد کاربر واقعی فقط از private JSON روی سرور.</p>
+    <h3>ورود پرسنل</h3>
+    <p>ورود با نام کاربری و رمز عبور از صفحه پرسنل.</p>
     <div class="v1mc-links">
-      <a href="erp-v1-unit-access-console.php">مشاهده مسیرهای دسترسی</a>
-      <a href="api/auth/staff-login.php">API staff-login</a>
+      <a href="staff-login.php">ورود پرسنل</a>
+      <a href="owner-login.php">ورود مدیریتی</a>
+      <a href="erp-v1-unit-access-console.php">مسیرهای دسترسی</a>
     </div>
   </article>
 </div>
-
-<p class="v1mc-muted">سایت عمومی mirror: بسته جدا — از این index برای پذیرش مشتری Codex/MySQL استفاده نکنید.</p>
 <?php v1mc_render_foot(); ?>

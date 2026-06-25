@@ -1,0 +1,27 @@
+{
+  "name": "MOGHARE360 ERP",
+  "short_name": "MOGHARE360",
+  "description": "رابط آینه MOGHARE360 — بدون ذخیره داده روی هاست",
+  "start_url": "/index.php",
+  "scope": "/",
+  "display": "standalone",
+  "dir": "rtl",
+  "lang": "fa",
+  "orientation": "any",
+  "theme_color": "#22c55e",
+  "background_color": "#0f1714",
+  "icons": [
+    {
+      "src": "assets/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "assets/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
