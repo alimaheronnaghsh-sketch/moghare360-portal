@@ -1,0 +1,107 @@
+{
+  "schema_version": "1.0",
+  "import_notes": "Copy to private/production-users.json on the server only. Never commit the private copy. Replace placeholders before import. Use a bcrypt hash in temporary_password_or_hash_placeholder, or a one-time plain value only in the private file (hashed at import; never logged).",
+  "allowed_role_codes": [
+    "OWNER",
+    "SYSTEM_ADMIN",
+    "RECEPTION",
+    "TECHNICIAN",
+    "INVENTORY",
+    "FINANCE",
+    "QC",
+    "CRM",
+    "COMPANY_OWNER_VIEWER"
+  ],
+  "users": [
+    {
+      "user_id": 20001,
+      "username": "owner.placeholder",
+      "display_name": "Owner Placeholder",
+      "mobile_optional": "",
+      "role_code": "OWNER",
+      "company_code": "MOGHAREH_MAIN",
+      "is_login_enabled": true,
+      "temporary_password_or_hash_placeholder": "REPLACE_WITH_BCRYPT_HASH_OR_ONE_TIME_PASSWORD_IN_PRIVATE_FILE_ONLY"
+    },
+    {
+      "user_id": 20002,
+      "username": "sysadmin.placeholder",
+      "display_name": "System Admin Placeholder",
+      "mobile_optional": "",
+      "role_code": "SYSTEM_ADMIN",
+      "company_code": "MOGHAREH_MAIN",
+      "is_login_enabled": true,
+      "temporary_password_or_hash_placeholder": "REPLACE_WITH_BCRYPT_HASH_OR_ONE_TIME_PASSWORD_IN_PRIVATE_FILE_ONLY"
+    },
+    {
+      "user_id": 20003,
+      "username": "reception.placeholder",
+      "display_name": "Reception Placeholder",
+      "mobile_optional": "",
+      "role_code": "RECEPTION",
+      "company_code": "MOGHAREH_MAIN",
+      "is_login_enabled": true,
+      "temporary_password_or_hash_placeholder": "REPLACE_WITH_BCRYPT_HASH_OR_ONE_TIME_PASSWORD_IN_PRIVATE_FILE_ONLY"
+    },
+    {
+      "user_id": 20004,
+      "username": "technician.placeholder",
+      "display_name": "Technician Placeholder",
+      "mobile_optional": "",
+      "role_code": "TECHNICIAN",
+      "company_code": "MOGHAREH_MAIN",
+      "is_login_enabled": true,
+      "temporary_password_or_hash_placeholder": "REPLACE_WITH_BCRYPT_HASH_OR_ONE_TIME_PASSWORD_IN_PRIVATE_FILE_ONLY"
+    },
+    {
+      "user_id": 20005,
+      "username": "inventory.placeholder",
+      "display_name": "Inventory Placeholder",
+      "mobile_optional": "",
+      "role_code": "INVENTORY",
+      "company_code": "MOGHAREH_MAIN",
+      "is_login_enabled": true,
+      "temporary_password_or_hash_placeholder": "REPLACE_WITH_BCRYPT_HASH_OR_ONE_TIME_PASSWORD_IN_PRIVATE_FILE_ONLY"
+    },
+    {
+      "user_id": 20006,
+      "username": "finance.placeholder",
+      "display_name": "Finance Placeholder",
+      "mobile_optional": "",
+      "role_code": "FINANCE",
+      "company_code": "MOGHAREH_MAIN",
+      "is_login_enabled": true,
+      "temporary_password_or_hash_placeholder": "REPLACE_WITH_BCRYPT_HASH_OR_ONE_TIME_PASSWORD_IN_PRIVATE_FILE_ONLY"
+    },
+    {
+      "user_id": 20007,
+      "username": "qc.placeholder",
+      "display_name": "QC Placeholder",
+      "mobile_optional": "",
+      "role_code": "QC",
+      "company_code": "MOGHAREH_MAIN",
+      "is_login_enabled": true,
+      "temporary_password_or_hash_placeholder": "REPLACE_WITH_BCRYPT_HASH_OR_ONE_TIME_PASSWORD_IN_PRIVATE_FILE_ONLY"
+    },
+    {
+      "user_id": 20008,
+      "username": "crm.placeholder",
+      "display_name": "CRM Placeholder",
+      "mobile_optional": "",
+      "role_code": "CRM",
+      "company_code": "MOGHAREH_MAIN",
+      "is_login_enabled": true,
+      "temporary_password_or_hash_placeholder": "REPLACE_WITH_BCRYPT_HASH_OR_ONE_TIME_PASSWORD_IN_PRIVATE_FILE_ONLY"
+    },
+    {
+      "user_id": 20009,
+      "username": "viewer.placeholder",
+      "display_name": "Company Owner Viewer Placeholder",
+      "mobile_optional": "",
+      "role_code": "COMPANY_OWNER_VIEWER",
+      "company_code": "MOGHAREH_MAIN",
+      "is_login_enabled": true,
+      "temporary_password_or_hash_placeholder": "REPLACE_WITH_BCRYPT_HASH_OR_ONE_TIME_PASSWORD_IN_PRIVATE_FILE_ONLY"
+    }
+  ]
+}

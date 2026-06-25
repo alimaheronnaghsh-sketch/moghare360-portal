@@ -1,5 +1,7 @@
 # MOGHARE360 ERP local/private config
 private/erp-config.php
+private/production-users.json
+private/production-site-config.json
 *.local.php
 .env
 .env.*
@@ -17,6 +19,7 @@ tools/_legacy_codex_review/
 # Runtime storage and backups (never commit)
 storage/
 private/backups/
+runtime/
 uploads/
 logs/
 backups/

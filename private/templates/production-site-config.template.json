@@ -1,0 +1,15 @@
+{
+  "schema_version": "1.0",
+  "import_notes": "Copy to private/production-site-config.json on the server only. Never commit the private copy. Use real values only on the production host.",
+  "domain": "moghareh360.ir",
+  "company_code": "MOGHAREH_MAIN",
+  "company_display_name": "MOGHAREH MOTORS (template placeholder)",
+  "support_phone": "00000000000",
+  "reception_phone": "00000000000",
+  "address": "Address placeholder — set in private file only",
+  "working_hours": "Sat-Wed 08:00-17:00 (template)",
+  "storage_path": "storage",
+  "ssl_expected": true,
+  "master_server_base_url": "https://master.example.invalid/moghare360/",
+  "mirror_base_url": "https://moghareh360.ir/"
+}
