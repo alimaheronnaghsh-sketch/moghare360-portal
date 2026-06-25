@@ -113,22 +113,45 @@ if ($CreateConfig -or -not (Test-Path $configPath)) {
     Write-ReportLine "- Existing config preserved"
 }
 
-# 5. SQL migration (idempotent)
+# 5. SQL migration (idempotent canonical bundle + verify)
 if (-not $SkipSql) {
     Write-ReportLine "## SQL Migration"
-    $sqlFile = Join-Path $RepoRoot "public_html\sql\sqlserver\v1_saas_activation_foundation.sql"
-    if (Test-Path $sqlFile) {
-        $sqlcmd = Get-Command sqlcmd -ErrorAction SilentlyContinue
-        if ($sqlcmd) {
-            & sqlcmd -S $SqlServer -d $DatabaseName -i $sqlFile -b 2>&1 | Out-Null
-            if ($LASTEXITCODE -eq 0) {
-                Write-ReportLine "- v1_saas_activation_foundation.sql applied"
-            } else {
-                Write-ReportLine "- WARN: sqlcmd exit $LASTEXITCODE - run SQL manually if needed"
-            }
-        } else {
-            Write-ReportLine "- WARN: sqlcmd not found - run v1_saas_activation_foundation.sql manually"
+    $sqlDir = Join-Path $RepoRoot "public_html\sql\sqlserver"
+    $sqlCanonical = Join-Path $sqlDir "MOGHARE360_V1_CANONICAL_DATABASE.sql"
+    $sqlVerify = Join-Path $sqlDir "MOGHARE360_V1_DATABASE_VERIFY.sql"
+    $sqlcmd = Get-Command sqlcmd -ErrorAction SilentlyContinue
+    if (-not $sqlcmd) {
+        Write-ReportLine "- FAIL: sqlcmd not found - cannot apply canonical database"
+        $Report | Set-Content -Path $ReportPath -Encoding UTF8
+        exit 1
+    }
+    if (-not (Test-Path $sqlCanonical)) {
+        Write-ReportLine "- FAIL: canonical SQL missing at $sqlCanonical"
+        $Report | Set-Content -Path $ReportPath -Encoding UTF8
+        exit 1
+    }
+    Push-Location $sqlDir
+    try {
+        & sqlcmd -S $SqlServer -d $DatabaseName -E -i $sqlCanonical -b 2>&1 | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            Write-ReportLine "- FAIL: MOGHARE360_V1_CANONICAL_DATABASE.sql exit $LASTEXITCODE"
+            $Report | Set-Content -Path $ReportPath -Encoding UTF8
+            exit 1
         }
+        Write-ReportLine "- MOGHARE360_V1_CANONICAL_DATABASE.sql applied"
+        if (Test-Path $sqlVerify) {
+            $verifyOut = & sqlcmd -S $SqlServer -d $DatabaseName -E -i $sqlVerify -b 2>&1
+            $verifyText = ($verifyOut | Out-String)
+            if ($verifyText -match 'VERIFY RESULT:\s*FAIL') {
+                Write-ReportLine "- FAIL: database verify reported missing tables"
+                Write-ReportLine $verifyText
+                $Report | Set-Content -Path $ReportPath -Encoding UTF8
+                exit 1
+            }
+            Write-ReportLine "- MOGHARE360_V1_DATABASE_VERIFY.sql PASS"
+        }
+    } finally {
+        Pop-Location
     }
 }
 

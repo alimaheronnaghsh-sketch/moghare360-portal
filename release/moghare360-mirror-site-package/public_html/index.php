@@ -7,7 +7,7 @@ mirror_render_head('ورود به MOGHARE360 — رابط آینه', 'index');
 ?>
 <section class="m360-hero">
     <h2>سامانه ERP تعمیرگاهی MOGHARE360</h2>
-    <p>رابط آینه moghareh360.ir — درخواست‌ها به سرور اصلی (لپ‌تاپ مالک) ارسال می‌شوند. هیچ داده‌ای روی هاست ذخیره نمی‌شود.</p>
+    <p>پورتال یکپارچه خدمات خودرو — رابط آینه moghareh360.ir. درخواست‌ها به سرور اصلی (Master Server) ارسال می‌شوند؛ هیچ داده‌ای روی هاست Mirror ذخیره نمی‌شود.</p>
 </section>
 
 <div class="m360-grid m360-role-grid">

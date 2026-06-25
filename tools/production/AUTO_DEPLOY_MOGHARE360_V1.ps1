@@ -97,6 +97,19 @@ if (Test-Path $smoke) {
     Add-DeployReport "- Smoke test PASS"
 }
 
+Add-DeployReport "## Canonical Database Test"
+$canonTest = Join-Path $ToolsDir "test-v1-canonical-database.php"
+if (Test-Path $canonTest) {
+    & $phpExe $canonTest
+    if ($LASTEXITCODE -ne 0) {
+        Add-DeployReport "- Canonical database test FAILED"
+        Add-DeployReport "Rollback: restore htdocs backup from INSTALL_REPORT.md"
+        $DeployReport | Set-Content -Path $ReportPath -Encoding UTF8
+        exit 1
+    }
+    Add-DeployReport "- Canonical database test PASS"
+}
+
 Add-DeployReport ""
 Add-DeployReport "Completed: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
 Add-DeployReport "MOGHARE360 V1 SaaS-enabled Production Release deploy complete."

@@ -13,10 +13,15 @@ $input = [
     'vehicle_class' => '',
     'plate_number' => '',
     'vin' => '',
+    'odometer_km' => '',
     'request_type' => '',
     'request_description' => '',
     'city' => '',
     'address' => '',
+    'postal_address' => '',
+    'extra_contact_info' => '',
+    'job_title' => '',
+    'birth_date' => '',
 ];
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
@@ -25,6 +30,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     }
 
     $payload = [
+        'customer_name' => $input['full_name'],
         'full_name' => $input['full_name'],
         'mobile' => $input['mobile'],
         'national_id' => $input['national_id'],
@@ -32,11 +38,18 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         'model' => $input['model'],
         'vehicle_class' => $input['vehicle_class'],
         'plate_number' => $input['plate_number'],
+        'vehicle_plate' => $input['plate_number'],
         'vin' => $input['vin'],
+        'odometer_km' => $input['odometer_km'],
         'request_type' => $input['request_type'],
         'request_description' => $input['request_description'],
+        'service_description' => $input['request_description'],
         'city' => $input['city'],
-        'address' => $input['address'],
+        'address' => $input['address'] !== '' ? $input['address'] : $input['postal_address'],
+        'postal_address' => $input['postal_address'],
+        'extra_contact_info' => $input['extra_contact_info'],
+        'job_title' => $input['job_title'],
+        'birth_date' => $input['birth_date'],
         'source' => 'mirror-moghareh360.ir',
         'mirror_mode' => true,
     ];
@@ -58,12 +71,16 @@ mirror_render_head('ثبت درخواست مشتری — MOGHARE360', 'customer'
 ?>
 <section class="m360-hero">
     <h2>ثبت درخواست آنلاین</h2>
-    <p>فیلدها مطابق فرم‌های Customer / Vehicle موجود در نرم‌افزار (erp-customer-create-v2، erp-customer-vehicle-create) هستند. درخواست فقط به Master Server ارسال می‌شود.</p>
+    <p>پورتال یکپارچه خدمات خودرو — فرم مشتری و خودرو در یک مرحله. پس از ثبت، درخواست فقط به Master Server (V1 API) ارسال می‌شود.</p>
 </section>
 
 <?php if ($result !== null): ?>
     <div class="m360-alert <?= ($result['ok'] ?? false) ? 'm360-alert-info' : 'm360-alert-error' ?>">
-        <?= mirror_h((string)($result['message'] ?? '')) ?>
+        <?php if ($result['ok'] ?? false): ?>
+            <strong>ثبت موفق.</strong> درخواست شما ثبت شد و پس از بررسی با شما تماس گرفته می‌شود.
+        <?php else: ?>
+            <?= mirror_h((string)($result['message'] ?? '')) ?>
+        <?php endif; ?>
         <?php if (!($result['ok'] ?? false) && (int)($result['status'] ?? 0) === 0): ?>
             <p style="margin:0.5rem 0 0;font-size:0.85rem">Master API endpoint implementation required on local server</p>
         <?php endif; ?>
@@ -87,6 +104,18 @@ mirror_render_head('ثبت درخواست مشتری — MOGHARE360', 'customer'
 
         <label for="address">آدرس</label>
         <input type="text" id="address" name="address" maxlength="200" value="<?= mirror_h($input['address']) ?>">
+
+        <label for="postal_address">آدرس پستی</label>
+        <input type="text" id="postal_address" name="postal_address" maxlength="200" value="<?= mirror_h($input['postal_address']) ?>">
+
+        <label for="extra_contact_info">اطلاعات تماس تکمیلی</label>
+        <textarea id="extra_contact_info" name="extra_contact_info" maxlength="500"><?= mirror_h($input['extra_contact_info']) ?></textarea>
+
+        <label for="job_title">شغل</label>
+        <input type="text" id="job_title" name="job_title" maxlength="100" value="<?= mirror_h($input['job_title']) ?>">
+
+        <label for="birth_date">تاریخ تولد</label>
+        <input type="date" id="birth_date" name="birth_date" value="<?= mirror_h($input['birth_date']) ?>">
 
         <h3 style="margin-top:1.25rem">اطلاعات خودرو</h3>
         <label for="brand">برند خودرو <span style="color:var(--m360-danger)">*</span></label>
@@ -113,6 +142,9 @@ mirror_render_head('ثبت درخواست مشتری — MOGHARE360', 'customer'
 
         <label for="vin">VIN</label>
         <input type="text" id="vin" name="vin" maxlength="17" value="<?= mirror_h($input['vin']) ?>">
+
+        <label for="odometer_km">کیلومتر خودرو</label>
+        <input type="number" id="odometer_km" name="odometer_km" min="0" step="1" value="<?= mirror_h($input['odometer_km']) ?>">
 
         <h3 style="margin-top:1.25rem">درخواست</h3>
         <label for="request_type">نوع درخواست <span style="color:var(--m360-danger)">*</span></label>

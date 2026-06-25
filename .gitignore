@@ -11,6 +11,9 @@ public_html/release/*.zip
 *.zip
 !package.zip
 
+# Legacy Codex review extract (reference only)
+tools/_legacy_codex_review/
+
 # Runtime storage and backups (never commit)
 storage/
 private/backups/

@@ -192,6 +192,12 @@ html, body {
   font-family: inherit;
   cursor: pointer;
   text-decoration: none;
+  transition: transform 0.15s ease, filter 0.15s ease;
+}
+
+.m360-btn:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.04);
 }
 
 .m360-btn-secondary {
