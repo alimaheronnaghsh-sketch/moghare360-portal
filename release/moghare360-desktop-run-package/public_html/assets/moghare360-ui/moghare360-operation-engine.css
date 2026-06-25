@@ -1,0 +1,119 @@
+/**
+ * MOGHARE360 ERP — Phase 2 Operation Engine UI
+ * Extends Customer Core / Soft Run styling.
+ */
+
+.p2oe-page {
+  margin: 0;
+  background: #f4f6f8;
+  color: #1f2937;
+  font-family: var(--m360-font-family-sans, Tahoma, Arial, sans-serif);
+  line-height: 1.6;
+}
+
+.p2oe-wrap {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 1.5rem 1.25rem 2.5rem;
+}
+
+.p2oe-readonly-banner {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1e40af;
+  border-radius: 10px;
+  padding: 0.75rem 1rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-align: center;
+  margin-bottom: 1rem;
+}
+
+.p2oe-hero {
+  background: linear-gradient(135deg, #0f766e 0%, #0d9488 50%, #14b8a6 100%);
+  color: #fff;
+  border-radius: 14px;
+  padding: 1.25rem 1.4rem;
+  margin-bottom: 1.25rem;
+}
+
+.p2oe-hero h1 {
+  margin: 0 0 0.35rem;
+  font-size: 1.4rem;
+}
+
+.p2oe-hero p {
+  margin: 0;
+  font-size: 0.9rem;
+  opacity: 0.92;
+}
+
+.p2oe-stage-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 0.5rem;
+}
+
+.p2oe-stage-chip {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 0.5rem;
+  text-align: center;
+  font-size: 0.75rem;
+}
+
+.p2oe-stage-chip strong {
+  display: block;
+  font-size: 1.1rem;
+  margin-top: 0.15rem;
+  direction: ltr;
+  unicode-bidi: embed;
+}
+
+.p2oe-section-title {
+  margin: 0 0 0.75rem;
+  font-size: 1.05rem;
+  border-inline-start: 3px solid #0d9488;
+  padding-inline-start: 0.6rem;
+}
+
+.p2oe-form-inline {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 0.75rem;
+  align-items: end;
+}
+
+.p2oe-link {
+  color: #0d9488;
+  text-decoration: none;
+}
+
+.p2oe-link:hover {
+  text-decoration: underline;
+}
+
+.p2oe-footer-nav {
+  margin-top: 1.5rem;
+  font-size: 0.85rem;
+  text-align: center;
+  color: #6b7280;
+}
+
+.p2oe-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.5rem 1rem;
+  font-size: 0.85rem;
+}
+
+.p2oe-meta-item span {
+  color: #6b7280;
+  display: block;
+  font-size: 0.72rem;
+}
+
+.p2oe-flow-list a {
+  font-weight: 600;
+}

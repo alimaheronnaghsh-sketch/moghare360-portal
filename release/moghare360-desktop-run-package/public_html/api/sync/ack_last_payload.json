@@ -1,0 +1,41 @@
+{
+    "time": "2026-05-24 09:42:59",
+    "raw": "{\"table\": \"inventory_items_staging\", \"ids\": [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30], \"status\": \"Synced\", \"sync_message\": \"Imported into SQL Server WebSync staging tables.\", \"sync_batch\": \"20260524131258-7a0beb76\"}",
+    "decoded": {
+        "table": "inventory_items_staging",
+        "ids": [
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20,
+            21,
+            22,
+            23,
+            24,
+            25,
+            26,
+            27,
+            28,
+            29,
+            30
+        ],
+        "status": "Synced",
+        "sync_message": "Imported into SQL Server WebSync staging tables.",
+        "sync_batch": "20260524131258-7a0beb76"
+    }
+}

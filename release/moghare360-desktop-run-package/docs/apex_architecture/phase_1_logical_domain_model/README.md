@@ -1,0 +1,38 @@
+# ApexMahinERP — Phase 1 Logical Domain Model
+
+## Reading Order
+
+1. [APEX_10_LOGICAL_DOMAIN_MODEL_OVERVIEW.md](APEX_10_LOGICAL_DOMAIN_MODEL_OVERVIEW.md) — Start here
+2. Domain models (any order; recommended foundation first):
+   - [APEX_11_DOMAIN_MODEL_ORGANIZATION.md](APEX_11_DOMAIN_MODEL_ORGANIZATION.md)
+   - [APEX_12_DOMAIN_MODEL_IDENTITY_ACCESS.md](APEX_12_DOMAIN_MODEL_IDENTITY_ACCESS.md)
+   - [APEX_13_DOMAIN_MODEL_FINANCE.md](APEX_13_DOMAIN_MODEL_FINANCE.md)
+   - [APEX_14_DOMAIN_MODEL_PROCUREMENT.md](APEX_14_DOMAIN_MODEL_PROCUREMENT.md)
+   - [APEX_15_DOMAIN_MODEL_INVENTORY.md](APEX_15_DOMAIN_MODEL_INVENTORY.md)
+   - [APEX_16_DOMAIN_MODEL_CRM_MARKETING.md](APEX_16_DOMAIN_MODEL_CRM_MARKETING.md)
+   - [APEX_17_DOMAIN_MODEL_HR.md](APEX_17_DOMAIN_MODEL_HR.md)
+   - [APEX_18_DOMAIN_MODEL_JOB_TECHNICAL_INTELLIGENCE.md](APEX_18_DOMAIN_MODEL_JOB_TECHNICAL_INTELLIGENCE.md)
+3. [APEX_19_CROSS_DOMAIN_INTERACTION_MAP.md](APEX_19_CROSS_DOMAIN_INTERACTION_MAP.md)
+4. [APEX_20_SERVICE_BOUNDARY_PREVIEW.md](APEX_20_SERVICE_BOUNDARY_PREVIEW.md)
+5. [APEX_21_LOGICAL_MODEL_REVIEW_NOTES.md](APEX_21_LOGICAL_MODEL_REVIEW_NOTES.md)
+6. [APEX_90_PHASE_1_RESULT.md](APEX_90_PHASE_1_RESULT.md)
+7. [APEX_99_PHASE_1_SIGNOFF.md](APEX_99_PHASE_1_SIGNOFF.md)
+
+## Prerequisites
+
+Phase 0 architecture freeze package: `docs/apex_architecture/APEX_00` through `APEX_07`.
+
+## Hard Rules
+
+- Logical model only — not physical schema
+- No SQL, no migrations, no database work in Phase 1
+- Cross-domain interaction via service/API boundary only
+- No direct cross-domain table access
+
+## CLI Test
+
+```text
+C:\xampp\php\php.exe tools/test-apex-phase-1-logical-domain-model.php
+```
+
+Expected: `APEX PHASE 1 LOGICAL DOMAIN MODEL TEST PASSED`

@@ -1,0 +1,21 @@
+/**
+ * MOGHARE360 ERP — Phase 5 Financial System UI
+ */
+
+.p5fs-page { margin:0; background:#f4f6f8; font-family:Tahoma,Arial,sans-serif; }
+.p5fs-wrap { max-width:1200px; margin:0 auto; padding:1.5rem 1.25rem 2.5rem; }
+.p5fs-hero { background:linear-gradient(135deg,#065f46 0%,#047857 50%,#10b981 100%); color:#fff; border-radius:14px; padding:1.25rem 1.4rem; margin-bottom:1.25rem; }
+.p5fs-hero h1 { margin:0 0 .35rem; font-size:1.4rem; }
+.p5fs-readonly-banner { background:#ecfdf5; border:1px solid #a7f3d0; color:#065f46; border-radius:10px; padding:.75rem 1rem; text-align:center; margin-bottom:1rem; font-size:.85rem; font-weight:600; }
+.p5fs-section-title { margin:0 0 .75rem; border-inline-start:3px solid #10b981; padding-inline-start:.6rem; font-size:1.05rem; }
+.p5fs-footer { text-align:center; font-size:.85rem; color:#6b7280; margin-top:1.5rem; }
+.p5fs-footer a { color:#047857; text-decoration:none; }
+.p5fs-finance-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:.75rem; }
+.p5fs-finance-card { background:#fff; border:1px solid #d1fae5; border-radius:12px; padding:1rem; text-align:center; }
+.p5fs-finance-card .label { font-size:.8rem; color:#6b7280; margin-bottom:.35rem; }
+.p5fs-finance-card .value { font-size:1.25rem; font-weight:700; color:#065f46; }
+.p5fs-invoice-warning { background:#fffbeb; border:2px solid #f59e0b; border-radius:12px; padding:1rem 1.25rem; margin-bottom:1rem; color:#92400e; font-weight:600; text-align:center; }
+.p5fs-totals { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:.5rem; margin:1rem 0; }
+.p5fs-total-item { background:#f0fdf4; border-radius:8px; padding:.65rem .75rem; }
+.p5fs-total-item span { display:block; font-size:.75rem; color:#6b7280; }
+.p5fs-total-item strong { font-size:1rem; color:#065f46; }

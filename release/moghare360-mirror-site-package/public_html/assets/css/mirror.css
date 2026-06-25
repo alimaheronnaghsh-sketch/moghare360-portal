@@ -1,0 +1,25 @@
+@import url("moghare360-v1-luxury-ui.css");
+
+.m360-mirror-banner {
+  font-size: 0.78rem;
+  color: var(--m360-gold);
+  margin-top: 0.35rem;
+}
+
+.m360-role-grid a.m360-role-card {
+  display: block;
+  text-decoration: none;
+  color: inherit;
+  transition: transform 0.15s, border-color 0.15s;
+}
+
+.m360-role-grid a.m360-role-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--m360-accent);
+}
+
+.m360-install-hint {
+  font-size: 0.82rem;
+  color: var(--m360-muted);
+  margin-top: 0.5rem;
+}
