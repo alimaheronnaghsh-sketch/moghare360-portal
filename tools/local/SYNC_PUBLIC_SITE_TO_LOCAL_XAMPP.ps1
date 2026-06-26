@@ -34,6 +34,20 @@ Add-Line "Source: $srcRoot"
 Add-Line "Target: $InstallPath"
 Add-Line ""
 
+$ensureDirs = @(
+    "includes",
+    "api\customer",
+    "assets\js",
+    "assets\css"
+)
+foreach ($dirRel in $ensureDirs) {
+    $dirPath = Join-Path $InstallPath $dirRel
+    if (-not (Test-Path $dirPath)) {
+        New-Item -ItemType Directory -Path $dirPath -Force | Out-Null
+        Add-Line "- MKDIR $dirRel"
+    }
+}
+
 $relativeFiles = @(
     "customer-request.php",
     "staff-login.php",
@@ -46,12 +60,16 @@ $relativeFiles = @(
     "service-worker.js",
     "includes\mirror-layout.php",
     "includes\mirror-api-client.php",
+    "includes\m360-otp-helper.php",
     "api\customer\request.php",
+    "api\customer\send-otp.php",
+    "api\customer\verify-otp.php",
     "assets\css\mirror.css",
     "assets\css\moghare360-v1-luxury-ui.css",
     "assets\js\iran-provinces-cities.js",
     "assets\js\vehicle-brand-classes.js",
-    "assets\js\customer-form.js"
+    "assets\js\customer-form.js",
+    "assets\js\m360-jalali-datepicker.js"
 )
 
 $forbidden = @('config.php', 'erp-config.php', 'mirror-config.php')
@@ -89,6 +107,27 @@ if (-not $SkipMirrorConfig) {
         & $cfgScript -InstallPath $InstallPath -Force
         Add-Line "- mirror-config.php ensured (local runtime only)"
     }
+}
+
+Add-Line ""
+Add-Line "## OTP runtime validation"
+$otpCritical = @(
+    "includes\m360-otp-helper.php",
+    "api\customer\send-otp.php",
+    "api\customer\verify-otp.php"
+)
+$otpMissing = @()
+foreach ($rel in $otpCritical) {
+    $target = Join-Path $InstallPath $rel
+    if (Test-Path $target) {
+        Add-Line "- OK $rel"
+    } else {
+        Add-Line "- FAIL missing: $rel"
+        $otpMissing += $rel
+    }
+}
+if ($otpMissing.Count -gt 0) {
+    throw "OTP sync validation failed. Missing: $($otpMissing -join ', ')"
 }
 
 Add-Line ""

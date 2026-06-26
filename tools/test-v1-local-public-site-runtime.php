@@ -8,6 +8,7 @@ declare(strict_types=1);
 $root = dirname(__DIR__);
 $phpBin = is_file('C:\\xampp\\php\\php.exe') ? 'C:\\xampp\\php\\php.exe' : 'php';
 $pub = $root . DIRECTORY_SEPARATOR . 'public_html';
+$localRuntime = rtrim(getenv('MOGHARE360_INSTALL_PATH') ?: 'C:\\xampp\\htdocs\\moghare360', '\\/');
 $baseUrl = rtrim(getenv('MOGHARE360_BASE_URL') ?: 'http://localhost:8080/moghare360/', '/') . '/';
 
 function rt_pass(string $name, bool $ok, string $detail = ''): array
@@ -43,11 +44,26 @@ $required = [
     'assets/js/customer-form.js',
     'includes/mirror-api-client.php',
     'includes/mirror-layout.php',
+    'includes/m360-otp-helper.php',
+    'api/customer/send-otp.php',
+    'api/customer/verify-otp.php',
 ];
 
 foreach ($required as $rel) {
     $path = $pub . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $rel);
     $results[] = rt_pass('Exists: ' . $rel, is_file($path));
+}
+
+$localOtpFiles = [
+    'includes/m360-otp-helper.php',
+    'api/customer/send-otp.php',
+    'api/customer/verify-otp.php',
+];
+if (is_dir($localRuntime)) {
+    foreach ($localOtpFiles as $rel) {
+        $path = $localRuntime . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $rel);
+        $results[] = rt_pass('Local runtime exists: ' . $rel, is_file($path));
+    }
 }
 
 $lintFiles = ['customer-request.php', 'staff-login.php', 'owner-login.php'];
@@ -70,6 +86,7 @@ $results[] = rt_pass('staff-login no legacy config.php', !str_contains($staff, "
 $results[] = rt_pass('staff-login no ensureSessionStarted', !preg_match('/\bensureSessionStarted\s*\(/', $staff));
 $results[] = rt_pass('owner-login no ensureSessionStarted', !preg_match('/\bensureSessionStarted\s*\(/', $owner));
 $results[] = rt_pass('customer-request uses API client', str_contains($customer, 'mirror_api_customer_request'));
+$results[] = rt_pass('customer-request uses OTP helper', str_contains($customer, 'm360-otp-helper.php'));
 $results[] = rt_pass('API client targets customer request', str_contains(rt_read($pub . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'mirror-api-client.php'), '/api/customer/request'));
 
 $forbidden = ['Master Server', 'Mirror Interface Only', 'No Host Database', 'رابط آینه', 'SQL Server', 'laptop'];
