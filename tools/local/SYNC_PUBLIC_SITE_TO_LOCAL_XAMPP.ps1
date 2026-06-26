@@ -110,6 +110,22 @@ if (-not $SkipMirrorConfig) {
     }
 }
 
+$configPath = Join-Path $InstallPath "mirror-config.php"
+if (Test-Path $configPath) {
+    $cfgText = Get-Content $configPath -Raw
+    if ($cfgText -notmatch "M360_OTP_TEST_MODE") {
+        $otpKeys = @"
+    'M360_OTP_TEST_MODE' => true,
+    'M360_OTP_TEST_CODE' => '',
+"@
+        $cfgText = $cfgText -replace "(\r?\n\];)", "$([Environment]::NewLine)$otpKeys`$1"
+        [System.IO.File]::WriteAllText($configPath, $cfgText, (New-Object System.Text.UTF8Encoding $false))
+        Add-Line "- PATCH mirror-config.php OTP test keys (local only; set M360_OTP_TEST_CODE manually)"
+    } else {
+        Add-Line "- OK mirror-config.php already has OTP test keys"
+    }
+}
+
 Add-Line ""
 Add-Line "## OTP runtime validation"
 $otpCritical = @(

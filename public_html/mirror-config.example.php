@@ -4,6 +4,11 @@ declare(strict_types=1);
 /**
  * Mirror site configuration — EXAMPLE ONLY (no secrets).
  * Copy to mirror-config.php on host and set MASTER_SERVER_BASE_URL.
+ *
+ * M360_OTP_TEST_MODE / M360_OTP_TEST_CODE:
+ * - Local development only (localhost / 127.0.0.1).
+ * - Never enable on production or public hosts (moghareh360.ir).
+ * - Even if set to true on a public host, the OTP helper hard-blocks test mode.
  */
 
 return [
@@ -25,4 +30,6 @@ return [
     'SMS_SENDER' => '',
     'IPPANEL_API_KEY' => '',
     'IPPANEL_SENDER' => '',
+    'M360_OTP_TEST_MODE' => false,
+    'M360_OTP_TEST_CODE' => '',
 ];

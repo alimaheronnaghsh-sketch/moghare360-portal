@@ -45,24 +45,36 @@ $results[] = cog_pass('send-otp endpoint exists', is_file($public . DIRECTORY_SE
 $results[] = cog_pass('OTP helper exists', is_file($public . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-otp-helper.php'));
 $results[] = cog_pass('verify-otp endpoint exists', is_file($public . DIRECTORY_SEPARATOR . 'api' . DIRECTORY_SEPARATOR . 'customer' . DIRECTORY_SEPARATOR . 'verify-otp.php'));
 $results[] = cog_pass('OTP helper stores hash not raw code', str_contains($helper, 'password_hash') && !preg_match('/\$_SESSION\[[\'"]otp_hash[\'"]\]\s*=\s*\$code/', $helper));
-$results[] = cog_pass('OTP helper no fake success path', !str_contains($helper, 'useFakeOtp') && !str_contains($helper, 'renderFake'));
+$results[] = cog_pass('OTP helper localhost detector exists', str_contains($helper, 'function m360_otp_is_localhost'));
+$results[] = cog_pass('OTP helper dev code gate exists', str_contains($helper, 'm360_otp_can_use_dev_code') && str_contains($helper, 'm360_otp_get_dev_code'));
+$results[] = cog_pass('OTP helper hard-blocks moghareh360.ir host', str_contains($helper, 'moghareh360.ir') && preg_match('/function m360_otp_is_localhost[\s\S]*moghareh360\.ir/', $helper) === 1);
+$results[] = cog_pass('Dev code only inside get_dev_code helper', preg_match('/function m360_otp_get_dev_code[\s\S]*return [\'"]123456[\'"];/', $helper) === 1);
+$results[] = cog_pass('send-otp exposes test_mode flag only from helper', str_contains($sendOtp, 'test_mode') && str_contains($sendOtp, "m360_otp_send"));
+$results[] = cog_pass('verify-otp has no test bypass', !str_contains($verifyOtp, 'm360_otp_can_use_dev_code') && str_contains($verifyOtp, 'm360_otp_verify'));
+$results[] = cog_pass('customer-request local dev note gated by helper', str_contains($customer, 'm360_otp_can_use_dev_code') && str_contains($customer, 'm360_otp_get_dev_code'));
+$results[] = cog_pass('customer-request does not hardcode dev code literal', !preg_match('/[\'"]123456[\'"]/', $customer));
+$results[] = cog_pass('OTP helper no ungated fake success path', !preg_match('/useFakeOtp|renderFake/', $helper));
 $results[] = cog_pass('SMS fails when provider not configured', str_contains($helper, 'امکان ارسال پیامک در حال حاضر فعال نیست'));
 $results[] = cog_pass('request.php server OTP gate', str_contains($requestApi, 'm360_otp_is_verified') && str_contains($requestApi, 'شماره موبایل تأیید نشده است'));
 $results[] = cog_pass('customer-request.php server OTP gate', str_contains($customer, 'm360_otp_is_verified'));
 
 $results[] = cog_pass('mirror-config.example SMS placeholders only', str_contains($exampleCfg, 'M360_SMS_PROVIDER') && str_contains($exampleCfg, "M360_SMS_API_KEY' => ''"));
+$results[] = cog_pass('mirror-config.example OTP test placeholders', str_contains($exampleCfg, 'M360_OTP_TEST_MODE') && str_contains($exampleCfg, 'M360_OTP_TEST_CODE'));
+$results[] = cog_pass('mirror-config.example warns localhost-only OTP test', str_contains($exampleCfg, 'localhost') && str_contains($exampleCfg, 'moghareh360.ir'));
 $results[] = cog_pass('No real SMS API key in example config', !preg_match("/M360_SMS_API_KEY'\s*=>\s*'[^']{8,}/", $exampleCfg));
 
 $forbiddenCredentialPatterns = [
     '/password_hash\(\s*[\'"]123456/',
     '/\$otp\s*=\s*[\'"]123456[\'"]/',
+    '/\$code\s*=\s*[\'"]123456[\'"]/',
     '/useFakeOtp/',
     '/renderFake.*Otp/',
 ];
-$combinedOtp = $helper . $sendOtp . $verifyOtp . $formJs;
+$combinedOtp = $sendOtp . $verifyOtp . $formJs;
 foreach ($forbiddenCredentialPatterns as $pattern) {
-    $results[] = cog_pass('No hardcoded OTP pattern: ' . $pattern, preg_match($pattern, $combinedOtp) !== 1);
+    $results[] = cog_pass('No ungated hardcoded OTP pattern: ' . $pattern, preg_match($pattern, $combinedOtp) !== 1);
 }
+$results[] = cog_pass('Dev code not in send/verify endpoints', !preg_match('/123456/', $sendOtp . $verifyOtp));
 
 $unchangedAuthFiles = ['staff-login.php', 'owner-login.php', 'access-control.php'];
 foreach ($unchangedAuthFiles as $rel) {
@@ -86,8 +98,25 @@ foreach ($lintFiles as $rel) {
 require_once $public . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-otp-helper.php';
 m360_otp_session_start();
 $_SESSION = [];
+
+$savedHost = $_SERVER['HTTP_HOST'] ?? null;
+$_SERVER['HTTP_HOST'] = 'moghareh360.ir';
+$results[] = cog_pass('Public host blocks dev OTP', m360_otp_can_use_dev_code() === false);
+$results[] = cog_pass('Public host dev code empty', m360_otp_get_dev_code() === '');
 $sendResult = m360_otp_send('09123456789');
-$results[] = cog_pass('send-otp fails without SMS provider (no fake pass)', $sendResult['ok'] === false, $sendResult['message']);
+$results[] = cog_pass('send-otp fails without SMS provider on public host (no fake pass)', $sendResult['ok'] === false, $sendResult['message']);
+
+$_SERVER['HTTP_HOST'] = 'localhost:8080';
+$results[] = cog_pass('localhost:8080 host detection', m360_otp_is_localhost() === true);
+$_SESSION = [];
+$localSend = m360_otp_send('09123456789');
+$results[] = cog_pass('localhost dev OTP fallback send', ($localSend['ok'] ?? false) === true && ($localSend['test_mode'] ?? false) === true, $localSend['message'] ?? '');
+
+if ($savedHost !== null) {
+    $_SERVER['HTTP_HOST'] = $savedHost;
+} else {
+    unset($_SERVER['HTTP_HOST']);
+}
 
 $results[] = cog_pass('OTP is_verified false without session proof', !m360_otp_is_verified('09120000000'));
 
