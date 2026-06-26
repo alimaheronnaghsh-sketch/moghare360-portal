@@ -153,6 +153,27 @@ $combined = $layout . $index
     . ccd_zip_read($zipPath, 'staff-login.php')
     . ccd_zip_read($zipPath, 'owner-login.php');
 
+$helper = ccd_zip_read($zipPath, 'includes/m360-otp-helper.php');
+$sendOtp = ccd_zip_read($zipPath, 'api/customer/send-otp.php');
+$verifyOtp = ccd_zip_read($zipPath, 'api/customer/verify-otp.php');
+$profileStatus = ccd_zip_read($zipPath, 'api/customer/profile-status.php');
+$exampleCfg = ccd_zip_read($zipPath, 'mirror-config.example.php');
+$combinedOtp = $helper . $sendOtp . $verifyOtp . $formJs;
+
+$results[] = ccd_pass('OTP-first mobile step in customer-request.php', str_contains($customer, 'm360_step_mobile') && str_contains($customer, 'm360_send_otp'));
+$results[] = ccd_pass('OTP verify step in customer-request.php', str_contains($customer, 'm360_step_otp') && str_contains($customer, 'm360_verify_otp'));
+$results[] = ccd_pass('customer-form.js OTP-first send flow', str_contains($formJs, 'sendOtp') && str_contains($formJs, 'api/customer/send-otp.php'));
+$results[] = ccd_pass('customer-form.js OTP verify flow', str_contains($formJs, 'api/customer/verify-otp.php') && str_contains($formJs, 'loadProfileAndShowForm'));
+$results[] = ccd_pass('profile-status.php in package', $profileStatus !== '' && str_contains($profileStatus, 'm360_otp_is_verified'));
+$results[] = ccd_pass('m360-otp-helper dev gate exists', str_contains($helper, 'm360_otp_can_use_dev_code') && str_contains($helper, 'm360_otp_get_dev_code'));
+$results[] = ccd_pass('m360-otp-helper hard-blocks moghareh360.ir', str_contains($helper, 'moghareh360.ir'));
+$results[] = ccd_pass('Dev code 123456 only in get_dev_code helper', preg_match('/function m360_otp_get_dev_code[\s\S]*return [\'"]123456[\'"];/', $helper) === 1);
+$results[] = ccd_pass('send-otp has no ungated dev bypass', !preg_match('/123456/', $sendOtp));
+$results[] = ccd_pass('verify-otp has no dev bypass', !str_contains($verifyOtp, 'm360_otp_can_use_dev_code') && str_contains($verifyOtp, 'm360_otp_verify'));
+$results[] = ccd_pass('mirror-config.example safe OTP defaults', str_contains($exampleCfg, 'M360_OTP_TEST_MODE') && preg_match("/M360_OTP_TEST_MODE'\s*=>\s*false/", $exampleCfg) === 1);
+$results[] = ccd_pass('Package has no real mirror-config.php content', !preg_match("/MASTER_SERVER_BASE_URL'\s*=>\s*'https?:\/\/[^']+/", $exampleCfg) || str_contains($exampleCfg, 'EXAMPLE ONLY'));
+$results[] = ccd_pass('No useFakeOtp in package OTP code', !str_contains($combinedOtp, 'useFakeOtp'));
+
 $results[] = ccd_pass('Customer form: server-rendered visit calendar', str_contains($customer, 'm360_server_calendar') && str_contains($customer, 'm360-calendar-day'));
 $results[] = ccd_pass('Customer form: birth year/month/day selects', str_contains($customer, 'birth_year_jalali') && str_contains($customer, 'birth_month_jalali') && str_contains($customer, 'birth_day_jalali'));
 $results[] = ccd_pass('Customer form: vehicle year jalali/gregorian labels', str_contains($customer, 'شمسی /') && str_contains($customer, 'میلادی'));
@@ -185,7 +206,11 @@ $lintTargets = [
     'staff-login.php',
     'owner-login.php',
     'includes/mirror-layout.php',
+    'includes/m360-otp-helper.php',
     'api/customer/request.php',
+    'api/customer/send-otp.php',
+    'api/customer/verify-otp.php',
+    'api/customer/profile-status.php',
     'api/mirror/health.php',
 ];
 if (is_file($zipPath) && $entries !== []) {

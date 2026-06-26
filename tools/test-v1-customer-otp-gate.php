@@ -45,6 +45,14 @@ $results[] = cog_pass('send-otp endpoint exists', is_file($public . DIRECTORY_SE
 $results[] = cog_pass('OTP helper exists', is_file($public . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-otp-helper.php'));
 $results[] = cog_pass('verify-otp endpoint exists', is_file($public . DIRECTORY_SEPARATOR . 'api' . DIRECTORY_SEPARATOR . 'customer' . DIRECTORY_SEPARATOR . 'verify-otp.php'));
 $results[] = cog_pass('OTP helper stores hash not raw code', str_contains($helper, 'password_hash') && !preg_match('/\$_SESSION\[[\'"]otp_hash[\'"]\]\s*=\s*\$code/', $helper));
+$results[] = cog_pass('OTP dedicated config loader exists', str_contains($helper, 'function m360_otp_load_config') && str_contains($helper, 'mirror-config.php'));
+$results[] = cog_pass('OTP cfg_value supports M360 and IPPANEL aliases', str_contains($helper, 'm360_otp_cfg_value') && str_contains($helper, 'ippanelPatternId'));
+$results[] = cog_pass('Provider normalization for ippanel', str_contains($helper, 'm360_otp_normalize_provider'));
+$results[] = cog_pass('sms_configured requires ippanel pattern id', preg_match('/\$s\[\'pattern_id\'\]\s*!==\s*\'\'/', $helper) === 1);
+$results[] = cog_pass('IPPanel pattern payload uses top-level recipients', str_contains($helper, 'm360_otp_ippanel_pattern_payload') && preg_match("/'recipients'\s*=>\s*\[m360_otp_ippanel_recipient/", $helper) === 1);
+$results[] = cog_pass('IPPanel pattern uses code field not pattern_code', !str_contains($helper, 'pattern_code') && str_contains($helper, "'code' => (string)\$settings['pattern_id']"));
+$results[] = cog_pass('SMS inactive vs provider failure messages separated', str_contains($helper, 'M360_OTP_MSG_SMS_INACTIVE') && str_contains($helper, 'M360_OTP_MSG_SMS_FAILED'));
+$results[] = cog_pass('Provider errors return send failed message', preg_match('/ippanel_http[\s\S]*M360_OTP_MSG_SMS_FAILED/', $helper) === 1);
 $results[] = cog_pass('OTP helper localhost detector exists', str_contains($helper, 'function m360_otp_is_localhost'));
 $results[] = cog_pass('OTP helper dev code gate exists', str_contains($helper, 'm360_otp_can_use_dev_code') && str_contains($helper, 'm360_otp_get_dev_code'));
 $results[] = cog_pass('OTP helper hard-blocks moghareh360.ir host', str_contains($helper, 'moghareh360.ir') && preg_match('/function m360_otp_is_localhost[\s\S]*moghareh360\.ir/', $helper) === 1);
@@ -54,7 +62,7 @@ $results[] = cog_pass('verify-otp has no test bypass', !str_contains($verifyOtp,
 $results[] = cog_pass('customer-request local dev note gated by helper', str_contains($customer, 'm360_otp_can_use_dev_code') && str_contains($customer, 'm360_otp_get_dev_code'));
 $results[] = cog_pass('customer-request does not hardcode dev code literal', !preg_match('/[\'"]123456[\'"]/', $customer));
 $results[] = cog_pass('OTP helper no ungated fake success path', !preg_match('/useFakeOtp|renderFake/', $helper));
-$results[] = cog_pass('SMS fails when provider not configured', str_contains($helper, 'امکان ارسال پیامک در حال حاضر فعال نیست'));
+$results[] = cog_pass('SMS fails when provider not configured', str_contains($helper, 'M360_OTP_MSG_SMS_INACTIVE'));
 $results[] = cog_pass('request.php server OTP gate', str_contains($requestApi, 'm360_otp_is_verified') && str_contains($requestApi, 'شماره موبایل تأیید نشده است'));
 $results[] = cog_pass('customer-request.php server OTP gate', str_contains($customer, 'm360_otp_is_verified'));
 
@@ -96,6 +104,21 @@ foreach ($lintFiles as $rel) {
 }
 
 require_once $public . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-otp-helper.php';
+
+$tmpCfgPath = $root . DIRECTORY_SEPARATOR . 'runtime' . DIRECTORY_SEPARATOR . '_otp_sms_config_probe.php';
+if (!is_dir(dirname($tmpCfgPath))) {
+    mkdir(dirname($tmpCfgPath), 0775, true);
+}
+file_put_contents($tmpCfgPath, "<?php\nreturn [\n    'M360_SMS_PROVIDER' => 'IPPanel',\n    'M360_SMS_API_KEY' => 'probe-key-abcdefghijklmnopqrst',\n    'M360_SMS_SENDER' => '3000505',\n    'M360_SMS_PATTERN_ID' => 'pattern-probe-001',\n];\n");
+$probeCfg = require $tmpCfgPath;
+$probeProvider = m360_otp_normalize_provider((string)($probeCfg['M360_SMS_PROVIDER'] ?? ''));
+$probeConfigured = $probeProvider === 'ippanel'
+    && trim((string)($probeCfg['M360_SMS_API_KEY'] ?? '')) !== ''
+    && trim((string)($probeCfg['M360_SMS_SENDER'] ?? '')) !== ''
+    && trim((string)($probeCfg['M360_SMS_PATTERN_ID'] ?? '')) !== '';
+$results[] = cog_pass('Probe ippanel config shape would be configured', $probeConfigured, 'provider=' . $probeProvider);
+@unlink($tmpCfgPath);
+
 m360_otp_session_start();
 $_SESSION = [];
 

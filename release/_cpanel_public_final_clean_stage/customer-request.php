@@ -318,6 +318,9 @@ mirror_render_head('ثبت درخواست مشتری', 'customer');
 
         <section id="m360_step_mobile" class="m360-step-card m360-step-card--active" aria-labelledby="m360_step_mobile_title">
             <h3 id="m360_step_mobile_title" class="m360-step-title">مرحله ۱ — ورود شماره موبایل</h3>
+            <?php if (m360_otp_can_use_dev_code()): ?>
+                <p class="m360-otp-status" role="note">حالت تست لوکال فعال است. کد تأیید: <?= mirror_h(m360_otp_get_dev_code()) ?></p>
+            <?php endif; ?>
             <label for="mobile">شماره موبایل <span class="m360-req">*</span></label>
             <div class="m360-mobile-row">
                 <input type="tel" id="mobile" name="mobile" inputmode="tel" maxlength="11" required value="<?= mirror_h($input['mobile']) ?>" placeholder="09xxxxxxxxx" autocomplete="tel">
@@ -596,5 +599,5 @@ mirror_render_head('ثبت درخواست مشتری', 'customer');
 
 <script src="assets/js/iran-provinces-cities.js"></script>
 <script src="assets/js/vehicle-brand-classes.js"></script>
-<script src="assets/js/customer-form.js"></script>
+<script src="assets/js/customer-form.js?v=p07d"></script>
 <?php mirror_render_foot(); ?>

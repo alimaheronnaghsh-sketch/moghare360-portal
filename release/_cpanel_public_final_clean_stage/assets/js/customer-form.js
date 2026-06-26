@@ -10,6 +10,28 @@
 
   function $(id) { return document.getElementById(id); }
 
+  function isLocalDev() {
+    var host = (window.location && window.location.hostname) ? window.location.hostname.toLowerCase() : '';
+    return host === 'localhost' || host === '127.0.0.1' || host.endsWith('.localhost');
+  }
+
+  function logDevError(message, detail) {
+    if (!isLocalDev()) return;
+    if (detail !== undefined) {
+      console.error(message, detail);
+    } else {
+      console.error(message);
+    }
+  }
+
+  function resolveApiUrl(path) {
+    try {
+      return new URL(path, window.location.href).href;
+    } catch (e) {
+      return path;
+    }
+  }
+
   function bindPersianValidity(select, message) {
     if (!select) return;
     select.addEventListener('invalid', function (e) {
@@ -49,7 +71,7 @@
   }
 
   function fetchJson(url, body) {
-    return fetch(url, {
+    return fetch(resolveApiUrl(url), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
       credentials: 'same-origin',
@@ -57,10 +79,16 @@
     }).then(function (res) {
       return res.text().then(function (text) {
         var data = null;
+        var trimmed = (text || '').trim();
+        if (!trimmed) {
+          logDevError('OTP fetch empty response', { url: url, status: res.status });
+          return { status: res.status, data: { ok: false, message: 'ارسال کد تأیید انجام نشد. لطفاً دوباره تلاش کنید.' } };
+        }
         try {
-          data = text ? JSON.parse(text) : null;
+          data = JSON.parse(trimmed);
         } catch (e) {
-          data = { ok: false, message: 'پاسخ سرور نامعتبر است. لطفاً دوباره تلاش کنید.' };
+          logDevError('OTP fetch non-JSON response', { url: url, status: res.status, body: trimmed.slice(0, 300) });
+          data = { ok: false, message: 'ارسال کد تأیید انجام نشد. لطفاً دوباره تلاش کنید.' };
         }
         return { status: res.status, data: data };
       });
@@ -145,7 +173,7 @@
     hideFormSections();
     showSection('m360_step_otp', false);
     setStatus($('m360_otp_status'), '', '');
-    setStatus($('m360_mobile_status'), '', '');
+    setStatus($('m360_mobile_status'), 'برای شروع، شماره موبایل خود را وارد کنید.', '');
     var flow = $('customer_flow');
     if (flow) flow.value = 'new';
     var vname = $('verified_customer_name');
@@ -161,7 +189,7 @@
     var sendBtn = $('m360_send_otp');
     var phone = mobile ? mobile.value.trim() : '';
     if (!/^09\d{9}$/.test(phone)) {
-      setStatus($('m360_mobile_status'), 'شماره موبایل معتبر نیست. فرمت صحیح: 09xxxxxxxxx', 'error');
+      setStatus($('m360_mobile_status'), 'شماره موبایل معتبر وارد کنید.', 'error');
       return;
     }
     if (sendBtn) sendBtn.disabled = true;
@@ -173,11 +201,16 @@
           showSection('m360_step_otp', true);
           startResendCountdown();
         } else {
-          setStatus($('m360_mobile_status'), (result.data && result.data.message) || 'ارسال کد تأیید ناموفق بود.', 'error');
+          setStatus(
+            $('m360_mobile_status'),
+            (result.data && result.data.message) || 'ارسال کد تأیید انجام نشد. لطفاً دوباره تلاش کنید.',
+            'error'
+          );
         }
       })
-      .catch(function () {
-        setStatus($('m360_mobile_status'), 'ارسال کد تأیید ناموفق بود. لطفاً دوباره تلاش کنید.', 'error');
+      .catch(function (err) {
+        logDevError('OTP send fetch failed', err);
+        setStatus($('m360_mobile_status'), 'ارسال کد تأیید انجام نشد. لطفاً دوباره تلاش کنید.', 'error');
       })
       .finally(function () {
         if (sendBtn) sendBtn.disabled = false;
@@ -346,25 +379,40 @@
     var sendBtn = $('m360_send_otp');
     var verifyBtn = $('m360_verify_otp');
     var resendBtn = $('m360_resend_otp');
-    if (!mobile || !sendBtn || !verifyBtn) return;
+    var mobileStatus = $('m360_mobile_status');
+
+    if (!sendBtn) {
+      logDevError('OTP send button not found');
+      return;
+    }
+    if (!mobile) {
+      logDevError('OTP mobile input not found');
+      return;
+    }
 
     hideFormSections();
     showSection('m360_step_otp', false);
     setSubmitEnabled(false);
     setNewCustomerRequired(false);
     setBothFlowRequired(false);
+    setStatus(mobileStatus, 'برای شروع، شماره موبایل خود را وارد کنید.', '');
 
     sendBtn.addEventListener('click', function (e) {
       e.preventDefault();
+      e.stopPropagation();
       sendOtp();
     });
-    verifyBtn.addEventListener('click', function (e) {
-      e.preventDefault();
-      verifyOtp();
-    });
+    if (verifyBtn) {
+      verifyBtn.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        verifyOtp();
+      });
+    }
     if (resendBtn) {
       resendBtn.addEventListener('click', function (e) {
         e.preventDefault();
+        e.stopPropagation();
         sendOtp();
       });
     }

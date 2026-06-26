@@ -119,7 +119,7 @@ $results[] = rt_pass('staff-login no ensureSessionStarted', !preg_match('/\bensu
 $results[] = rt_pass('owner-login no ensureSessionStarted', !preg_match('/\bensureSessionStarted\s*\(/', $owner));
 $results[] = rt_pass('customer-request uses API client', str_contains($customer, 'mirror_api_customer_request'));
 $results[] = rt_pass('customer-request uses OTP helper', str_contains($customer, 'm360-otp-helper.php'));
-$results[] = rt_pass('customer-request loads customer-form cache bust', str_contains($customer, 'customer-form.js?v=p07d'));
+$results[] = rt_pass('customer-request loads customer-form cache bust', str_contains($customer, 'customer-form.js?v=full-replace-v2'));
 $results[] = rt_pass('customer-form binds send OTP click', str_contains(rt_read($pub . DIRECTORY_SEPARATOR . 'assets' . DIRECTORY_SEPARATOR . 'js' . DIRECTORY_SEPARATOR . 'customer-form.js'), 'stopPropagation'));
 $results[] = rt_pass('API client targets customer request', str_contains(rt_read($pub . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'mirror-api-client.php'), '/api/customer/request'));
 

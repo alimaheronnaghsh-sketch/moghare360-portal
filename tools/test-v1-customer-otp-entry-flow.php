@@ -80,7 +80,7 @@ $results = [];
 $results[] = oef_pass('Send OTP button type=button', str_contains($customer, 'id="m360_send_otp"') && preg_match('/id="m360_send_otp"[^>]*type="button"|type="button"[^>]*id="m360_send_otp"/', $customer) === 1);
 $sendIdCount = preg_match_all('/id="m360_send_otp"/', $customer, $m);
 $results[] = oef_pass('Single send OTP button id', $sendIdCount === 1, 'count=' . $sendIdCount);
-$results[] = oef_pass('customer-form.js cache bust', str_contains($customer, 'customer-form.js?v=p07d'));
+$results[] = oef_pass('customer-form.js cache bust', str_contains($customer, 'customer-form.js?v=full-replace-v2'));
 $results[] = oef_pass('DOMContentLoaded OTP init', str_contains($formJs, "document.addEventListener('DOMContentLoaded'") && str_contains($formJs, 'initOtpFirstFlow'));
 $results[] = oef_pass('Send click preventDefault', str_contains($formJs, 'preventDefault') && str_contains($formJs, 'stopPropagation'));
 $results[] = oef_pass('Localhost missing-button console error', str_contains($formJs, 'OTP send button not found') && str_contains($formJs, 'logDevError'));
@@ -146,7 +146,7 @@ if (function_exists('curl_init')) {
     } else {
         $results[] = oef_pass(
             'Browser page includes OTP send button',
-            str_contains((string)$pageHtml, 'id="m360_send_otp"') && str_contains((string)$pageHtml, 'customer-form.js?v=p07d'),
+            str_contains((string)$pageHtml, 'id="m360_send_otp"') && str_contains((string)$pageHtml, 'customer-form.js?v=full-replace-v2'),
             'HTTP ' . $pageHttp
         );
     }

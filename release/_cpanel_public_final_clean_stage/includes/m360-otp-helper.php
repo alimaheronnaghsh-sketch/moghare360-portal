@@ -121,6 +121,132 @@ function m360_otp_ippanel_recipient(string $phone09): string
     return $phone09;
 }
 
+function m360_otp_request_host(): string
+{
+    $host = strtolower(trim((string)($_SERVER['HTTP_HOST'] ?? '')));
+    if ($host === '' && PHP_SAPI === 'cli') {
+        return 'localhost';
+    }
+    return (string)(preg_replace('/:\d+$/', '', $host) ?? $host);
+}
+
+function m360_otp_is_localhost(): bool
+{
+    $rawHost = strtolower(trim((string)($_SERVER['HTTP_HOST'] ?? '')));
+    if ($rawHost !== '' && str_contains($rawHost, 'moghareh360.ir')) {
+        return false;
+    }
+
+    if ($rawHost === '' && PHP_SAPI === 'cli') {
+        return true;
+    }
+
+    $host = m360_otp_request_host();
+    if ($host === '') {
+        return false;
+    }
+
+    return $host === 'localhost'
+        || $host === '127.0.0.1'
+        || str_ends_with($host, '.localhost')
+        || str_contains($host, 'localhost');
+}
+
+function m360_otp_is_localhost_host(): bool
+{
+    return m360_otp_is_localhost();
+}
+
+function m360_otp_can_use_dev_code(): bool
+{
+    return m360_otp_is_localhost();
+}
+
+function m360_otp_get_dev_code(): string
+{
+    if (!m360_otp_can_use_dev_code()) {
+        return '';
+    }
+
+    return '123456';
+}
+
+function m360_otp_cfg_bool(string $key): bool
+{
+    $cfg = mirror_config();
+    if (!array_key_exists($key, $cfg)) {
+        return false;
+    }
+    $val = $cfg[$key];
+    if (is_bool($val)) {
+        return $val;
+    }
+    if (is_int($val) || is_float($val)) {
+        return (int)$val !== 0;
+    }
+    $normalized = strtolower(trim((string)$val));
+    return in_array($normalized, ['1', 'true', 'yes', 'on'], true);
+}
+
+function m360_otp_test_code_from_config(): ?string
+{
+    $cfg = mirror_config();
+    $raw = '';
+    if (isset($cfg['M360_OTP_TEST_CODE']) && is_scalar($cfg['M360_OTP_TEST_CODE'])) {
+        $raw = trim((string)$cfg['M360_OTP_TEST_CODE']);
+    }
+    if ($raw === '') {
+        $raw = m360_otp_cfg_string('M360_OTP_TEST_CODE');
+    }
+    $digits = preg_replace('/\D+/', '', $raw) ?? '';
+    if (strlen($digits) !== 6) {
+        return null;
+    }
+    return $digits;
+}
+
+function m360_otp_is_local_test_mode(): bool
+{
+    if (!m360_otp_is_localhost()) {
+        return false;
+    }
+
+    if (!m360_otp_cfg_bool('M360_OTP_TEST_MODE')) {
+        return false;
+    }
+
+    return m360_otp_test_code_from_config() !== null;
+}
+
+function m360_otp_dev_fallback_message(): string
+{
+    $code = m360_otp_get_dev_code();
+    if ($code === '') {
+        return 'کد تست لوکال فعال شد.';
+    }
+
+    return 'کد تست لوکال فعال شد. کد: ' . $code;
+}
+
+/**
+ * @return array{ok:bool,message:string,test_mode?:bool}
+ */
+function m360_otp_store_pending(string $normalized, string $code, string $successMessage, bool $testMode = false): array
+{
+    m360_otp_session_start();
+    $_SESSION['otp_phone'] = $normalized;
+    $_SESSION['otp_hash'] = password_hash($code, PASSWORD_DEFAULT);
+    $_SESSION['otp_expires_at'] = time() + M360_OTP_TTL_SECONDS;
+    $_SESSION['otp_attempts'] = 0;
+    $_SESSION['otp_last_sent_at'] = time();
+
+    $result = ['ok' => true, 'message' => $successMessage];
+    if ($testMode) {
+        $result['test_mode'] = true;
+    }
+    return $result;
+}
+
 function m360_otp_sms_configured(): bool
 {
     $s = m360_otp_sms_settings();
@@ -272,7 +398,7 @@ function m360_otp_verified_token(): string
 }
 
 /**
- * @return array{ok:bool,message:string}
+ * @return array{ok:bool,message:string,test_mode?:bool}
  */
 function m360_otp_send(string $phone): array
 {
@@ -290,19 +416,26 @@ function m360_otp_send(string $phone): array
         return ['ok' => false, 'message' => 'لطفاً ' . $wait . ' ثانیه دیگر برای ارسال مجدد صبر کنید.'];
     }
 
-    $code = (string)random_int(100000, 999999);
-    $sms = m360_otp_send_sms($normalized, $code);
-    if (!$sms['ok']) {
-        return $sms;
+    if (m360_otp_sms_configured()) {
+        $code = (string)random_int(100000, 999999);
+        $sms = m360_otp_send_sms($normalized, $code);
+        if (!$sms['ok']) {
+            return $sms;
+        }
+
+        return m360_otp_store_pending($normalized, $code, 'کد تأیید به شماره موبایل شما ارسال شد.');
     }
 
-    $_SESSION['otp_phone'] = $normalized;
-    $_SESSION['otp_hash'] = password_hash($code, PASSWORD_DEFAULT);
-    $_SESSION['otp_expires_at'] = time() + M360_OTP_TTL_SECONDS;
-    $_SESSION['otp_attempts'] = 0;
-    $_SESSION['otp_last_sent_at'] = time();
+    if (m360_otp_can_use_dev_code()) {
+        $devCode = m360_otp_get_dev_code();
+        if ($devCode === '') {
+            return ['ok' => false, 'message' => 'امکان ارسال پیامک در حال حاضر فعال نیست.'];
+        }
 
-    return ['ok' => true, 'message' => 'کد تأیید به شماره موبایل شما ارسال شد.'];
+        return m360_otp_store_pending($normalized, $devCode, m360_otp_dev_fallback_message(), true);
+    }
+
+    return ['ok' => false, 'message' => 'امکان ارسال پیامک در حال حاضر فعال نیست.'];
 }
 
 /**

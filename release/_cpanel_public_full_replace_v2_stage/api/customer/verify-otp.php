@@ -15,23 +15,15 @@ if (!is_array($body)) {
 }
 
 $phone = trim((string)($body['phone'] ?? $body['mobile'] ?? ''));
-$result = m360_otp_send($phone);
+$otp = trim((string)($body['otp'] ?? $body['code'] ?? ''));
+
+$result = m360_otp_verify($phone, $otp);
 
 if (!$result['ok']) {
     m360_otp_json_fail($result['message'], 400);
 }
 
-$responseData = ['expires_in' => M360_OTP_TTL_SECONDS];
-if (!empty($result['test_mode'])) {
-    $responseData['test_mode'] = true;
-    http_response_code(200);
-    echo json_encode([
-        'ok' => true,
-        'message' => $result['message'],
-        'test_mode' => true,
-        'data' => $responseData,
-    ], JSON_UNESCAPED_UNICODE);
-    exit;
-}
-
-m360_otp_json_ok($result['message'], $responseData);
+m360_otp_json_ok($result['message'], [
+    'verified' => true,
+    'token' => $result['token'] ?? '',
+]);
