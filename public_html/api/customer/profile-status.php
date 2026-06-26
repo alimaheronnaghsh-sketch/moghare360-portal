@@ -146,11 +146,15 @@ function m360_profile_lookup_customer($conn, int $companyId, string $mobile): ?a
     return null;
 }
 
+require_once dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-online-request-helper.php';
+
 $tenant = mogh_tenant_resolve_from_request();
 $conn = mogh_tenant_db_connect();
 $profile = null;
+$resolvedCustomerId = null;
 try {
     $profile = m360_profile_lookup_customer($conn, $tenant['company_id'], $normalized);
+    $resolvedCustomerId = m360_online_req_resolve_customer_id($conn, $tenant['company_id'], $normalized);
 } finally {
     @odbc_close($conn);
 }
@@ -162,6 +166,7 @@ mogh_api_ok('وضعیت مشتری دریافت شد.', [
     'verified' => true,
     'customer_exists' => $customerExists,
     'profile_required' => !$customerExists,
+    'customer_id' => $resolvedCustomerId,
     'customer' => [
         'full_name' => $displayName,
         'mobile' => m360_profile_mask_mobile($normalized),

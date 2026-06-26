@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'moghare360-v1-api-bootstrap.php';
 require_once dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-otp-helper.php';
+require_once dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-online-request-helper.php';
 
 mogh_api_json_headers();
 
@@ -85,12 +86,14 @@ $extra = [
     'extra_contact_info' => mogh_api_sanitize_string($body['extra_contact_info'] ?? '', 500),
     'job_title' => mogh_api_sanitize_string($body['job_title'] ?? '', 100),
     'birth_date' => mogh_api_sanitize_string($body['birth_date'] ?? '', 20),
-    'source' => mogh_api_sanitize_string($body['source'] ?? 'MIRROR', 80),
+    'source' => M360_ONLINE_REQ_SOURCE_PUBLIC,
+    'customer_flow' => $customerFlow,
+    'otp_verified' => 1,
 ];
 
 $payloadData = array_merge(
-    ['customer_name' => $name, 'mobile' => $mobile, 'vehicle_plate' => $plate, 'service_note' => $description, 'customer_flow' => $customerFlow],
-    array_filter($extra, static fn($v) => $v !== '')
+    ['customer_name' => $name, 'mobile' => $mobile, 'vehicle_plate' => $plate, 'service_note' => $description],
+    array_filter($extra, static fn($v) => $v !== '' && $v !== 0)
 );
 if ($plateParts !== []) {
     $payloadData['plate_parts'] = $plateParts;
@@ -115,7 +118,7 @@ if ($description !== '') {
 }
 $extraLines = [];
 foreach ($extra as $key => $val) {
-    if ($val !== '') {
+    if ($val !== '' && $key !== 'otp_verified') {
         $extraLines[] = $key . ': ' . $val;
     }
 }
@@ -124,7 +127,8 @@ if ($extraLines !== []) {
 }
 $note = mogh_api_sanitize_string(implode("\n\n", $noteParts), 2000);
 $requestType = mogh_api_sanitize_string($body['request_type'] ?? '', 80);
-$sourceChannel = mogh_api_sanitize_string($body['source_channel'] ?? $extra['source'] ?? 'MIRROR', 80);
+$sourceChannel = mogh_api_sanitize_string($body['source_channel'] ?? M360_ONLINE_REQ_SOURCE_PUBLIC, 80);
+$visitDate = mogh_api_sanitize_string($body['visit_date'] ?? '', 20);
 $payloadJson = json_encode($payloadData, JSON_UNESCAPED_UNICODE);
 if ($payloadJson === false) {
     $payloadJson = '{}';
@@ -133,70 +137,48 @@ if ($payloadJson === false) {
 $endpoint = '/api/customer/request';
 $conn = mogh_tenant_db_connect();
 
-function mogh_api_table_has_column($conn, string $table, string $column): bool
-{
-    if (!is_resource($conn)) {
-        return false;
-    }
-    $sql = "SELECT COUNT(*) AS c FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='dbo' AND TABLE_NAME=? AND COLUMN_NAME=?";
-    $stmt = @odbc_prepare($conn, $sql);
-    if ($stmt === false || !@odbc_execute($stmt, [$table, $column])) {
-        return false;
-    }
-    $row = odbc_fetch_array($stmt);
-    return $row !== false && (int)($row['c'] ?? 0) > 0;
-}
-
 try {
-    $hasPayload = mogh_api_table_has_column($conn, 'erp_customer_online_requests', 'request_payload_json');
-    $hasReqType = mogh_api_table_has_column($conn, 'erp_customer_online_requests', 'request_type');
+    $insert = m360_online_req_insert($conn, $tenant['company_id'], [
+        'customer_name' => $name,
+        'mobile' => $mobile,
+        'vehicle_plate' => $plate,
+        'service_note' => $note,
+        'request_type' => $requestType,
+        'source_channel' => $sourceChannel,
+        'request_payload_json' => $payloadJson,
+        'visit_date' => $visitDate,
+    ]);
 
-    if ($hasPayload && $hasReqType) {
-        $sql = 'INSERT INTO dbo.erp_customer_online_requests
-            (company_id, customer_name, mobile, vehicle_plate, service_note, request_status, source_channel, request_type, request_payload_json)
-            VALUES (?, ?, ?, ?, ?, N\'PENDING\', ?, ?, ?)';
-        $params = [$tenant['company_id'], $name, $mobile, $plate, $note, $sourceChannel, $requestType, $payloadJson];
-    } elseif ($hasPayload) {
-        $sql = 'INSERT INTO dbo.erp_customer_online_requests
-            (company_id, customer_name, mobile, vehicle_plate, service_note, request_status, source_channel, request_payload_json)
-            VALUES (?, ?, ?, ?, ?, N\'PENDING\', ?, ?)';
-        $params = [$tenant['company_id'], $name, $mobile, $plate, $note, $sourceChannel, $payloadJson];
-    } else {
-        $sql = 'INSERT INTO dbo.erp_customer_online_requests
-            (company_id, customer_name, mobile, vehicle_plate, service_note, request_status, source_channel)
-            VALUES (?, ?, ?, ?, ?, N\'PENDING\', ?)';
-        $params = [$tenant['company_id'], $name, $mobile, $plate, $note, $sourceChannel];
-    }
-
-    $stmt = odbc_prepare($conn, $sql);
-    if ($stmt === false || !@odbc_execute($stmt, $params)) {
+    if (!$insert['ok'] || $insert['online_request_id'] < 1) {
         throw new RuntimeException('ثبت درخواست ناموفق بود.');
     }
 
-    $idSql = 'SELECT CAST(SCOPE_IDENTITY() AS BIGINT) AS new_id';
-    $idRes = @odbc_exec($conn, $idSql);
-    $newId = 0;
-    if ($idRes !== false && ($row = odbc_fetch_array($idRes))) {
-        $newId = (int)($row['new_id'] ?? 0);
-    }
+    $newId = $insert['online_request_id'];
 
     $mirrorSql = 'INSERT INTO dbo.erp_mirror_requests (company_id, request_type, payload_json, response_status)
                   VALUES (?, N\'CUSTOMER_REQUEST\', ?, 201)';
-    $payload = json_encode([
+    $mirrorPayload = json_encode([
         'online_request_id' => $newId,
         'customer_name' => $name,
-        'request_payload_json' => $hasPayload ? json_decode($payloadJson, true) : null,
+        'status' => $insert['status'],
+        'profile_required' => $insert['profile_required'],
+        'customer_id' => $insert['customer_id'],
+        'vehicle_id' => $insert['vehicle_id'],
     ], JSON_UNESCAPED_UNICODE);
     $mStmt = odbc_prepare($conn, $mirrorSql);
     if ($mStmt !== false) {
-        @odbc_execute($mStmt, [$tenant['company_id'], $payload]);
+        @odbc_execute($mStmt, [$tenant['company_id'], $mirrorPayload]);
     }
 
     mogh_api_log_request($conn, $tenant['company_id'], $endpoint, 'POST', 201, 'customer_request');
     mogh_api_ok('درخواست مشتری ثبت شد.', [
         'online_request_id' => $newId,
         'company_id' => $tenant['company_id'],
-        'status' => 'PENDING',
+        'status' => $insert['status'],
+        'profile_required' => $insert['profile_required'],
+        'customer_id' => $insert['customer_id'],
+        'vehicle_id' => $insert['vehicle_id'],
+        'otp_verified' => true,
     ], 201);
 } catch (Throwable) {
     mogh_api_log_request($conn, $tenant['company_id'], $endpoint, 'POST', 500, 'customer_request_failed');
