@@ -3,6 +3,101 @@ declare(strict_types=1);
 
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'mirror-api-client.php';
 
+/**
+ * @return array{jy:int,jm:int,jd:int}
+ */
+function m360_gregorian_to_jalali(int $gy, int $gm, int $gd): array
+{
+    $gdm = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334];
+    $gy2 = ($gm > 2) ? ($gy + 1) : $gy;
+    $days = (int)(355666 + (365 * $gy) + intdiv($gy2 + 3, 4) - intdiv($gy2 + 99, 100) + intdiv($gy2 + 399, 400) + $gd + $gdm[$gm - 1]);
+    $jy = -1595 + (33 * intdiv($days, 12053));
+    $days %= 12053;
+    $jy += 4 * intdiv($days, 1461);
+    $days %= 1461;
+    if ($days > 365) {
+        $jy += intdiv($days - 1, 365);
+        $days = ($days - 1) % 365;
+    }
+    if ($days < 186) {
+        $jm = 1 + intdiv($days, 31);
+        $jd = 1 + ($days % 31);
+    } else {
+        $jm = 7 + intdiv($days - 186, 30);
+        $jd = 1 + (($days - 186) % 30);
+    }
+    return ['jy' => $jy, 'jm' => $jm, 'jd' => $jd];
+}
+
+function m360_persian_weekday(DateTimeImmutable $dt): string
+{
+    $map = [
+        0 => 'یکشنبه',
+        1 => 'دوشنبه',
+        2 => 'سه‌شنبه',
+        3 => 'چهارشنبه',
+        4 => 'پنج‌شنبه',
+        5 => 'جمعه',
+        6 => 'شنبه',
+    ];
+    return $map[(int)$dt->format('w')] ?? '';
+}
+
+/** @return list<string> */
+function m360_jalali_month_names(): array
+{
+    return ['فروردین', 'اردیبهشت', 'خرداد', 'تیر', 'مرداد', 'شهریور', 'مهر', 'آبان', 'آذر', 'دی', 'بهمن', 'اسفند'];
+}
+
+$tehranTz = new DateTimeZone('Asia/Tehran');
+$todayGregorian = new DateTimeImmutable('today', $tehranTz);
+$todayGy = (int)$todayGregorian->format('Y');
+$todayGm = (int)$todayGregorian->format('n');
+$todayGd = (int)$todayGregorian->format('j');
+$todayJalali = m360_gregorian_to_jalali($todayGy, $todayGm, $todayGd);
+$currentJalaliYear = $todayJalali['jy'];
+$jalaliMonthNames = m360_jalali_month_names();
+
+/** @var list<array{gregorian:string,jalali:string,label:string,weekday:string,day:int,month:string,is_today:bool}> */
+$visitCalendarDays = [];
+for ($offset = 0; $offset <= 30; $offset++) {
+    $gDay = $todayGregorian->modify('+' . $offset . ' days');
+    $jy = (int)$gDay->format('Y');
+    $jm = (int)$gDay->format('n');
+    $jd = (int)$gDay->format('j');
+    $j = m360_gregorian_to_jalali($jy, $jm, $jd);
+    $gregorianIso = $gDay->format('Y-m-d');
+    $jalaliStr = sprintf('%d/%02d/%02d', $j['jy'], $j['jm'], $j['jd']);
+    $weekday = m360_persian_weekday($gDay);
+    $visitCalendarDays[] = [
+        'gregorian' => $gregorianIso,
+        'jalali' => $jalaliStr,
+        'label' => $weekday . ' ' . $jalaliStr,
+        'weekday' => $weekday,
+        'day' => $j['jd'],
+        'month' => $jalaliMonthNames[$j['jm'] - 1] ?? '',
+        'is_today' => $offset === 0,
+    ];
+}
+
+/** @var list<array{value:string,label:string,jy:int,gy:int}> */
+$vehicleYearOptions = [];
+for ($i = 0; $i <= 20; $i++) {
+    $gy = $todayGy - $i;
+    $j = m360_gregorian_to_jalali($gy, 6, 15);
+    $jy = $j['jy'];
+    $vehicleYearOptions[] = [
+        'value' => $jy . ' - ' . $gy,
+        'label' => $jy . ' شمسی / ' . $gy . ' میلادی',
+        'jy' => $jy,
+        'gy' => $gy,
+    ];
+}
+
+$birthYearSelected = '';
+$birthMonthSelected = '';
+$birthDaySelected = '';
+
 $result = null;
 $input = [
     'full_name' => '',
@@ -51,6 +146,23 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     ];
     foreach ($digitKeys as $key) {
         $input[$key] = trim((string)($_POST[$key] ?? ''));
+    }
+
+    $birthYearSelected = trim((string)($_POST['birth_year_jalali'] ?? ''));
+    $birthMonthSelected = trim((string)($_POST['birth_month_jalali'] ?? ''));
+    $birthDaySelected = trim((string)($_POST['birth_day_jalali'] ?? ''));
+    if ($birthYearSelected !== '' && $birthMonthSelected !== '' && $birthDaySelected !== '') {
+        $input['birth_date'] = sprintf(
+            '%s/%02d/%02d',
+            $birthYearSelected,
+            (int)$birthMonthSelected,
+            (int)$birthDaySelected
+        );
+    }
+
+    $allowedVisitDates = array_column($visitCalendarDays, 'gregorian');
+    if ($input['visit_date'] !== '' && !in_array($input['visit_date'], $allowedVisitDates, true)) {
+        $input['visit_date'] = '';
     }
 
     if ($input['plate_left_2_digits'] === '' && $input['plate_first_digit_1'] !== '' && $input['plate_first_digit_2'] !== '') {
@@ -129,6 +241,25 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     $result = mirror_api_customer_request($payload);
 }
 
+if ($input['birth_date'] !== '' && preg_match('/^(\d{4})\/(\d{1,2})\/(\d{1,2})$/', $input['birth_date'], $birthParts)) {
+    $birthYearSelected = $birthParts[1];
+    $birthMonthSelected = (string)(int)$birthParts[2];
+    $birthDaySelected = (string)(int)$birthParts[3];
+}
+
+$visitDateDisplay = '';
+if ($input['visit_date'] !== '') {
+    foreach ($visitCalendarDays as $day) {
+        if ($day['gregorian'] === $input['visit_date']) {
+            $visitDateDisplay = $day['label'];
+            break;
+        }
+    }
+    if ($visitDateDisplay === '') {
+        $visitDateDisplay = $input['visit_date'];
+    }
+}
+
 mirror_render_head('ثبت درخواست مشتری', 'customer');
 ?>
 <section class="m360-hero">
@@ -186,8 +317,37 @@ mirror_render_head('ثبت درخواست مشتری', 'customer');
         <label for="job_title">شغل</label>
         <input type="text" id="job_title" name="job_title" maxlength="100" value="<?= mirror_h($input['job_title']) ?>">
 
-        <label for="birth_date">تاریخ تولد</label>
-        <input type="date" id="birth_date" name="birth_date" value="<?= mirror_h($input['birth_date']) ?>">
+        <label>تاریخ تولد</label>
+        <div class="m360-birthdate-row">
+            <div class="m360-birthdate-col">
+                <label for="birth_year_jalali" class="m360-sub-label">سال</label>
+                <select id="birth_year_jalali" name="birth_year_jalali">
+                    <option value="">انتخاب سال</option>
+                    <?php for ($y = $currentJalaliYear; $y >= 1310; $y--): ?>
+                        <option value="<?= $y ?>" <?= $birthYearSelected === (string)$y ? 'selected' : '' ?>><?= $y ?></option>
+                    <?php endfor; ?>
+                </select>
+            </div>
+            <div class="m360-birthdate-col">
+                <label for="birth_month_jalali" class="m360-sub-label">ماه</label>
+                <select id="birth_month_jalali" name="birth_month_jalali">
+                    <option value="">انتخاب ماه</option>
+                    <?php foreach ($jalaliMonthNames as $mi => $monthName): ?>
+                        <option value="<?= $mi + 1 ?>" <?= $birthMonthSelected === (string)($mi + 1) ? 'selected' : '' ?>><?= mirror_h($monthName) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="m360-birthdate-col">
+                <label for="birth_day_jalali" class="m360-sub-label">روز</label>
+                <select id="birth_day_jalali" name="birth_day_jalali">
+                    <option value="">انتخاب روز</option>
+                    <?php for ($d = 1; $d <= 31; $d++): ?>
+                        <option value="<?= $d ?>" <?= $birthDaySelected === (string)$d ? 'selected' : '' ?>><?= $d ?></option>
+                    <?php endfor; ?>
+                </select>
+            </div>
+        </div>
+        <input type="hidden" id="birth_date" name="birth_date" value="<?= mirror_h($input['birth_date']) ?>">
 
         <h3 class="m360-section-title">اطلاعات خودرو</h3>
 
@@ -210,70 +370,92 @@ mirror_render_head('ثبت درخواست مشتری', 'customer');
         <label for="vehicle_year_pair">سال تولید <span class="m360-req">*</span></label>
         <select id="vehicle_year_pair" name="vehicle_year_pair" required>
             <option value="">انتخاب سال</option>
-            <?php if ($input['vehicle_year_pair'] !== ''): ?>
-                <option value="<?= mirror_h($input['vehicle_year_pair']) ?>" selected><?= mirror_h($input['vehicle_year_pair']) ?></option>
-            <?php endif; ?>
+            <?php foreach ($vehicleYearOptions as $yearOpt): ?>
+                <option value="<?= mirror_h($yearOpt['value']) ?>" <?= $input['vehicle_year_pair'] === $yearOpt['value'] ? 'selected' : '' ?>>
+                    <?= mirror_h($yearOpt['label']) ?>
+                </option>
+            <?php endforeach; ?>
         </select>
 
-        <label>پلاک خودرو <span class="m360-req">*</span></label>
+        <label class="iran-plate-field-label">پلاک خودرو <span class="m360-req">*</span></label>
+        <p class="iran-plate-field-hint">از چپ به راست: دو رقم، حرف، سه رقم، سپس کد ایران</p>
         <div class="iran-plate-widget" aria-label="پلاک خودرو">
-            <div class="iran-plate-ir-band" aria-hidden="true"><span>IR</span><span>🇮🇷</span></div>
-            <div class="iran-plate-main">
-                <select class="plate-digit-select" id="plate_first_digit_1" name="plate_first_digit_1" required aria-label="رقم اول پلاک">
-                    <option value="">-</option>
-                    <?php for ($d = 1; $d <= 9; $d++): ?>
-                        <option value="<?= $d ?>"><?= $d ?></option>
-                    <?php endfor; ?>
-                </select>
-                <select class="plate-digit-select" id="plate_first_digit_2" name="plate_first_digit_2" required aria-label="رقم دوم پلاک">
-                    <option value="">-</option>
-                    <?php for ($d = 1; $d <= 9; $d++): ?>
-                        <option value="<?= $d ?>"><?= $d ?></option>
-                    <?php endfor; ?>
-                </select>
-                <select class="plate-letter-select" id="plate_letter" name="plate_letter" required aria-label="حرف پلاک">
-                    <option value="">حرف</option>
-                    <?php foreach ($plateLetters as $letter): ?>
-                        <option value="<?= mirror_h($letter) ?>" <?= $input['plate_letter'] === $letter ? 'selected' : '' ?>><?= mirror_h($letter) ?></option>
-                    <?php endforeach; ?>
-                </select>
-                <select class="plate-digit-select" id="plate_middle_digit_1" name="plate_middle_digit_1" required aria-label="رقم اول سه‌رقمی">
-                    <option value="">-</option>
-                    <?php for ($d = 1; $d <= 9; $d++): ?>
-                        <option value="<?= $d ?>"><?= $d ?></option>
-                    <?php endfor; ?>
-                </select>
-                <select class="plate-digit-select" id="plate_middle_digit_2" name="plate_middle_digit_2" required aria-label="رقم دوم سه‌رقمی">
-                    <option value="">-</option>
-                    <?php for ($d = 1; $d <= 9; $d++): ?>
-                        <option value="<?= $d ?>"><?= $d ?></option>
-                    <?php endfor; ?>
-                </select>
-                <select class="plate-digit-select" id="plate_middle_digit_3" name="plate_middle_digit_3" required aria-label="رقم سوم سه‌رقمی">
-                    <option value="">-</option>
-                    <?php for ($d = 1; $d <= 9; $d++): ?>
-                        <option value="<?= $d ?>"><?= $d ?></option>
-                    <?php endfor; ?>
-                </select>
+            <div class="iran-plate-ir-band" aria-hidden="true">
+                <span class="iran-plate-ir-band__ir">IR</span>
+                <span class="iran-plate-ir-band__flag" aria-hidden="true">🇮🇷</span>
             </div>
-            <div class="iran-plate-region-box">
+            <div class="iran-plate-body">
+                <div class="iran-plate-group iran-plate-group--series" aria-label="دو رقم اول">
+                    <span class="iran-plate-group__label">۲ رقم</span>
+                    <div class="iran-plate-group__inputs">
+                        <select class="plate-digit-select" id="plate_first_digit_1" name="plate_first_digit_1" required aria-label="رقم اول پلاک">
+                            <option value="">-</option>
+                            <?php for ($d = 0; $d <= 9; $d++): ?>
+                                <option value="<?= $d ?>"><?= $d ?></option>
+                            <?php endfor; ?>
+                        </select>
+                        <select class="plate-digit-select" id="plate_first_digit_2" name="plate_first_digit_2" required aria-label="رقم دوم پلاک">
+                            <option value="">-</option>
+                            <?php for ($d = 0; $d <= 9; $d++): ?>
+                                <option value="<?= $d ?>"><?= $d ?></option>
+                            <?php endfor; ?>
+                        </select>
+                    </div>
+                </div>
+                <span class="iran-plate-sep" aria-hidden="true"></span>
+                <div class="iran-plate-group iran-plate-group--letter" aria-label="حرف پلاک">
+                    <span class="iran-plate-group__label">حرف</span>
+                    <select class="plate-letter-select" id="plate_letter" name="plate_letter" required aria-label="حرف پلاک">
+                        <option value="">حرف</option>
+                        <?php foreach ($plateLetters as $letter): ?>
+                            <option value="<?= mirror_h($letter) ?>" <?= $input['plate_letter'] === $letter ? 'selected' : '' ?>><?= mirror_h($letter) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <span class="iran-plate-sep" aria-hidden="true"></span>
+                <div class="iran-plate-group iran-plate-group--middle" aria-label="سه رقم وسط">
+                    <span class="iran-plate-group__label">۳ رقم</span>
+                    <div class="iran-plate-group__inputs">
+                        <select class="plate-digit-select" id="plate_middle_digit_1" name="plate_middle_digit_1" required aria-label="رقم اول سه‌رقمی">
+                            <option value="">-</option>
+                            <?php for ($d = 0; $d <= 9; $d++): ?>
+                                <option value="<?= $d ?>"><?= $d ?></option>
+                            <?php endfor; ?>
+                        </select>
+                        <select class="plate-digit-select" id="plate_middle_digit_2" name="plate_middle_digit_2" required aria-label="رقم دوم سه‌رقمی">
+                            <option value="">-</option>
+                            <?php for ($d = 0; $d <= 9; $d++): ?>
+                                <option value="<?= $d ?>"><?= $d ?></option>
+                            <?php endfor; ?>
+                        </select>
+                        <select class="plate-digit-select" id="plate_middle_digit_3" name="plate_middle_digit_3" required aria-label="رقم سوم سه‌رقمی">
+                            <option value="">-</option>
+                            <?php for ($d = 0; $d <= 9; $d++): ?>
+                                <option value="<?= $d ?>"><?= $d ?></option>
+                            <?php endfor; ?>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <div class="iran-plate-region-box" aria-label="کد ایران">
                 <span class="iran-plate-region-box__label">ایران</span>
                 <div class="iran-plate-region-box__digits">
-                    <select class="plate-digit-select" id="plate_region_digit_1" name="plate_region_digit_1" required aria-label="رقم اول منطقه">
+                    <select class="plate-digit-select" id="plate_region_digit_1" name="plate_region_digit_1" required aria-label="رقم اول کد ایران">
                         <option value="">-</option>
-                        <?php for ($d = 1; $d <= 9; $d++): ?>
+                        <?php for ($d = 0; $d <= 9; $d++): ?>
                             <option value="<?= $d ?>"><?= $d ?></option>
                         <?php endfor; ?>
                     </select>
-                    <select class="plate-digit-select" id="plate_region_digit_2" name="plate_region_digit_2" required aria-label="رقم دوم منطقه">
+                    <select class="plate-digit-select" id="plate_region_digit_2" name="plate_region_digit_2" required aria-label="رقم دوم کد ایران">
                         <option value="">-</option>
-                        <?php for ($d = 1; $d <= 9; $d++): ?>
+                        <?php for ($d = 0; $d <= 9; $d++): ?>
                             <option value="<?= $d ?>"><?= $d ?></option>
                         <?php endfor; ?>
                     </select>
                 </div>
             </div>
         </div>
+        <p id="plate_preview" class="iran-plate-preview" aria-live="polite">پس از تکمیل، پلاک اینجا نمایش داده می‌شود</p>
         <input type="hidden" id="plate_left_2_digits" name="plate_left_2_digits" value="<?= mirror_h($input['plate_left_2_digits']) ?>">
         <input type="hidden" id="plate_middle_3_digits" name="plate_middle_3_digits" value="<?= mirror_h($input['plate_middle_3_digits']) ?>">
         <input type="hidden" id="plate_region_2_digits" name="plate_region_2_digits" value="<?= mirror_h($input['plate_region_2_digits']) ?>">
@@ -295,13 +477,44 @@ mirror_render_head('ثبت درخواست مشتری', 'customer');
             <?php endforeach; ?>
         </select>
 
-        <label for="visit_date">تاریخ مراجعه <span class="m360-req">*</span></label>
-        <input type="hidden" id="visit_date" name="visit_date" required value="<?= mirror_h($input['visit_date']) ?>">
-        <div id="visit_date_display" class="m360-muted"><?= $input['visit_date'] !== '' ? 'تاریخ انتخاب‌شده: ' . mirror_h($input['visit_date']) : 'روز مورد نظر را از تقویم انتخاب کنید.' ?></div>
-        <div id="visit_cal_toolbar" class="m360-cal-toolbar" aria-label="ناوبری تقویم"></div>
-        <div id="visit_cal_weekdays" class="m360-cal-weekdays" aria-hidden="true"></div>
-        <div id="visit_date_grid" class="m360-cal-grid" aria-label="تقویم شمسی"></div>
-        <p id="visit_booking_hint" class="m360-booking-hint">انتخاب نوبت فقط از فردا تا ۷ روز آینده فعال است.</p>
+        <label for="visit_date_display">تاریخ مراجعه <span class="m360-req">*</span></label>
+        <div class="m360-date-field">
+            <input
+                type="text"
+                id="visit_date_display"
+                class="m360-date-display<?= $visitDateDisplay !== '' ? ' m360-date-display--filled' : '' ?>"
+                readonly
+                placeholder="روز مراجعه را از تقویم انتخاب کنید"
+                value="<?= mirror_h($visitDateDisplay) ?>"
+                aria-describedby="visit_date_hint"
+            >
+            <input type="hidden" id="visit_date" name="visit_date" required value="<?= mirror_h($input['visit_date']) ?>">
+            <p id="visit_date_hint" class="m360-jalali-datepicker__hint">انتخاب مراجعه فقط از امروز تا ۳۰ روز آینده امکان‌پذیر است</p>
+            <div class="m360-server-calendar" id="m360_server_calendar" role="group" aria-label="تقویم مراجعه">
+                <?php foreach ($visitCalendarDays as $day): ?>
+                    <?php
+                    $btnClass = 'm360-calendar-day';
+                    if ($day['is_today']) {
+                        $btnClass .= ' m360-calendar-day--today';
+                    }
+                    if ($input['visit_date'] !== '' && $input['visit_date'] === $day['gregorian']) {
+                        $btnClass .= ' m360-calendar-day--selected';
+                    }
+                    ?>
+                    <button
+                        type="button"
+                        class="<?= mirror_h($btnClass) ?>"
+                        data-gregorian="<?= mirror_h($day['gregorian']) ?>"
+                        data-jalali="<?= mirror_h($day['jalali']) ?>"
+                        data-label="<?= mirror_h($day['label']) ?>"
+                    >
+                        <span class="m360-calendar-day__weekday"><?= mirror_h($day['weekday']) ?></span>
+                        <strong class="m360-calendar-day__num"><?= (int)$day['day'] ?></strong>
+                        <small class="m360-calendar-day__month"><?= mirror_h($day['month']) ?></small>
+                    </button>
+                <?php endforeach; ?>
+            </div>
+        </div>
         <p id="visit_time_hint" class="m360-visit-hint" style="display:none">ساعت حضور الزاما بین 8:30 الی 11:30 می‌باشد.</p>
 
         <label for="request_description">شرح درخواست <span class="m360-req">*</span></label>

@@ -73,6 +73,7 @@ $required = [
     'assets/js/iran-provinces-cities.js',
     'assets/js/vehicle-brand-classes.js',
     'assets/js/customer-form.js',
+    'assets/js/m360-jalali-datepicker.js',
     'mirror-config.example.php',
     'manifest.webmanifest',
     'service-worker.js',
@@ -139,11 +140,22 @@ $results[] = ccd_pass('No api/sync debug endpoints in package', !$syncApiFound);
 $layout = ccd_zip_read($zipPath, 'includes/mirror-layout.php');
 $css = ccd_zip_read($zipPath, 'assets/css/mirror.css') . ccd_zip_read($zipPath, 'assets/css/moghare360-v1-luxury-ui.css');
 $sw = ccd_zip_read($zipPath, 'service-worker.js');
+$customer = ccd_zip_read($zipPath, 'customer-request.php');
+$formJs = ccd_zip_read($zipPath, 'assets/js/customer-form.js');
+$jalaliJs = ccd_zip_read($zipPath, 'assets/js/m360-jalali-datepicker.js');
 $index = ccd_zip_read($zipPath, 'index.php');
 $combined = $layout . $index
-    . ccd_zip_read($zipPath, 'customer-request.php')
+    . $customer
     . ccd_zip_read($zipPath, 'staff-login.php')
     . ccd_zip_read($zipPath, 'owner-login.php');
+
+$results[] = ccd_pass('Customer form: server-rendered visit calendar', str_contains($customer, 'm360_server_calendar') && str_contains($customer, 'm360-calendar-day'));
+$results[] = ccd_pass('Customer form: birth year/month/day selects', str_contains($customer, 'birth_year_jalali') && str_contains($customer, 'birth_month_jalali') && str_contains($customer, 'birth_day_jalali'));
+$results[] = ccd_pass('Customer form: vehicle year jalali/gregorian labels', str_contains($customer, 'شمسی /') && str_contains($customer, 'میلادی'));
+$results[] = ccd_pass('Customer form: Iran plate schematic', str_contains($customer, 'iran-plate-widget') && str_contains($customer, 'plate_first_digit_1'));
+$results[] = ccd_pass('Customer form CSS: server calendar grid', str_contains($css, 'm360-server-calendar'));
+$results[] = ccd_pass('Customer form JS: server calendar click handler', str_contains($formJs, 'initServerVisitCalendar'));
+$results[] = ccd_pass('Optional jalali datepicker asset present', $jalaliJs !== '' && str_contains($jalaliJs, 'm360Jalali'));
 
 $results[] = ccd_pass('meta charset UTF-8 in layout', str_contains($layout, 'charset="UTF-8"') || str_contains($layout, "charset='UTF-8'"));
 $results[] = ccd_pass('html lang=fa dir=rtl', str_contains($layout, 'lang="fa"') && str_contains($layout, 'dir="rtl"'));

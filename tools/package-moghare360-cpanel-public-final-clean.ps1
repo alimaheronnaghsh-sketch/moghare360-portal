@@ -39,6 +39,7 @@ $relativeFiles = @(
     "assets\js\iran-provinces-cities.js",
     "assets\js\vehicle-brand-classes.js",
     "assets\js\customer-form.js",
+    "assets\js\m360-jalali-datepicker.js",
     "api\customer\request.php",
     "api\mirror\health.php"
 )

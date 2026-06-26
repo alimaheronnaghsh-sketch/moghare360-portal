@@ -1,268 +1,80 @@
 /**
- * MOGHARE360 — Customer request form interactions.
+ * MOGHARE360 — Customer request form interactions (server-rendered dates).
  */
 (function () {
   'use strict';
 
-  function toJalali(gy, gm, gd) {
-    var gdm = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334];
-    var jy, jm, jd, gy2, days;
-    gy2 = (gm > 2) ? (gy + 1) : gy;
-    days = 355666 + (365 * gy) + Math.floor((gy2 + 3) / 4) - Math.floor((gy2 + 99) / 100) + Math.floor((gy2 + 399) / 400) + gd + gdm[gm - 1];
-    jy = -1595 + (33 * Math.floor(days / 12053));
-    days %= 12053;
-    jy += 4 * Math.floor(days / 1461);
-    days %= 1461;
-    if (days > 365) {
-      jy += Math.floor((days - 1) / 365);
-      days = (days - 1) % 365;
-    }
-    if (days < 186) {
-      jm = 1 + Math.floor(days / 31);
-      jd = 1 + (days % 31);
-    } else {
-      jm = 7 + Math.floor((days - 186) / 30);
-      jd = 1 + ((days - 186) % 30);
-    }
-    return { jy: jy, jm: jm, jd: jd };
-  }
-
-  function jalaliToGregorian(jy, jm, jd) {
-    jy = parseInt(jy, 10);
-    jm = parseInt(jm, 10);
-    jd = parseInt(jd, 10);
-    var jy2 = jy + 1595;
-    var days = -355668 + (365 * jy2) + Math.floor(jy2 / 33) * 8 + Math.floor(((jy2 % 33) + 3) / 4) + jd + (jm < 7 ? (jm - 1) * 31 : (jm - 7) * 30 + 186);
-    var gy = 400 * Math.floor(days / 146097);
-    days %= 146097;
-    if (days > 36524) {
-      gy += 100 * Math.floor(--days / 36524);
-      days %= 36524;
-      if (days >= 365) {
-        days++;
-      }
-    }
-    gy += 4 * Math.floor(days / 1461);
-    days %= 1461;
-    if (days > 365) {
-      gy += Math.floor((days - 1) / 365);
-      days = (days - 1) % 365;
-    }
-    var gd = days + 1;
-    var salA = [0, 31, ((gy % 4 === 0 && gy % 100 !== 0) || (gy % 400 === 0)) ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-    var gm = 0;
-    for (gm = 1; gm <= 12 && gd > salA[gm]; gm++) {
-      gd -= salA[gm];
-    }
-    return { gy: gy, gm: gm, gd: gd };
-  }
-
-  function pad2(n) {
-    return n < 10 ? '0' + n : String(n);
-  }
-
-  function dateKey(jy, jm, jd) {
-    return jy * 10000 + jm * 100 + jd;
-  }
-
-  function addJalaliDays(jy, jm, jd, days) {
-    var g = jalaliToGregorian(jy, jm, jd);
-    var dt = new Date(g.gy, g.gm - 1, g.gd);
-    dt.setDate(dt.getDate() + days);
-    return toJalali(dt.getFullYear(), dt.getMonth() + 1, dt.getDate());
-  }
-
-  function jalaliMonthLength(jy, jm) {
-    if (jm <= 6) return 31;
-    if (jm <= 11) return 30;
-    var r = jy % 33;
-    var leap = (r === 1 || r === 5 || r === 9 || r === 13 || r === 17 || r === 22 || r === 26 || r === 30);
-    return leap ? 30 : 29;
-  }
-
-  function irWeekday(jy, jm, jd) {
-    var g = jalaliToGregorian(jy, jm, jd);
-    var d = new Date(g.gy, g.gm - 1, g.gd).getDay();
-    return (d + 1) % 7;
-  }
-
-  function populateYearPairs(select) {
+  function bindPersianValidity(select, message) {
     if (!select) return;
-    var now = new Date();
-    var j = toJalali(now.getFullYear(), now.getMonth() + 1, now.getDate());
-    select.innerHTML = '<option value="">انتخاب سال</option>';
-    for (var i = 0; i < 20; i++) {
-      var jy = j.jy - i;
-      var gy = now.getFullYear() - i;
-      var opt = document.createElement('option');
-      opt.value = jy + ' - ' + gy;
-      opt.textContent = jy + ' - ' + gy;
-      select.appendChild(opt);
-    }
+    select.addEventListener('invalid', function (e) {
+      if (e.target.validity.valueMissing) {
+        e.target.setCustomValidity(message || 'لطفاً یک گزینه را انتخاب کنید.');
+      }
+    });
+    select.addEventListener('change', function (e) {
+      e.target.setCustomValidity('');
+    });
+  }
+
+  function chainPlateFocus(ids) {
+    ids.forEach(function (id, index) {
+      var el = document.getElementById(id);
+      if (!el) return;
+      el.addEventListener('change', function () {
+        if (el.value !== '' && index < ids.length - 1) {
+          var next = document.getElementById(ids[index + 1]);
+          if (next) next.focus();
+        }
+      });
+    });
   }
 
   function populateDigitSelect(select) {
     if (!select) return;
     var current = select.value;
     select.innerHTML = '<option value="">-</option>';
-    for (var n = 1; n <= 9; n++) {
+    for (var n = 0; n <= 9; n++) {
       var opt = document.createElement('option');
       opt.value = String(n);
       opt.textContent = String(n);
       select.appendChild(opt);
     }
-    if (current) select.value = current;
+    if (current !== '') select.value = current;
   }
 
-  function initJalaliPicker() {
+  function initServerVisitCalendar() {
     var hidden = document.getElementById('visit_date');
     var display = document.getElementById('visit_date_display');
-    var grid = document.getElementById('visit_date_grid');
-    var toolbar = document.getElementById('visit_cal_toolbar');
-    var weekdays = document.getElementById('visit_cal_weekdays');
-    if (!hidden || !display || !grid || !toolbar || !weekdays) return;
+    var calendar = document.getElementById('m360_server_calendar');
+    if (!hidden || !display || !calendar) return;
 
-    var now = new Date();
-    var today = toJalali(now.getFullYear(), now.getMonth() + 1, now.getDate());
-    var minDate = addJalaliDays(today.jy, today.jm, today.jd, 1);
-    var maxDate = addJalaliDays(today.jy, today.jm, today.jd, 7);
-    var minKey = dateKey(minDate.jy, minDate.jm, minDate.jd);
-    var maxKey = dateKey(maxDate.jy, maxDate.jm, maxDate.jd);
-    var view = { jy: today.jy, jm: today.jm };
-    var monthNames = ['فروردین', 'اردیبهشت', 'خرداد', 'تیر', 'مرداد', 'شهریور', 'مهر', 'آبان', 'آذر', 'دی', 'بهمن', 'اسفند'];
-    var weekdayNames = ['ش', 'ی', 'د', 'س', 'چ', 'پ', 'ج'];
-
-    weekdays.innerHTML = '';
-    weekdayNames.forEach(function (name) {
-      var cell = document.createElement('div');
-      cell.textContent = name;
-      weekdays.appendChild(cell);
+    calendar.querySelectorAll('.m360-calendar-day').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        hidden.value = btn.getAttribute('data-gregorian') || '';
+        display.value = btn.getAttribute('data-label') || '';
+        display.classList.add('m360-date-display--filled');
+        display.classList.remove('m360-date-display--error');
+        calendar.querySelectorAll('.m360-calendar-day').forEach(function (el) {
+          el.classList.remove('m360-calendar-day--selected');
+        });
+        btn.classList.add('m360-calendar-day--selected');
+      });
     });
+  }
 
-    function isSelectable(jy, jm, jd) {
-      var key = dateKey(jy, jm, jd);
-      return key >= minKey && key <= maxKey;
+  function syncBirthDateHidden() {
+    var y = document.getElementById('birth_year_jalali');
+    var m = document.getElementById('birth_month_jalali');
+    var d = document.getElementById('birth_day_jalali');
+    var hidden = document.getElementById('birth_date');
+    if (!y || !m || !d || !hidden) return;
+    if (y.value && m.value && d.value) {
+      var mm = String(m.value).padStart(2, '0');
+      var dd = String(d.value).padStart(2, '0');
+      hidden.value = y.value + '/' + mm + '/' + dd;
+    } else {
+      hidden.value = '';
     }
-
-    function shiftMonth(delta) {
-      view.jm += delta;
-      if (view.jm > 12) {
-        view.jm = 1;
-        view.jy++;
-      } else if (view.jm < 1) {
-        view.jm = 12;
-        view.jy--;
-      }
-      render();
-    }
-
-    function shiftYear(delta) {
-      view.jy += delta;
-      render();
-    }
-
-    function renderToolbar() {
-      toolbar.innerHTML = '';
-      var prevYear = document.createElement('button');
-      prevYear.type = 'button';
-      prevYear.textContent = '« سال قبل';
-      prevYear.addEventListener('click', function () { shiftYear(-1); });
-
-      var prevMonth = document.createElement('button');
-      prevMonth.type = 'button';
-      prevMonth.textContent = '‹ ماه قبل';
-      prevMonth.addEventListener('click', function () { shiftMonth(-1); });
-
-      var title = document.createElement('span');
-      title.textContent = monthNames[view.jm - 1] + ' ' + view.jy;
-
-      var nextMonth = document.createElement('button');
-      nextMonth.type = 'button';
-      nextMonth.textContent = 'ماه بعد ›';
-      nextMonth.addEventListener('click', function () { shiftMonth(1); });
-
-      var nextYear = document.createElement('button');
-      nextYear.type = 'button';
-      nextYear.textContent = 'سال بعد »';
-      nextYear.addEventListener('click', function () { shiftYear(1); });
-
-      toolbar.appendChild(prevYear);
-      toolbar.appendChild(prevMonth);
-      toolbar.appendChild(title);
-      toolbar.appendChild(nextMonth);
-      toolbar.appendChild(nextYear);
-    }
-
-    function render() {
-      renderToolbar();
-      grid.innerHTML = '';
-
-      var daysInMonth = jalaliMonthLength(view.jy, view.jm);
-      var startOffset = irWeekday(view.jy, view.jm, 1);
-      var prevMonth = view.jm === 1 ? 12 : view.jm - 1;
-      var prevYear = view.jm === 1 ? view.jy - 1 : view.jy;
-      var prevDays = jalaliMonthLength(prevYear, prevMonth);
-
-      var totalCells = Math.ceil((startOffset + daysInMonth) / 7) * 7;
-      for (var cell = 0; cell < totalCells; cell++) {
-        var dayNum;
-        var cellJy = view.jy;
-        var cellJm = view.jm;
-        var outside = false;
-
-        if (cell < startOffset) {
-          dayNum = prevDays - startOffset + cell + 1;
-          cellJm = prevMonth;
-          cellJy = prevYear;
-          outside = true;
-        } else if (cell >= startOffset + daysInMonth) {
-          dayNum = cell - startOffset - daysInMonth + 1;
-          cellJm = view.jm === 12 ? 1 : view.jm + 1;
-          cellJy = view.jm === 12 ? view.jy + 1 : view.jy;
-          outside = true;
-        } else {
-          dayNum = cell - startOffset + 1;
-        }
-
-        var btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'm360-cal-day';
-        btn.textContent = String(dayNum);
-        if (outside) {
-          btn.classList.add('outside-month');
-        }
-
-        var selectable = isSelectable(cellJy, cellJm, dayNum);
-        if (selectable) {
-          btn.classList.add('available');
-        } else {
-          btn.disabled = true;
-        }
-
-        var selectedVal = hidden.value;
-        if (selectedVal) {
-          var parts = selectedVal.split('/');
-          if (parts.length === 3 && parseInt(parts[0], 10) === cellJy && parseInt(parts[1], 10) === cellJm && parseInt(parts[2], 10) === dayNum) {
-            btn.classList.add('selected');
-          }
-        }
-
-        if (selectable) {
-          (function (jy, jm, jd, button) {
-            button.addEventListener('click', function () {
-              hidden.value = jy + '/' + pad2(jm) + '/' + pad2(jd);
-              display.textContent = 'تاریخ انتخاب‌شده: ' + hidden.value;
-              grid.querySelectorAll('.m360-cal-day').forEach(function (el) { el.classList.remove('selected'); });
-              button.classList.add('selected');
-            });
-          })(cellJy, cellJm, dayNum, btn);
-        }
-
-        grid.appendChild(btn);
-      }
-    }
-
-    render();
   }
 
   function updateVisitHint() {
@@ -285,36 +97,29 @@
     var mid = document.getElementById('plate_middle_3_digits');
     var region = document.getElementById('plate_region_2_digits');
     var hidden = document.getElementById('plate_display');
+    var preview = document.getElementById('plate_preview');
     if (!d1 || !d2 || !letter || !m1 || !m2 || !m3 || !r1 || !r2 || !left || !mid || !region || !hidden) return;
 
-    if (d1.value && d2.value) {
+    if (d1.value !== '' && d2.value !== '') {
       left.value = d1.value + d2.value;
     }
-    if (m1.value && m2.value && m3.value) {
+    if (m1.value !== '' && m2.value !== '' && m3.value !== '') {
       mid.value = m1.value + m2.value + m3.value;
     }
-    if (r1.value && r2.value) {
+    if (r1.value !== '' && r2.value !== '') {
       region.value = r1.value + r2.value;
     }
 
     if (left.value && letter.value && mid.value && region.value) {
       hidden.value = left.value + ' ' + letter.value + ' ' + mid.value + ' ایران ' + region.value;
+      if (preview) {
+        preview.textContent = hidden.value;
+        preview.classList.add('iran-plate-preview--filled');
+      }
+    } else if (preview) {
+      preview.textContent = 'پس از تکمیل، پلاک اینجا نمایش داده می‌شود';
+      preview.classList.remove('iran-plate-preview--filled');
     }
-  }
-
-  function validateVisitDate() {
-    var hidden = document.getElementById('visit_date');
-    if (!hidden || hidden.value === '') return false;
-    var now = new Date();
-    var today = toJalali(now.getFullYear(), now.getMonth() + 1, now.getDate());
-    var minDate = addJalaliDays(today.jy, today.jm, today.jd, 1);
-    var maxDate = addJalaliDays(today.jy, today.jm, today.jd, 7);
-    var minKey = dateKey(minDate.jy, minDate.jm, minDate.jd);
-    var maxKey = dateKey(maxDate.jy, maxDate.jm, maxDate.jd);
-    var parts = hidden.value.split('/');
-    if (parts.length !== 3) return false;
-    var key = dateKey(parseInt(parts[0], 10), parseInt(parts[1], 10), parseInt(parts[2], 10));
-    return key >= minKey && key <= maxKey;
   }
 
   document.addEventListener('DOMContentLoaded', function () {
@@ -324,6 +129,8 @@
       m360PopulateProvinces(province);
       city.disabled = true;
       province.addEventListener('change', function () { m360PopulateCities(province, city); });
+      bindPersianValidity(province, 'لطفاً استان را انتخاب کنید.');
+      bindPersianValidity(city, 'لطفاً شهر را انتخاب کنید.');
     }
 
     var brand = document.getElementById('vehicle_brand');
@@ -332,19 +139,45 @@
       m360PopulateVehicleBrands(brand);
       vclass.disabled = true;
       brand.addEventListener('change', function () { m360PopulateVehicleClasses(brand, vclass); });
+      bindPersianValidity(brand, 'لطفاً برند خودرو را انتخاب کنید.');
+      bindPersianValidity(vclass, 'لطفاً کلاس / مدل خودرو را انتخاب کنید.');
     }
 
-    populateYearPairs(document.getElementById('vehicle_year_pair'));
+    bindPersianValidity(document.getElementById('vehicle_year_pair'), 'لطفاً سال تولید خودرو را انتخاب کنید.');
+    bindPersianValidity(document.getElementById('request_type'), 'لطفاً نوع درخواست را انتخاب کنید.');
 
-    [
-      'plate_first_digit_1', 'plate_first_digit_2',
+    ['birth_year_jalali', 'birth_month_jalali', 'birth_day_jalali'].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) el.addEventListener('change', syncBirthDateHidden);
+    });
+    syncBirthDateHidden();
+
+    var plateIds = [
+      'plate_first_digit_1', 'plate_first_digit_2', 'plate_letter',
       'plate_middle_digit_1', 'plate_middle_digit_2', 'plate_middle_digit_3',
       'plate_region_digit_1', 'plate_region_digit_2'
-    ].forEach(function (id) {
+    ];
+    plateIds.forEach(function (id) {
       populateDigitSelect(document.getElementById(id));
     });
+    plateIds.forEach(function (id) {
+      var labels = {
+        plate_first_digit_1: 'رقم اول پلاک را انتخاب کنید.',
+        plate_first_digit_2: 'رقم دوم پلاک را انتخاب کنید.',
+        plate_letter: 'حرف پلاک را انتخاب کنید.',
+        plate_middle_digit_1: 'رقم اول بخش سه‌رقمی را انتخاب کنید.',
+        plate_middle_digit_2: 'رقم دوم بخش سه‌رقمی را انتخاب کنید.',
+        plate_middle_digit_3: 'رقم سوم بخش سه‌رقمی را انتخاب کنید.',
+        plate_region_digit_1: 'رقم اول کد ایران را انتخاب کنید.',
+        plate_region_digit_2: 'رقم دوم کد ایران را انتخاب کنید.'
+      };
+      bindPersianValidity(document.getElementById(id), labels[id]);
+      var el = document.getElementById(id);
+      if (el) el.addEventListener('change', buildPlateDisplay);
+    });
+    chainPlateFocus(plateIds);
 
-    initJalaliPicker();
+    initServerVisitCalendar();
 
     var requestType = document.getElementById('request_type');
     if (requestType) {
@@ -352,24 +185,20 @@
       updateVisitHint();
     }
 
-    [
-      'plate_first_digit_1', 'plate_first_digit_2', 'plate_letter',
-      'plate_middle_digit_1', 'plate_middle_digit_2', 'plate_middle_digit_3',
-      'plate_region_digit_1', 'plate_region_digit_2'
-    ].forEach(function (id) {
-      var el = document.getElementById(id);
-      if (el) el.addEventListener('change', buildPlateDisplay);
-    });
-
     var form = document.querySelector('form.m360-customer-form');
     if (form) {
       form.addEventListener('submit', function (e) {
         buildPlateDisplay();
-        if (!validateVisitDate()) {
+        syncBirthDateHidden();
+
+        var visitHidden = document.getElementById('visit_date');
+        var visitDisplay = document.getElementById('visit_date_display');
+        if (!visitHidden || visitHidden.value === '') {
           e.preventDefault();
-          var display = document.getElementById('visit_date_display');
-          if (display) {
-            display.textContent = 'لطفاً یک تاریخ مجاز از تقویم انتخاب کنید (فردا تا ۷ روز آینده).';
+          if (visitDisplay) {
+            visitDisplay.value = '';
+            visitDisplay.placeholder = 'لطفاً تاریخ مراجعه را از تقویم انتخاب کنید.';
+            visitDisplay.classList.add('m360-date-display--error');
           }
         }
       });
