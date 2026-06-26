@@ -156,11 +156,24 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             'ok' => false,
             'message' => 'برای ثبت درخواست، ابتدا شماره موبایل خود را با کد پیامکی تأیید کنید.',
         ];
-    } elseif (!in_array($input['plate_letter'], $plateLetters, true)) {
+    } elseif (!in_array($input['plate_letter'], $plateLetters, true) && $input['plate_letter'] !== '') {
         $result = [
             'ok' => false,
             'message' => 'لطفاً حرف پلاک را انتخاب کنید.',
         ];
+    } else {
+    $customerFlow = trim((string)($_POST['customer_flow'] ?? 'new'));
+    $isReturningCustomer = $customerFlow === 'returning';
+    $verifiedCustomerName = trim((string)($_POST['verified_customer_name'] ?? ''));
+
+    if (!$isReturningCustomer && $input['full_name'] === '') {
+        $result = ['ok' => false, 'message' => 'لطفاً نام و نام خانوادگی را وارد کنید.'];
+    } elseif (!$isReturningCustomer && ($input['province'] === '' || $input['city'] === '')) {
+        $result = ['ok' => false, 'message' => 'لطفاً استان و شهر را انتخاب کنید.'];
+    } elseif ($isReturningCustomer && $input['full_name'] === '' && $verifiedCustomerName !== '') {
+        $input['full_name'] = $verifiedCustomerName;
+    } elseif ($isReturningCustomer && $input['full_name'] === '') {
+        $input['full_name'] = 'مشتری گرامی';
     } else {
 
     $birthYearSelected = trim((string)($_POST['birth_year_jalali'] ?? ''));
@@ -252,9 +265,12 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         'source' => 'moghareh360.ir',
         'source_channel' => 'PUBLIC_WEB',
         'otp_verified_token' => m360_otp_verified_token(),
+        'customer_flow' => $customerFlow,
+        'verified_customer_name' => $verifiedCustomerName,
     ];
 
     $result = mirror_api_customer_request($payload);
+    }
     }
 }
 
@@ -281,7 +297,7 @@ mirror_render_head('ثبت درخواست مشتری', 'customer');
 ?>
 <section class="m360-hero">
     <h2>ثبت درخواست آنلاین</h2>
-    <p>فرم زیر را تکمیل کنید تا همکاران ما در اسرع وقت با شما تماس بگیرند.</p>
+    <p>ابتدا شماره موبایل خود را تأیید کنید؛ سپس فرم مناسب برای شما نمایش داده می‌شود.</p>
 </section>
 
 <?php if ($result !== null): ?>
@@ -295,31 +311,51 @@ mirror_render_head('ثبت درخواست مشتری', 'customer');
 <?php endif; ?>
 
 <section class="m360-card m360-form">
-    <form method="post" action="customer-request.php" class="m360-customer-form">
-        <h3>اطلاعات مشتری</h3>
-        <label for="full_name">نام و نام خانوادگی <span class="m360-req">*</span></label>
-        <input type="text" id="full_name" name="full_name" maxlength="100" required value="<?= mirror_h($input['full_name']) ?>">
-
-        <label for="mobile">موبایل <span class="m360-req">*</span></label>
-        <div class="m360-mobile-row">
-            <input type="tel" id="mobile" name="mobile" inputmode="tel" maxlength="11" required value="<?= mirror_h($input['mobile']) ?>" placeholder="09xxxxxxxxx" autocomplete="tel">
-            <button type="button" id="m360_send_otp" class="m360-btn m360-btn-secondary">ارسال کد تأیید</button>
-        </div>
-        <div class="m360-otp-verify-row">
-            <div class="m360-otp-verify-col">
-                <label for="m360_otp_code" class="m360-sub-label">کد پیامکی</label>
-                <input type="text" id="m360_otp_code" inputmode="numeric" maxlength="6" pattern="[0-9]{6}" placeholder="۶ رقم" autocomplete="one-time-code">
-            </div>
-            <button type="button" id="m360_verify_otp" class="m360-btn m360-btn-secondary">تأیید شماره موبایل</button>
-        </div>
-        <p id="m360_otp_status" class="m360-otp-status" role="status" aria-live="polite"></p>
+    <form method="post" action="customer-request.php" class="m360-customer-form" novalidate>
+        <input type="hidden" id="customer_flow" name="customer_flow" value="new">
+        <input type="hidden" id="verified_customer_name" name="verified_customer_name" value="">
         <input type="hidden" id="mobile_verified" name="mobile_verified" value="0">
 
+        <section id="m360_step_mobile" class="m360-step-card m360-step-card--active" aria-labelledby="m360_step_mobile_title">
+            <h3 id="m360_step_mobile_title" class="m360-step-title">مرحله ۱ — ورود شماره موبایل</h3>
+            <label for="mobile">شماره موبایل <span class="m360-req">*</span></label>
+            <div class="m360-mobile-row">
+                <input type="tel" id="mobile" name="mobile" inputmode="tel" maxlength="11" required value="<?= mirror_h($input['mobile']) ?>" placeholder="09xxxxxxxxx" autocomplete="tel">
+                <button type="button" id="m360_send_otp" class="m360-btn m360-btn-secondary">ارسال کد تأیید</button>
+            </div>
+            <p id="m360_mobile_status" class="m360-otp-status" role="status" aria-live="polite"></p>
+        </section>
+
+        <section id="m360_step_otp" class="m360-step-card m360-step--hidden" aria-labelledby="m360_step_otp_title">
+            <h3 id="m360_step_otp_title" class="m360-step-title">مرحله ۲ — تأیید کد پیامکی</h3>
+            <div class="m360-otp-verify-row">
+                <div class="m360-otp-verify-col">
+                    <label for="m360_otp_code" class="m360-sub-label">کد ۶ رقمی</label>
+                    <input type="text" id="m360_otp_code" inputmode="numeric" maxlength="6" pattern="[0-9]{6}" placeholder="۶ رقم" autocomplete="one-time-code">
+                </div>
+                <button type="button" id="m360_verify_otp" class="m360-btn m360-btn-secondary">تأیید شماره موبایل</button>
+            </div>
+            <div class="m360-otp-actions">
+                <button type="button" id="m360_resend_otp" class="m360-btn-link" disabled>ارسال مجدد کد</button>
+                <span id="m360_resend_timer" class="m360-resend-timer"></span>
+            </div>
+            <p id="m360_otp_status" class="m360-otp-status" role="status" aria-live="polite"></p>
+        </section>
+
+        <section id="m360_step_welcome" class="m360-step-card m360-step-card--success m360-step--hidden" aria-live="polite">
+            <p id="m360_welcome_message" class="m360-welcome-message">مشتری گرامی، شماره شما تأیید شد.</p>
+            <p id="m360_last_vehicle_hint" class="m360-last-vehicle-hint"></p>
+        </section>
+
+        <section id="m360_section_profile" class="m360-step-card m360-step--hidden" aria-labelledby="m360_profile_title">
+        <h3 id="m360_profile_title" class="m360-section-title">اطلاعات مشتری</h3>
+        <label for="full_name">نام و نام خانوادگی <span class="m360-req">*</span></label>
+        <input type="text" id="full_name" name="full_name" maxlength="100" data-required-new="1" value="<?= mirror_h($input['full_name']) ?>">
         <label for="national_id">کد ملی</label>
         <input type="text" id="national_id" name="national_id" maxlength="10" inputmode="numeric" value="<?= mirror_h($input['national_id']) ?>">
 
         <label for="province">استان <span class="m360-req">*</span></label>
-        <select id="province" name="province" required>
+        <select id="province" name="province" data-required-new="1">
             <option value="">انتخاب استان</option>
             <?php if ($input['province'] !== ''): ?>
                 <option value="<?= mirror_h($input['province']) ?>" selected><?= mirror_h($input['province']) ?></option>
@@ -327,7 +363,7 @@ mirror_render_head('ثبت درخواست مشتری', 'customer');
         </select>
 
         <label for="city">شهر <span class="m360-req">*</span></label>
-        <select id="city" name="city" required <?= $input['city'] === '' ? 'disabled' : '' ?>>
+        <select id="city" name="city" data-required-new="1" <?= $input['city'] === '' ? 'disabled' : '' ?>>
             <option value="">انتخاب شهر</option>
             <?php if ($input['city'] !== ''): ?>
                 <option value="<?= mirror_h($input['city']) ?>" selected><?= mirror_h($input['city']) ?></option>
@@ -377,11 +413,13 @@ mirror_render_head('ثبت درخواست مشتری', 'customer');
             </div>
         </div>
         <input type="hidden" id="birth_date" name="birth_date" value="<?= mirror_h($input['birth_date']) ?>">
+        </section>
 
-        <h3 class="m360-section-title">اطلاعات خودرو</h3>
+        <section id="m360_section_vehicle" class="m360-step-card m360-step--hidden" aria-labelledby="m360_vehicle_title">
+        <h3 id="m360_vehicle_title" class="m360-section-title">اطلاعات خودرو</h3>
 
         <label for="vehicle_brand">برند خودرو <span class="m360-req">*</span></label>
-        <select id="vehicle_brand" name="vehicle_brand" required>
+        <select id="vehicle_brand" name="vehicle_brand" data-required-both="1">
             <option value="">انتخاب برند</option>
             <?php if ($input['vehicle_brand'] !== ''): ?>
                 <option value="<?= mirror_h($input['vehicle_brand']) ?>" selected><?= mirror_h($input['vehicle_brand']) ?></option>
@@ -389,7 +427,7 @@ mirror_render_head('ثبت درخواست مشتری', 'customer');
         </select>
 
         <label for="vehicle_class">کلاس / مدل خودرو <span class="m360-req">*</span></label>
-        <select id="vehicle_class" name="vehicle_class" required <?= $input['vehicle_class'] === '' ? 'disabled' : '' ?>>
+        <select id="vehicle_class" name="vehicle_class" data-required-both="1" <?= $input['vehicle_class'] === '' ? 'disabled' : '' ?>>
             <option value="">انتخاب کلاس / مدل</option>
             <?php if ($input['vehicle_class'] !== ''): ?>
                 <option value="<?= mirror_h($input['vehicle_class']) ?>" selected><?= mirror_h($input['vehicle_class']) ?></option>
@@ -397,7 +435,7 @@ mirror_render_head('ثبت درخواست مشتری', 'customer');
         </select>
 
         <label for="vehicle_year_pair">سال تولید <span class="m360-req">*</span></label>
-        <select id="vehicle_year_pair" name="vehicle_year_pair" required>
+        <select id="vehicle_year_pair" name="vehicle_year_pair" data-required-both="1">
             <option value="">انتخاب سال</option>
             <?php foreach ($vehicleYearOptions as $yearOpt): ?>
                 <option value="<?= mirror_h($yearOpt['value']) ?>" <?= $input['vehicle_year_pair'] === $yearOpt['value'] ? 'selected' : '' ?>>
@@ -417,13 +455,13 @@ mirror_render_head('ثبت درخواست مشتری', 'customer');
                 <div class="iran-plate-group iran-plate-group--series" aria-label="دو رقم اول">
                     <span class="iran-plate-group__label">۲ رقم</span>
                     <div class="iran-plate-group__inputs">
-                        <select class="plate-digit-select" id="plate_first_digit_1" name="plate_first_digit_1" required aria-label="رقم اول پلاک">
+                        <select class="plate-digit-select" id="plate_first_digit_1" name="plate_first_digit_1" data-required-both="1" aria-label="رقم اول پلاک">
                             <option value="">-</option>
                             <?php for ($d = 0; $d <= 9; $d++): ?>
                                 <option value="<?= $d ?>"><?= $d ?></option>
                             <?php endfor; ?>
                         </select>
-                        <select class="plate-digit-select" id="plate_first_digit_2" name="plate_first_digit_2" required aria-label="رقم دوم پلاک">
+                        <select class="plate-digit-select" id="plate_first_digit_2" name="plate_first_digit_2" data-required-both="1" aria-label="رقم دوم پلاک">
                             <option value="">-</option>
                             <?php for ($d = 0; $d <= 9; $d++): ?>
                                 <option value="<?= $d ?>"><?= $d ?></option>
@@ -434,7 +472,7 @@ mirror_render_head('ثبت درخواست مشتری', 'customer');
                 <span class="iran-plate-sep" aria-hidden="true"></span>
                 <div class="iran-plate-group iran-plate-group--letter" aria-label="حرف پلاک">
                     <span class="iran-plate-group__label">حرف</span>
-                    <select class="plate-letter-select" id="plate_letter" name="plate_letter" required aria-label="حرف پلاک">
+                    <select class="plate-letter-select" id="plate_letter" name="plate_letter" data-required-both="1" aria-label="حرف پلاک">
                         <option value="">حرف</option>
                         <?php foreach ($plateLetters as $letter): ?>
                             <option value="<?= mirror_h($letter) ?>" <?= $input['plate_letter'] === $letter ? 'selected' : '' ?>><?= mirror_h($letter) ?></option>
@@ -445,19 +483,19 @@ mirror_render_head('ثبت درخواست مشتری', 'customer');
                 <div class="iran-plate-group iran-plate-group--middle" aria-label="سه رقم وسط">
                     <span class="iran-plate-group__label">۳ رقم</span>
                     <div class="iran-plate-group__inputs">
-                        <select class="plate-digit-select" id="plate_middle_digit_1" name="plate_middle_digit_1" required aria-label="رقم اول سه‌رقمی">
+                        <select class="plate-digit-select" id="plate_middle_digit_1" name="plate_middle_digit_1" data-required-both="1" aria-label="رقم اول سه‌رقمی">
                             <option value="">-</option>
                             <?php for ($d = 0; $d <= 9; $d++): ?>
                                 <option value="<?= $d ?>"><?= $d ?></option>
                             <?php endfor; ?>
                         </select>
-                        <select class="plate-digit-select" id="plate_middle_digit_2" name="plate_middle_digit_2" required aria-label="رقم دوم سه‌رقمی">
+                        <select class="plate-digit-select" id="plate_middle_digit_2" name="plate_middle_digit_2" data-required-both="1" aria-label="رقم دوم سه‌رقمی">
                             <option value="">-</option>
                             <?php for ($d = 0; $d <= 9; $d++): ?>
                                 <option value="<?= $d ?>"><?= $d ?></option>
                             <?php endfor; ?>
                         </select>
-                        <select class="plate-digit-select" id="plate_middle_digit_3" name="plate_middle_digit_3" required aria-label="رقم سوم سه‌رقمی">
+                        <select class="plate-digit-select" id="plate_middle_digit_3" name="plate_middle_digit_3" data-required-both="1" aria-label="رقم سوم سه‌رقمی">
                             <option value="">-</option>
                             <?php for ($d = 0; $d <= 9; $d++): ?>
                                 <option value="<?= $d ?>"><?= $d ?></option>
@@ -469,13 +507,13 @@ mirror_render_head('ثبت درخواست مشتری', 'customer');
             <div class="iran-plate-region-box" aria-label="کد ایران">
                 <span class="iran-plate-region-box__label">ایران</span>
                 <div class="iran-plate-region-box__digits">
-                    <select class="plate-digit-select" id="plate_region_digit_1" name="plate_region_digit_1" required aria-label="رقم اول کد ایران">
+                    <select class="plate-digit-select" id="plate_region_digit_1" name="plate_region_digit_1" data-required-both="1" aria-label="رقم اول کد ایران">
                         <option value="">-</option>
                         <?php for ($d = 0; $d <= 9; $d++): ?>
                             <option value="<?= $d ?>"><?= $d ?></option>
                         <?php endfor; ?>
                     </select>
-                    <select class="plate-digit-select" id="plate_region_digit_2" name="plate_region_digit_2" required aria-label="رقم دوم کد ایران">
+                    <select class="plate-digit-select" id="plate_region_digit_2" name="plate_region_digit_2" data-required-both="1" aria-label="رقم دوم کد ایران">
                         <option value="">-</option>
                         <?php for ($d = 0; $d <= 9; $d++): ?>
                             <option value="<?= $d ?>"><?= $d ?></option>
@@ -495,11 +533,13 @@ mirror_render_head('ثبت درخواست مشتری', 'customer');
 
         <label for="odometer_km">کیلومتر خودرو</label>
         <input type="number" id="odometer_km" name="odometer_km" min="0" step="1" value="<?= mirror_h($input['odometer_km']) ?>">
+        </section>
 
-        <h3 class="m360-section-title">درخواست</h3>
+        <section id="m360_section_request" class="m360-step-card m360-step--hidden" aria-labelledby="m360_request_title">
+        <h3 id="m360_request_title" class="m360-section-title">درخواست</h3>
 
         <label for="request_type">نوع درخواست <span class="m360-req">*</span></label>
-        <select id="request_type" name="request_type" required>
+        <select id="request_type" name="request_type" data-required-both="1">
             <option value="">انتخاب کنید</option>
             <?php foreach ($requestTypes as $code => $label): ?>
                 <option value="<?= mirror_h($code) ?>" <?= $input['request_type'] === $code ? 'selected' : '' ?>><?= mirror_h($label) ?></option>
@@ -517,7 +557,7 @@ mirror_render_head('ثبت درخواست مشتری', 'customer');
                 value="<?= mirror_h($visitDateDisplay) ?>"
                 aria-describedby="visit_date_hint"
             >
-            <input type="hidden" id="visit_date" name="visit_date" required value="<?= mirror_h($input['visit_date']) ?>">
+            <input type="hidden" id="visit_date" name="visit_date" value="<?= mirror_h($input['visit_date']) ?>">
             <p id="visit_date_hint" class="m360-jalali-datepicker__hint">انتخاب مراجعه فقط از امروز تا ۳۰ روز آینده امکان‌پذیر است</p>
             <div class="m360-server-calendar" id="m360_server_calendar" role="group" aria-label="تقویم مراجعه">
                 <?php foreach ($visitCalendarDays as $day): ?>
@@ -547,9 +587,10 @@ mirror_render_head('ثبت درخواست مشتری', 'customer');
         <p id="visit_time_hint" class="m360-visit-hint" style="display:none">ساعت حضور الزاما بین 8:30 الی 11:30 می‌باشد.</p>
 
         <label for="request_description">شرح درخواست <span class="m360-req">*</span></label>
-        <textarea id="request_description" name="request_description" required maxlength="1500"><?= mirror_h($input['request_description']) ?></textarea>
+        <textarea id="request_description" name="request_description" data-required-both="1" maxlength="1500"><?= mirror_h($input['request_description']) ?></textarea>
 
         <button type="submit" id="m360_submit_btn" class="m360-btn" disabled>ثبت درخواست</button>
+        </section>
     </form>
 </section>
 

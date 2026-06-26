@@ -64,6 +64,7 @@ $relativeFiles = @(
     "api\customer\request.php",
     "api\customer\send-otp.php",
     "api\customer\verify-otp.php",
+    "api\customer\profile-status.php",
     "assets\css\mirror.css",
     "assets\css\moghare360-v1-luxury-ui.css",
     "assets\js\iran-provinces-cities.js",

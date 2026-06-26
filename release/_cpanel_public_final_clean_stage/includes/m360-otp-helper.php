@@ -56,16 +56,69 @@ function m360_otp_json_fail(string $message, int $status = 400, array $data = []
     exit;
 }
 
+/** @return string */
+function m360_otp_cfg_string(string ...$keys): string
+{
+    $cfg = mirror_config();
+    foreach ($keys as $key) {
+        if ($key === '') {
+            continue;
+        }
+        if (isset($cfg[$key]) && is_scalar($cfg[$key])) {
+            $val = trim((string)$cfg[$key]);
+            if ($val !== '') {
+                return $val;
+            }
+        }
+        $define = strtoupper(preg_replace('/[^A-Za-z0-9_]/', '_', $key) ?? $key);
+        if ($define !== '' && defined($define)) {
+            $val = trim((string)constant($define));
+            if ($val !== '') {
+                return $val;
+            }
+        }
+    }
+    return '';
+}
+
 /** @return array<string, mixed> */
 function m360_otp_sms_settings(): array
 {
     $cfg = mirror_config();
+    $provider = m360_otp_cfg_string('M360_SMS_PROVIDER', 'SMS_PROVIDER', 'SMS_PROVIDER_NAME');
+    $apiKey = m360_otp_cfg_string('M360_SMS_API_KEY', 'SMS_API_KEY', 'IPPANEL_API_KEY', 'ippanelApiKey');
+    $sender = m360_otp_cfg_string('M360_SMS_SENDER', 'SMS_SENDER', 'ippanelSender', 'IPPANEL_SENDER');
+    $patternId = m360_otp_cfg_string('M360_SMS_PATTERN_ID', 'SMS_PATTERN_ID', 'IPPANEL_PATTERN_ID');
+
+    if ($provider === '' && !empty($cfg['SMS_OTP_ENABLED']) && !empty($cfg['SMS_GATEWAY_CONFIGURED'])) {
+        $provider = 'ippanel';
+    }
+    if ($provider === '' && $apiKey !== '' && $sender !== '') {
+        $provider = 'ippanel';
+    }
+
     return [
-        'provider' => trim((string)($cfg['M360_SMS_PROVIDER'] ?? '')),
-        'api_key' => trim((string)($cfg['M360_SMS_API_KEY'] ?? '')),
-        'sender' => trim((string)($cfg['M360_SMS_SENDER'] ?? '')),
-        'pattern_id' => trim((string)($cfg['M360_SMS_PATTERN_ID'] ?? '')),
+        'provider' => $provider,
+        'api_key' => $apiKey,
+        'sender' => $sender,
+        'pattern_id' => $patternId,
     ];
+}
+
+function m360_otp_log_sms_issue(string $context, string $detail): void
+{
+    error_log('[MOGHARE360 OTP] ' . $context . ': ' . $detail);
+}
+
+function m360_otp_ippanel_recipient(string $phone09): string
+{
+    if (str_starts_with($phone09, '0') && strlen($phone09) === 11) {
+        return '+98' . substr($phone09, 1);
+    }
+    if (str_starts_with($phone09, '98')) {
+        return '+' . $phone09;
+    }
+    return $phone09;
 }
 
 function m360_otp_sms_configured(): bool
@@ -103,26 +156,30 @@ function m360_otp_send_sms(string $phone, string $code): array
     $message = 'کد تأیید مقاره۳۶۰: ' . $code;
 
     if ($s['provider'] === 'ippanel') {
-        $payload = [
-            'sending_type' => 'webservice',
-            'from_number' => $s['sender'],
-            'message' => $message,
-            'params' => [
-                'recipients' => [$phone],
-            ],
-        ];
         if ($s['pattern_id'] !== '') {
-            $payload['sending_type'] = 'pattern';
-            $payload['pattern_code'] = $s['pattern_id'];
-            $payload['params'] = [
-                'recipients' => [$phone],
-                'code' => $code,
+            $payload = [
+                'sending_type' => 'pattern',
+                'from_number' => $s['sender'],
+                'pattern_code' => $s['pattern_id'],
+                'params' => [
+                    'recipients' => [m360_otp_ippanel_recipient($phone)],
+                    'code' => $code,
+                ],
             ];
-            unset($payload['message']);
+        } else {
+            $payload = [
+                'sending_type' => 'webservice',
+                'from_number' => $s['sender'],
+                'params' => [
+                    'recipients' => [m360_otp_ippanel_recipient($phone)],
+                    'message' => $message,
+                ],
+            ];
         }
 
         $ch = curl_init('https://edge.ippanel.com/v1/api/send');
         if ($ch === false) {
+            m360_otp_log_sms_issue('curl_init', 'failed');
             return ['ok' => false, 'message' => 'امکان ارسال پیامک در حال حاضر فعال نیست.'];
         }
         curl_setopt_array($ch, [
@@ -137,12 +194,15 @@ function m360_otp_send_sms(string $phone, string $code): array
         ]);
         $raw = curl_exec($ch);
         $status = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curlErr = curl_error($ch);
         curl_close($ch);
         if ($raw === false || $status < 200 || $status >= 300) {
+            m360_otp_log_sms_issue('ippanel_http', 'status=' . $status . ' err=' . $curlErr . ' body=' . substr((string)$raw, 0, 300));
             return ['ok' => false, 'message' => 'امکان ارسال پیامک در حال حاضر فعال نیست.'];
         }
         $decoded = json_decode((string)$raw, true);
         if (is_array($decoded) && isset($decoded['meta']['status']) && (bool)$decoded['meta']['status'] === false) {
+            m360_otp_log_sms_issue('ippanel_meta', substr((string)$raw, 0, 300));
             return ['ok' => false, 'message' => 'امکان ارسال پیامک در حال حاضر فعال نیست.'];
         }
         return ['ok' => true, 'message' => 'کد تأیید ارسال شد.'];

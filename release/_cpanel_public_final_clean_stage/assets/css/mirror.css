@@ -155,6 +155,77 @@
   cursor: not-allowed;
 }
 
+.m360-step-card {
+  border: 1px solid var(--m360-border);
+  border-radius: var(--m360-radius, 14px);
+  padding: 1rem 1rem 1.1rem;
+  margin-bottom: 1rem;
+  background: rgba(15, 23, 42, 0.35);
+}
+
+.m360-step-card--active {
+  border-color: var(--m360-accent);
+  box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.25);
+}
+
+.m360-step-card--success {
+  border-color: rgba(34, 197, 94, 0.55);
+  background: rgba(34, 197, 94, 0.08);
+}
+
+.m360-step--hidden {
+  display: none !important;
+}
+
+.m360-step-title {
+  margin: 0 0 0.85rem;
+  font-size: 1rem;
+}
+
+.m360-otp-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0.35rem 0 0.5rem;
+}
+
+.m360-btn-link {
+  background: none;
+  border: none;
+  color: var(--m360-accent);
+  cursor: pointer;
+  font: inherit;
+  padding: 0;
+  text-decoration: underline;
+}
+
+.m360-btn-link:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  text-decoration: none;
+}
+
+.m360-resend-timer {
+  font-size: 0.82rem;
+  color: var(--m360-muted);
+}
+
+.m360-welcome-message {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.m360-last-vehicle-hint {
+  margin: 0.45rem 0 0;
+  font-size: 0.86rem;
+  color: var(--m360-muted);
+}
+
+.m360-otp-status--pending {
+  color: var(--m360-muted);
+}
+
 @media (max-width: 560px) {
   .m360-mobile-row,
   .m360-otp-verify-row {

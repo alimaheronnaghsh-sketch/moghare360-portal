@@ -44,6 +44,7 @@ $relativeFiles = @(
     "api\customer\request.php",
     "api\customer\send-otp.php",
     "api\customer\verify-otp.php",
+    "api\customer\profile-status.php",
     "api\mirror\health.php"
 )
 

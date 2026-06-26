@@ -20,4 +20,9 @@ return [
     'M360_SMS_API_KEY' => '',
     'M360_SMS_SENDER' => '',
     'M360_SMS_PATTERN_ID' => '',
+    'SMS_PROVIDER' => '',
+    'SMS_API_KEY' => '',
+    'SMS_SENDER' => '',
+    'IPPANEL_API_KEY' => '',
+    'IPPANEL_SENDER' => '',
 ];

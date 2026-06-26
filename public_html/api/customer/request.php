@@ -30,6 +30,23 @@ if ($tokenBody !== '' && $tokenSession !== '' && !hash_equals($tokenSession, $to
     mogh_api_fail('شماره موبایل تأیید نشده است.', 403);
 }
 
+$customerFlow = mogh_api_sanitize_string($body['customer_flow'] ?? 'new', 20);
+$isReturningCustomer = $customerFlow === 'returning';
+$verifiedCustomerName = mogh_api_sanitize_string($body['verified_customer_name'] ?? '', 200);
+
+if (!$isReturningCustomer && $name === '') {
+    mogh_api_fail('نام مشتری الزامی است.', 422);
+}
+if ($isReturningCustomer && $name === '') {
+    $name = $verifiedCustomerName !== '' ? $verifiedCustomerName : 'مشتری گرامی';
+}
+
+$province = mogh_api_sanitize_string($body['province'] ?? '', 80);
+$city = mogh_api_sanitize_string($body['city'] ?? '', 80);
+if (!$isReturningCustomer && ($province === '' || $city === '')) {
+    mogh_api_fail('استان و شهر الزامی است.', 422);
+}
+
 $plate = mogh_api_sanitize_string(
     $body['vehicle_plate'] ?? $body['plate_display'] ?? $body['plate_number'] ?? $body['plate'] ?? '',
     50
@@ -72,7 +89,7 @@ $extra = [
 ];
 
 $payloadData = array_merge(
-    ['customer_name' => $name, 'mobile' => $mobile, 'vehicle_plate' => $plate, 'service_note' => $description],
+    ['customer_name' => $name, 'mobile' => $mobile, 'vehicle_plate' => $plate, 'service_note' => $description, 'customer_flow' => $customerFlow],
     array_filter($extra, static fn($v) => $v !== '')
 );
 if ($plateParts !== []) {
@@ -111,10 +128,6 @@ $sourceChannel = mogh_api_sanitize_string($body['source_channel'] ?? $extra['sou
 $payloadJson = json_encode($payloadData, JSON_UNESCAPED_UNICODE);
 if ($payloadJson === false) {
     $payloadJson = '{}';
-}
-
-if ($name === '') {
-    mogh_api_fail('نام مشتری الزامی است.', 422);
 }
 
 $endpoint = '/api/customer/request';
