@@ -68,6 +68,7 @@ $required = [
     'mirror-health.php',
     'includes/mirror-layout.php',
     'includes/mirror-api-client.php',
+    'includes/m360-otp-helper.php',
     'assets/css/mirror.css',
     'assets/css/moghare360-v1-luxury-ui.css',
     'assets/js/iran-provinces-cities.js',
@@ -78,6 +79,8 @@ $required = [
     'manifest.webmanifest',
     'service-worker.js',
     'api/customer/request.php',
+    'api/customer/send-otp.php',
+    'api/customer/verify-otp.php',
     'api/mirror/health.php',
 ];
 foreach ($required as $rel) {

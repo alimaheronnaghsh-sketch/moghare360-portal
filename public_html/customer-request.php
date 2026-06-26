@@ -2,6 +2,9 @@
 declare(strict_types=1);
 
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'mirror-api-client.php';
+require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-otp-helper.php';
+
+m360_otp_session_start();
 
 /**
  * @return array{jy:int,jm:int,jd:int}
@@ -133,7 +136,7 @@ $requestTypes = [
     'other' => 'سایر',
 ];
 
-$plateLetters = ['ب', 'ج', 'د', 'س', 'ص', 'ط', 'ع', 'ق', 'ل', 'م', 'ن', 'و', 'ه', 'ی', 'ت', 'ک', 'گ', 'پ', 'ژ'];
+$plateLetters = ['ب', 'ج', 'د', 'س', 'ص', 'ط', 'ق', 'ل', 'م', 'ن', 'و', 'ه', 'ی', 'ع', 'پ', 'ت', 'ک', 'گ'];
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     foreach (array_keys($input) as $key) {
@@ -147,6 +150,18 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     foreach ($digitKeys as $key) {
         $input[$key] = trim((string)($_POST[$key] ?? ''));
     }
+
+    if (!m360_otp_is_verified($input['mobile'])) {
+        $result = [
+            'ok' => false,
+            'message' => 'برای ثبت درخواست، ابتدا شماره موبایل خود را با کد پیامکی تأیید کنید.',
+        ];
+    } elseif (!in_array($input['plate_letter'], $plateLetters, true)) {
+        $result = [
+            'ok' => false,
+            'message' => 'لطفاً حرف پلاک را انتخاب کنید.',
+        ];
+    } else {
 
     $birthYearSelected = trim((string)($_POST['birth_year_jalali'] ?? ''));
     $birthMonthSelected = trim((string)($_POST['birth_month_jalali'] ?? ''));
@@ -236,9 +251,11 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         'birth_date' => $input['birth_date'],
         'source' => 'moghareh360.ir',
         'source_channel' => 'PUBLIC_WEB',
+        'otp_verified_token' => m360_otp_verified_token(),
     ];
 
     $result = mirror_api_customer_request($payload);
+    }
 }
 
 if ($input['birth_date'] !== '' && preg_match('/^(\d{4})\/(\d{1,2})\/(\d{1,2})$/', $input['birth_date'], $birthParts)) {
@@ -284,7 +301,19 @@ mirror_render_head('ثبت درخواست مشتری', 'customer');
         <input type="text" id="full_name" name="full_name" maxlength="100" required value="<?= mirror_h($input['full_name']) ?>">
 
         <label for="mobile">موبایل <span class="m360-req">*</span></label>
-        <input type="tel" id="mobile" name="mobile" inputmode="tel" maxlength="15" required value="<?= mirror_h($input['mobile']) ?>">
+        <div class="m360-mobile-row">
+            <input type="tel" id="mobile" name="mobile" inputmode="tel" maxlength="11" required value="<?= mirror_h($input['mobile']) ?>" placeholder="09xxxxxxxxx" autocomplete="tel">
+            <button type="button" id="m360_send_otp" class="m360-btn m360-btn-secondary">ارسال کد تأیید</button>
+        </div>
+        <div class="m360-otp-verify-row">
+            <div class="m360-otp-verify-col">
+                <label for="m360_otp_code" class="m360-sub-label">کد پیامکی</label>
+                <input type="text" id="m360_otp_code" inputmode="numeric" maxlength="6" pattern="[0-9]{6}" placeholder="۶ رقم" autocomplete="one-time-code">
+            </div>
+            <button type="button" id="m360_verify_otp" class="m360-btn m360-btn-secondary">تأیید شماره موبایل</button>
+        </div>
+        <p id="m360_otp_status" class="m360-otp-status" role="status" aria-live="polite"></p>
+        <input type="hidden" id="mobile_verified" name="mobile_verified" value="0">
 
         <label for="national_id">کد ملی</label>
         <input type="text" id="national_id" name="national_id" maxlength="10" inputmode="numeric" value="<?= mirror_h($input['national_id']) ?>">
@@ -520,7 +549,7 @@ mirror_render_head('ثبت درخواست مشتری', 'customer');
         <label for="request_description">شرح درخواست <span class="m360-req">*</span></label>
         <textarea id="request_description" name="request_description" required maxlength="1500"><?= mirror_h($input['request_description']) ?></textarea>
 
-        <button type="submit" class="m360-btn">ثبت درخواست</button>
+        <button type="submit" id="m360_submit_btn" class="m360-btn" disabled>ثبت درخواست</button>
     </form>
 </section>
 

@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'moghare360-v1-api-bootstrap.php';
+require_once dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-otp-helper.php';
 
 mogh_api_json_headers();
 
@@ -18,6 +19,17 @@ $name = mogh_api_sanitize_string(
     200
 );
 $mobile = mogh_api_sanitize_string($body['mobile'] ?? $body['phone'] ?? '', 30);
+
+m360_otp_session_start();
+if (!m360_otp_is_verified($mobile)) {
+    mogh_api_fail('شماره موبایل تأیید نشده است.', 403);
+}
+$tokenBody = trim((string)($body['otp_verified_token'] ?? ''));
+$tokenSession = m360_otp_verified_token();
+if ($tokenBody !== '' && $tokenSession !== '' && !hash_equals($tokenSession, $tokenBody)) {
+    mogh_api_fail('شماره موبایل تأیید نشده است.', 403);
+}
+
 $plate = mogh_api_sanitize_string(
     $body['vehicle_plate'] ?? $body['plate_display'] ?? $body['plate_number'] ?? $body['plate'] ?? '',
     50

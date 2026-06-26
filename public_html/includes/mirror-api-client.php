@@ -82,6 +82,14 @@ function mirror_api_post(string $endpoint, array $payload): array
         CURLOPT_CONNECTTIMEOUT => min(10, $timeout),
     ]);
 
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        $targetHost = parse_url($url, PHP_URL_HOST);
+        $currentHost = $_SERVER['HTTP_HOST'] ?? '';
+        if ($targetHost !== false && $currentHost !== '' && strcasecmp((string)$targetHost, $currentHost) === 0) {
+            curl_setopt($ch, CURLOPT_COOKIE, session_name() . '=' . session_id());
+        }
+    }
+
     $raw = curl_exec($ch);
     $status = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);

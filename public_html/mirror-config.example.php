@@ -16,4 +16,8 @@ return [
     'SUPPORT_PHONE' => '021-00000000',
     'SMS_OTP_ENABLED' => false,
     'SMS_GATEWAY_CONFIGURED' => false,
+    'M360_SMS_PROVIDER' => '',
+    'M360_SMS_API_KEY' => '',
+    'M360_SMS_SENDER' => '',
+    'M360_SMS_PATTERN_ID' => '',
 ];

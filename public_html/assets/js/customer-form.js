@@ -122,6 +122,113 @@
     }
   }
 
+  function setOtpStatus(message, type) {
+    var el = document.getElementById('m360_otp_status');
+    if (!el) return;
+    el.textContent = message || '';
+    el.classList.remove('m360-otp-status--ok', 'm360-otp-status--error');
+    if (type === 'ok') el.classList.add('m360-otp-status--ok');
+    if (type === 'error') el.classList.add('m360-otp-status--error');
+  }
+
+  function setSubmitEnabled(enabled) {
+    var btn = document.getElementById('m360_submit_btn');
+    var hidden = document.getElementById('mobile_verified');
+    if (btn) btn.disabled = !enabled;
+    if (hidden) hidden.value = enabled ? '1' : '0';
+  }
+
+  function initMobileOtpGate() {
+    var mobile = document.getElementById('mobile');
+    var sendBtn = document.getElementById('m360_send_otp');
+    var verifyBtn = document.getElementById('m360_verify_otp');
+    var otpInput = document.getElementById('m360_otp_code');
+    if (!mobile || !sendBtn || !verifyBtn) return;
+
+    var verified = false;
+
+    function resetVerification() {
+      verified = false;
+      setSubmitEnabled(false);
+      setOtpStatus('', '');
+    }
+
+    mobile.addEventListener('input', resetVerification);
+    mobile.addEventListener('change', resetVerification);
+
+    sendBtn.addEventListener('click', function () {
+      var phone = (mobile.value || '').trim();
+      if (!/^09\d{9}$/.test(phone)) {
+        setOtpStatus('شماره موبایل معتبر نیست. فرمت صحیح: 09xxxxxxxxx', 'error');
+        return;
+      }
+      sendBtn.disabled = true;
+      setOtpStatus('در حال ارسال کد تأیید...', '');
+      fetch('api/customer/send-otp.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ phone: phone })
+      })
+        .then(function (res) { return res.json().then(function (data) { return { status: res.status, data: data }; }); })
+        .then(function (result) {
+          if (result.data && result.data.ok) {
+            setOtpStatus(result.data.message || 'کد تأیید ارسال شد.', '');
+          } else {
+            setOtpStatus((result.data && result.data.message) || 'ارسال کد تأیید ناموفق بود.', 'error');
+          }
+        })
+        .catch(function () {
+          setOtpStatus('ارسال کد تأیید ناموفق بود. لطفاً دوباره تلاش کنید.', 'error');
+        })
+        .finally(function () {
+          sendBtn.disabled = false;
+        });
+    });
+
+    verifyBtn.addEventListener('click', function () {
+      var phone = (mobile.value || '').trim();
+      var code = (otpInput && otpInput.value) ? otpInput.value.trim() : '';
+      if (!/^09\d{9}$/.test(phone)) {
+        setOtpStatus('شماره موبایل معتبر نیست.', 'error');
+        return;
+      }
+      if (!/^\d{6}$/.test(code)) {
+        setOtpStatus('کد تأیید باید ۶ رقم باشد.', 'error');
+        return;
+      }
+      verifyBtn.disabled = true;
+      fetch('api/customer/verify-otp.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ phone: phone, otp: code })
+      })
+        .then(function (res) { return res.json().then(function (data) { return { status: res.status, data: data }; }); })
+        .then(function (result) {
+          if (result.data && result.data.ok) {
+            verified = true;
+            setSubmitEnabled(true);
+            setOtpStatus('شماره موبایل تأیید شد', 'ok');
+          } else {
+            verified = false;
+            setSubmitEnabled(false);
+            setOtpStatus((result.data && result.data.message) || 'تأیید شماره موبایل ناموفق بود.', 'error');
+          }
+        })
+        .catch(function () {
+          verified = false;
+          setSubmitEnabled(false);
+          setOtpStatus('تأیید شماره موبایل ناموفق بود. لطفاً دوباره تلاش کنید.', 'error');
+        })
+        .finally(function () {
+          verifyBtn.disabled = false;
+        });
+    });
+
+    setSubmitEnabled(false);
+  }
+
   document.addEventListener('DOMContentLoaded', function () {
     var province = document.getElementById('province');
     var city = document.getElementById('city');
@@ -152,19 +259,26 @@
     });
     syncBirthDateHidden();
 
-    var plateIds = [
-      'plate_first_digit_1', 'plate_first_digit_2', 'plate_letter',
+    var plateDigitIds = [
+      'plate_first_digit_1', 'plate_first_digit_2',
       'plate_middle_digit_1', 'plate_middle_digit_2', 'plate_middle_digit_3',
       'plate_region_digit_1', 'plate_region_digit_2'
     ];
-    plateIds.forEach(function (id) {
+    plateDigitIds.forEach(function (id) {
       populateDigitSelect(document.getElementById(id));
     });
-    plateIds.forEach(function (id) {
+
+    var plateLetter = document.getElementById('plate_letter');
+    bindPersianValidity(plateLetter, 'لطفاً حرف پلاک را انتخاب کنید.');
+    if (plateLetter) {
+      plateLetter.addEventListener('change', buildPlateDisplay);
+    }
+
+    var plateIds = plateDigitIds.concat(['plate_letter']);
+    plateDigitIds.forEach(function (id) {
       var labels = {
         plate_first_digit_1: 'رقم اول پلاک را انتخاب کنید.',
         plate_first_digit_2: 'رقم دوم پلاک را انتخاب کنید.',
-        plate_letter: 'حرف پلاک را انتخاب کنید.',
         plate_middle_digit_1: 'رقم اول بخش سه‌رقمی را انتخاب کنید.',
         plate_middle_digit_2: 'رقم دوم بخش سه‌رقمی را انتخاب کنید.',
         plate_middle_digit_3: 'رقم سوم بخش سه‌رقمی را انتخاب کنید.',
@@ -178,6 +292,7 @@
     chainPlateFocus(plateIds);
 
     initServerVisitCalendar();
+    initMobileOtpGate();
 
     var requestType = document.getElementById('request_type');
     if (requestType) {
@@ -190,6 +305,13 @@
       form.addEventListener('submit', function (e) {
         buildPlateDisplay();
         syncBirthDateHidden();
+
+        var mobileVerified = document.getElementById('mobile_verified');
+        if (!mobileVerified || mobileVerified.value !== '1') {
+          e.preventDefault();
+          setOtpStatus('برای ثبت درخواست، ابتدا شماره موبایل خود را با کد پیامکی تأیید کنید.', 'error');
+          return;
+        }
 
         var visitHidden = document.getElementById('visit_date');
         var visitDisplay = document.getElementById('visit_date_display');

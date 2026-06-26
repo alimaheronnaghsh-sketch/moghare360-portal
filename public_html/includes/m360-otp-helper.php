@@ -1,0 +1,312 @@
+<?php
+declare(strict_types=1);
+
+/**
+ * MOGHARE360 V1 — Customer mobile OTP (session-backed, no fake pass).
+ */
+
+require_once __DIR__ . DIRECTORY_SEPARATOR . 'mirror-layout.php';
+
+const M360_OTP_TTL_SECONDS = 120;
+const M360_OTP_MAX_ATTEMPTS = 5;
+const M360_OTP_RESEND_SECONDS = 60;
+
+function m360_otp_json_headers(): void
+{
+    header('Content-Type: application/json; charset=UTF-8');
+    header('X-Content-Type-Options: nosniff');
+    header('Cache-Control: no-store');
+}
+
+function m360_otp_session_start(): void
+{
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        return;
+    }
+    $secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off');
+    session_set_cookie_params([
+        'lifetime' => 0,
+        'path' => '/',
+        'secure' => $secure,
+        'httponly' => true,
+        'samesite' => 'Lax',
+    ]);
+    session_start();
+}
+
+function m360_otp_json_ok(string $message, array $data = [], int $status = 200): never
+{
+    http_response_code($status);
+    echo json_encode([
+        'ok' => true,
+        'message' => $message,
+        'data' => $data,
+    ], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
+function m360_otp_json_fail(string $message, int $status = 400, array $data = []): never
+{
+    http_response_code($status);
+    echo json_encode([
+        'ok' => false,
+        'message' => $message,
+        'data' => $data,
+    ], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
+/** @return array<string, mixed> */
+function m360_otp_sms_settings(): array
+{
+    $cfg = mirror_config();
+    return [
+        'provider' => trim((string)($cfg['M360_SMS_PROVIDER'] ?? '')),
+        'api_key' => trim((string)($cfg['M360_SMS_API_KEY'] ?? '')),
+        'sender' => trim((string)($cfg['M360_SMS_SENDER'] ?? '')),
+        'pattern_id' => trim((string)($cfg['M360_SMS_PATTERN_ID'] ?? '')),
+    ];
+}
+
+function m360_otp_sms_configured(): bool
+{
+    $s = m360_otp_sms_settings();
+    return $s['provider'] !== '' && $s['api_key'] !== '' && $s['sender'] !== '';
+}
+
+function m360_otp_normalize_phone(string $phone): ?string
+{
+    $digits = preg_replace('/\D+/', '', $phone) ?? '';
+    if (str_starts_with($digits, '98') && strlen($digits) === 12) {
+        $digits = '0' . substr($digits, 2);
+    }
+    if (preg_match('/^09\d{9}$/', $digits) !== 1) {
+        return null;
+    }
+    return $digits;
+}
+
+/**
+ * @return array{ok:bool,message:string}
+ */
+function m360_otp_send_sms(string $phone, string $code): array
+{
+    if (!m360_otp_sms_configured()) {
+        return ['ok' => false, 'message' => 'امکان ارسال پیامک در حال حاضر فعال نیست.'];
+    }
+
+    if (!function_exists('curl_init')) {
+        return ['ok' => false, 'message' => 'امکان ارسال پیامک در حال حاضر فعال نیست.'];
+    }
+
+    $s = m360_otp_sms_settings();
+    $message = 'کد تأیید مقاره۳۶۰: ' . $code;
+
+    if ($s['provider'] === 'ippanel') {
+        $payload = [
+            'sending_type' => 'webservice',
+            'from_number' => $s['sender'],
+            'message' => $message,
+            'params' => [
+                'recipients' => [$phone],
+            ],
+        ];
+        if ($s['pattern_id'] !== '') {
+            $payload['sending_type'] = 'pattern';
+            $payload['pattern_code'] = $s['pattern_id'];
+            $payload['params'] = [
+                'recipients' => [$phone],
+                'code' => $code,
+            ];
+            unset($payload['message']);
+        }
+
+        $ch = curl_init('https://edge.ippanel.com/v1/api/send');
+        if ($ch === false) {
+            return ['ok' => false, 'message' => 'امکان ارسال پیامک در حال حاضر فعال نیست.'];
+        }
+        curl_setopt_array($ch, [
+            CURLOPT_POST => true,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT => 20,
+            CURLOPT_HTTPHEADER => [
+                'Content-Type: application/json',
+                'Authorization: ' . $s['api_key'],
+            ],
+            CURLOPT_POSTFIELDS => json_encode($payload, JSON_UNESCAPED_UNICODE),
+        ]);
+        $raw = curl_exec($ch);
+        $status = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        if ($raw === false || $status < 200 || $status >= 300) {
+            return ['ok' => false, 'message' => 'امکان ارسال پیامک در حال حاضر فعال نیست.'];
+        }
+        $decoded = json_decode((string)$raw, true);
+        if (is_array($decoded) && isset($decoded['meta']['status']) && (bool)$decoded['meta']['status'] === false) {
+            return ['ok' => false, 'message' => 'امکان ارسال پیامک در حال حاضر فعال نیست.'];
+        }
+        return ['ok' => true, 'message' => 'کد تأیید ارسال شد.'];
+    }
+
+    return ['ok' => false, 'message' => 'امکان ارسال پیامک در حال حاضر فعال نیست.'];
+}
+
+function m360_otp_clear_pending(): void
+{
+    m360_otp_session_start();
+    unset(
+        $_SESSION['otp_phone'],
+        $_SESSION['otp_hash'],
+        $_SESSION['otp_expires_at'],
+        $_SESSION['otp_attempts'],
+        $_SESSION['otp_last_sent_at']
+    );
+}
+
+function m360_otp_reset_verified(): void
+{
+    m360_otp_session_start();
+    unset(
+        $_SESSION['otp_verified_phone'],
+        $_SESSION['otp_verified_at'],
+        $_SESSION['otp_verified_token']
+    );
+}
+
+function m360_otp_reset_verified_if_phone_changed(string $phone): void
+{
+    m360_otp_session_start();
+    $verified = (string)($_SESSION['otp_verified_phone'] ?? '');
+    $normalized = m360_otp_normalize_phone($phone);
+    if ($verified !== '' && $normalized !== null && $verified !== $normalized) {
+        m360_otp_reset_verified();
+    }
+}
+
+function m360_otp_is_verified(string $phone): bool
+{
+    m360_otp_session_start();
+    $normalized = m360_otp_normalize_phone($phone);
+    if ($normalized === null) {
+        return false;
+    }
+    $verifiedPhone = (string)($_SESSION['otp_verified_phone'] ?? '');
+    $verifiedAt = (int)($_SESSION['otp_verified_at'] ?? 0);
+    $token = (string)($_SESSION['otp_verified_token'] ?? '');
+    if ($verifiedPhone === '' || $token === '' || $verifiedAt <= 0) {
+        return false;
+    }
+    if ($verifiedPhone !== $normalized) {
+        return false;
+    }
+    if (time() - $verifiedAt > 3600) {
+        return false;
+    }
+    return true;
+}
+
+function m360_otp_verified_token(): string
+{
+    m360_otp_session_start();
+    return (string)($_SESSION['otp_verified_token'] ?? '');
+}
+
+/**
+ * @return array{ok:bool,message:string}
+ */
+function m360_otp_send(string $phone): array
+{
+    m360_otp_session_start();
+    $normalized = m360_otp_normalize_phone($phone);
+    if ($normalized === null) {
+        return ['ok' => false, 'message' => 'شماره موبایل معتبر نیست. فرمت صحیح: 09xxxxxxxxx'];
+    }
+
+    m360_otp_reset_verified_if_phone_changed($normalized);
+
+    $lastSent = (int)($_SESSION['otp_last_sent_at'] ?? 0);
+    if ($lastSent > 0 && (time() - $lastSent) < M360_OTP_RESEND_SECONDS) {
+        $wait = M360_OTP_RESEND_SECONDS - (time() - $lastSent);
+        return ['ok' => false, 'message' => 'لطفاً ' . $wait . ' ثانیه دیگر برای ارسال مجدد صبر کنید.'];
+    }
+
+    $code = (string)random_int(100000, 999999);
+    $sms = m360_otp_send_sms($normalized, $code);
+    if (!$sms['ok']) {
+        return $sms;
+    }
+
+    $_SESSION['otp_phone'] = $normalized;
+    $_SESSION['otp_hash'] = password_hash($code, PASSWORD_DEFAULT);
+    $_SESSION['otp_expires_at'] = time() + M360_OTP_TTL_SECONDS;
+    $_SESSION['otp_attempts'] = 0;
+    $_SESSION['otp_last_sent_at'] = time();
+
+    return ['ok' => true, 'message' => 'کد تأیید به شماره موبایل شما ارسال شد.'];
+}
+
+/**
+ * @return array{ok:bool,message:string,token?:string}
+ */
+function m360_otp_verify(string $phone, string $otp): array
+{
+    m360_otp_session_start();
+    $normalized = m360_otp_normalize_phone($phone);
+    if ($normalized === null) {
+        return ['ok' => false, 'message' => 'شماره موبایل معتبر نیست.'];
+    }
+
+    $otpDigits = preg_replace('/\D+/', '', $otp) ?? '';
+    if (strlen($otpDigits) !== 6) {
+        return ['ok' => false, 'message' => 'کد تأیید باید ۶ رقم باشد.'];
+    }
+
+    $sessionPhone = (string)($_SESSION['otp_phone'] ?? '');
+    $hash = (string)($_SESSION['otp_hash'] ?? '');
+    $expires = (int)($_SESSION['otp_expires_at'] ?? 0);
+    $attempts = (int)($_SESSION['otp_attempts'] ?? 0);
+
+    if ($sessionPhone === '' || $hash === '' || $expires <= 0) {
+        return ['ok' => false, 'message' => 'ابتدا کد تأیید را درخواست کنید.'];
+    }
+
+    if ($sessionPhone !== $normalized) {
+        return ['ok' => false, 'message' => 'شماره موبایل با کد ارسال‌شده مطابقت ندارد.'];
+    }
+
+    if (time() > $expires) {
+        m360_otp_clear_pending();
+        return ['ok' => false, 'message' => 'کد تأیید منقضی شده است. لطفاً کد جدید درخواست کنید.'];
+    }
+
+    if ($attempts >= M360_OTP_MAX_ATTEMPTS) {
+        m360_otp_clear_pending();
+        return ['ok' => false, 'message' => 'تعداد تلاش‌های مجاز تمام شد. لطفاً کد جدید درخواست کنید.'];
+    }
+
+    $_SESSION['otp_attempts'] = $attempts + 1;
+
+    if (!password_verify($otpDigits, $hash)) {
+        $remaining = M360_OTP_MAX_ATTEMPTS - (int)$_SESSION['otp_attempts'];
+        if ($remaining <= 0) {
+            m360_otp_clear_pending();
+            return ['ok' => false, 'message' => 'تعداد تلاش‌های مجاز تمام شد. لطفاً کد جدید درخواست کنید.'];
+        }
+        return ['ok' => false, 'message' => 'کد تأیید نادرست است. ' . $remaining . ' تلاش باقی مانده.'];
+    }
+
+    m360_otp_clear_pending();
+    $token = bin2hex(random_bytes(16));
+    $_SESSION['otp_verified_phone'] = $normalized;
+    $_SESSION['otp_verified_at'] = time();
+    $_SESSION['otp_verified_token'] = $token;
+
+    return ['ok' => true, 'message' => 'شماره موبایل تأیید شد.', 'token' => $token];
+}
+
+function m360_otp_require_verified_mobile(string $phone): void
+{
+    if (!m360_otp_is_verified($phone)) {
+        m360_otp_json_fail('شماره موبایل تأیید نشده است.', 403);
+    }
+}
