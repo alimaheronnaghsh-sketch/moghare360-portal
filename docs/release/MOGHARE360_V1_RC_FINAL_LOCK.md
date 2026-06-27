@@ -28,11 +28,14 @@ After P11 lock, **no new workflow domains** are in scope for V1:
 6. **OTP provider config** — bugfix patches to `m360-otp-helper` / private OTP config only (P11.1+)
 7. **IPPanel CLI diagnostic** — temporary troubleshooting tools only (P11.2)
 8. **Online test gate hardening** — secure domain-to-laptop bridge, HMAC intake, cPanel templates (P11.3)
+9. **Owner access management UI** — professional staff access console over SQL Server identity (P11.4)
 
-## P11.3 Online Test Gate
+## P11.4 Access Management UI
 
-- Allowed: secure bridge config, HMAC API, P1 intake adapter, masked logs, readiness page, cPanel placeholder templates
-- Not allowed: P12 scope, workflow mutation, Auth/Login changes, production deployment claims
+- **Primary path:** `erp-access-management.php` and related P11.4 pages — not JSON editing
+- Allowed: controlled INSERT/UPDATE on `core_users`, `core_user_roles`, `erp_company_users`, `core_staff_profiles`, audit/history
+- Fallback only: `private/production-users.json` + PowerShell import
+- Not allowed: Auth/Login core changes, permission seed edits, legacy MySQL staff auth, P12 scope
 
 ## Verification Pages
 
@@ -41,6 +44,7 @@ After P11 lock, **no new workflow domains** are in scope for V1:
 - `erp-owner-presentation-lock.php`
 - `erp-rc-final-checklist.php`
 - `erp-online-test-readiness.php`
+- `erp-access-management.php`
 
 ## Migration P11
 

@@ -1,0 +1,36 @@
+.m360-access-page { background: #0f1419; color: #e8eef4; font-family: Tahoma, Arial, sans-serif; }
+.m360-access-wrap { max-width: 1200px; margin: 0 auto; padding: 1rem; }
+.m360-access-banner { background: linear-gradient(135deg, #1a2332, #243447); border-radius: 12px; padding: 1.25rem 1.5rem; margin-bottom: 1rem; }
+.m360-access-banner h1 { margin: 0 0 .35rem; font-size: 1.5rem; }
+.m360-access-banner p { margin: 0; opacity: .85; font-size: .92rem; }
+.m360-access-nav { display: flex; flex-wrap: wrap; gap: .5rem; margin-bottom: 1rem; }
+.m360-access-nav a { color: #9fd4ff; text-decoration: none; padding: .35rem .75rem; border: 1px solid #334; border-radius: 8px; font-size: .88rem; }
+.m360-access-nav a:hover { background: #1e2a3a; }
+.m360-access-card { background: #151c26; border: 1px solid #2a3544; border-radius: 10px; padding: 1rem; margin-bottom: 1rem; }
+.m360-access-table { width: 100%; border-collapse: collapse; font-size: .88rem; }
+.m360-access-table th, .m360-access-table td { border-bottom: 1px solid #2a3544; padding: .55rem .45rem; text-align: right; vertical-align: top; }
+.m360-access-table th { color: #9fd4ff; font-weight: 600; }
+.m360-access-form label { display: block; margin: .65rem 0 .25rem; font-size: .88rem; }
+.m360-access-form input, .m360-access-form select, .m360-access-form textarea {
+    width: 100%; max-width: 520px; box-sizing: border-box; padding: .5rem .65rem;
+    border-radius: 8px; border: 1px solid #334; background: #0f1419; color: #e8eef4;
+}
+.m360-access-form textarea { min-height: 90px; }
+.m360-access-btn { display: inline-block; background: #2d6cdf; color: #fff; border: 0; border-radius: 8px; padding: .55rem 1rem; cursor: pointer; text-decoration: none; font-size: .9rem; margin-top: .75rem; }
+.m360-access-btn.secondary { background: #3a4654; }
+.m360-access-btn.warn { background: #9a6b1a; }
+.m360-access-actions a, .m360-access-actions form { display: inline-block; margin-left: .35rem; margin-bottom: .25rem; }
+.m360-access-alert { padding: .75rem 1rem; border-radius: 8px; margin-bottom: 1rem; }
+.m360-access-alert-info { background: #1a3344; border: 1px solid #2d6cdf; }
+.m360-access-alert-error { background: #3a1f1f; border: 1px solid #c44; }
+.m360-access-alert-warn { background: #3a3018; border: 1px solid #c90; }
+.m360-access-badge { display: inline-block; padding: .15rem .45rem; border-radius: 6px; font-size: .75rem; }
+.m360-access-badge.pass { background: #1e4d2b; color: #9f9; }
+.m360-access-badge.warn { background: #4d3a12; color: #fd9; }
+.m360-access-badge.block { background: #4d1e1e; color: #f99; }
+.m360-access-foot { margin-top: 1.5rem; opacity: .7; font-size: .82rem; }
+.m360-access-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: .75rem; }
+.m360-access-kpi { background: #1a2332; border-radius: 8px; padding: .75rem; }
+.m360-access-kpi .val { font-size: 1.4rem; font-weight: 700; }
+.m360-access-kpi .lbl { font-size: .82rem; opacity: .85; }
+.m360-access-warning-box { background: #3a3018; border: 1px solid #c90; border-radius: 8px; padding: .75rem; margin-bottom: 1rem; }
