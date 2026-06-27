@@ -1,6 +1,7 @@
 # MOGHARE360 ERP local/private config
 private/erp-config.php
 private/m360-otp-config.php
+private/m360-online-bridge-config.php
 private/production-users.json
 private/production-site-config.json
 public_html/mirror-config.php
@@ -24,6 +25,8 @@ tools/_legacy_codex_review/
 storage/
 private/backups/
 private/logs/
+deployment/cpanel/**/local-config.php
+deployment/cpanel/**/forward-lead.php
 runtime/
 uploads/
 logs/

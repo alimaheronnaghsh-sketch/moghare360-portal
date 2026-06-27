@@ -1,0 +1,92 @@
+<?php
+declare(strict_types=1);
+
+/**
+ * MOGHARE360 — cPanel forwarder template (EXAMPLE ONLY).
+ *
+ * 1. Copy to forward-lead.php on cPanel (NOT committed with real secrets).
+ * 2. Set LAPTOP_ENDPOINT_URL and BRIDGE_SECRET below on server only.
+ */
+
+const LAPTOP_ENDPOINT_URL = 'https://LAPTOP_HOST_PLACEHOLDER:8080/api/online-intake-secure-receive.php';
+const BRIDGE_SECRET = 'PUT_LONG_RANDOM_SECRET_HERE';
+const BRIDGE_SOURCE = 'moghareh360.ir';
+
+if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
+    header('Location: lead-form.php?err=1');
+    exit;
+}
+
+$honeypot = trim((string)($_POST['website'] ?? ''));
+if ($honeypot !== '') {
+    header('Location: lead-form.php?err=1');
+    exit;
+}
+
+$name = trim((string)($_POST['customer_name'] ?? ''));
+$mobile = trim((string)($_POST['mobile'] ?? ''));
+$vehicle = trim((string)($_POST['vehicle_title'] ?? ''));
+if ($name === '' || $mobile === '' || $vehicle === '') {
+    header('Location: lead-form.php?err=1');
+    exit;
+}
+
+$payload = [
+    'customer_name' => $name,
+    'mobile' => $mobile,
+    'vehicle_title' => $vehicle,
+    'plate_masked' => trim((string)($_POST['plate_masked'] ?? '')),
+    'request_type' => trim((string)($_POST['request_type'] ?? 'SERVICE')),
+    'message' => trim((string)($_POST['message'] ?? '')),
+    'preferred_contact_time' => trim((string)($_POST['preferred_contact_time'] ?? '')),
+    'source_page' => 'lead-form.php',
+    'source' => BRIDGE_SOURCE,
+    'channel' => 'WEBSITE',
+    'submitted_at' => gmdate('c'),
+];
+
+$json = json_encode($payload, JSON_UNESCAPED_UNICODE);
+if ($json === false) {
+    header('Location: lead-form.php?err=1');
+    exit;
+}
+
+$timestamp = (string)time();
+$signature = hash_hmac('sha256', $timestamp . $json, BRIDGE_SECRET);
+
+$ch = curl_init(LAPTOP_ENDPOINT_URL);
+if ($ch === false) {
+    header('Location: lead-form.php?err=1');
+    exit;
+}
+
+curl_setopt_array($ch, [
+    CURLOPT_POST => true,
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_TIMEOUT => 25,
+    CURLOPT_HTTPHEADER => [
+        'Content-Type: application/json',
+        'X-M360-Source: ' . BRIDGE_SOURCE,
+        'X-M360-Timestamp: ' . $timestamp,
+        'X-M360-Signature: ' . $signature,
+    ],
+    CURLOPT_POSTFIELDS => $json,
+]);
+
+$raw = curl_exec($ch);
+$httpCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+curl_close($ch);
+
+if ($raw === false || $httpCode < 200 || $httpCode >= 300) {
+    header('Location: lead-form.php?err=1');
+    exit;
+}
+
+$decoded = json_decode((string)$raw, true);
+if (!is_array($decoded) || empty($decoded['ok'])) {
+    header('Location: lead-form.php?err=1');
+    exit;
+}
+
+header('Location: lead-form.php?ok=1');
+exit;
