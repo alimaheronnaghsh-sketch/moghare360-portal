@@ -18,8 +18,8 @@ return [
     'surveyLine' => '10004000757',
 
     'M360_SMS_PROVIDER' => 'ippanel',
-    'ippanelApiKey' => 'YOUR_REAL_IPPANEL_API_KEY',
-    'ippanelSender' => 'YOUR_APPROVED_SENDER_NUMBER',
-    'ippanelPatternCode' => 'YOUR_REAL_PATTERN_CODE',
+    'ippanelApiKey' => 'YTIxZjM1OTQtMWFkYy00MDRkLThjM2YtMGMwMGJiYmZmMDgxYTZiYmQ1NjM5ZDJkNTljNWMxODQ4MGI2OGQyNmI1YmU=',
+    'ippanelSender' => '+983000505',
+    'ippanelPatternCode' => 'sf1pcf8nqvxt2p3',
     'ippanelOtpVariableName' => 'OTP',
 ];
