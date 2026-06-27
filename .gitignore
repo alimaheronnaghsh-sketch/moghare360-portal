@@ -23,6 +23,7 @@ tools/_legacy_codex_review/
 # Runtime storage and backups (never commit)
 storage/
 private/backups/
+private/logs/
 runtime/
 uploads/
 logs/

@@ -448,6 +448,145 @@ function m360_otp_ippanel_from_number(string $sender): string
     return $sender;
 }
 
+function m360_otp_ippanel_debug_allowed(): bool
+{
+    return PHP_SAPI === 'cli';
+}
+
+function m360_otp_ippanel_debug_begin(): bool
+{
+    if (!m360_otp_ippanel_debug_allowed()) {
+        return false;
+    }
+    $GLOBALS['m360_otp_ippanel_debug_active'] = true;
+    $GLOBALS['m360_otp_ippanel_debug_trace'] = null;
+
+    return true;
+}
+
+/**
+ * @return array<string, mixed>|null
+ */
+function m360_otp_ippanel_debug_end(): ?array
+{
+    if (!m360_otp_ippanel_debug_allowed()) {
+        return null;
+    }
+    $GLOBALS['m360_otp_ippanel_debug_active'] = false;
+    $trace = $GLOBALS['m360_otp_ippanel_debug_trace'] ?? null;
+
+    return is_array($trace) ? $trace : null;
+}
+
+function m360_otp_ippanel_debug_log_path(): string
+{
+    return m360_otp_config_repo_root()
+        . DIRECTORY_SEPARATOR . 'private'
+        . DIRECTORY_SEPARATOR . 'logs'
+        . DIRECTORY_SEPARATOR . 'ippanel-debug.log';
+}
+
+function m360_otp_debug_mask_secret(string $value, int $showTail = 4): string
+{
+    $v = trim($value);
+    if ($v === '') {
+        return '';
+    }
+    $len = strlen($v);
+    if ($len <= $showTail + 2) {
+        return str_repeat('*', $len);
+    }
+
+    return str_repeat('*', max(8, $len - $showTail)) . substr($v, -$showTail);
+}
+
+/**
+ * @param list<string> $headers
+ * @return list<string>
+ */
+function m360_otp_debug_sanitize_headers(array $headers): array
+{
+    $out = [];
+    foreach ($headers as $header) {
+        if (preg_match('/^(Authorization:\s*)(.+)$/i', $header, $m) === 1) {
+            $auth = trim($m[2]);
+            if (preg_match('/^(AccessKey|Bearer)\s+(.+)$/i', $auth, $parts) === 1) {
+                $out[] = $m[1] . $parts[1] . ' ' . m360_otp_debug_mask_secret($parts[2]);
+                continue;
+            }
+            $out[] = $m[1] . m360_otp_debug_mask_secret($auth);
+            continue;
+        }
+        $out[] = $header;
+    }
+
+    return $out;
+}
+
+function m360_otp_debug_sanitize_text(string $text): string
+{
+    $text = preg_replace(
+        '/(api[_-]?key|accesskey|bearer|token|authorization)\s*[:=]\s*["\']?([^"\'\s,}]+)/i',
+        '$1=***MASKED***',
+        $text
+    ) ?? $text;
+
+    return $text;
+}
+
+/**
+ * @param array<string, mixed> $payload
+ */
+function m360_otp_debug_sanitize_payload(array $payload): array
+{
+    return $payload;
+}
+
+/**
+ * @param array<string, mixed> $trace
+ */
+function m360_otp_ippanel_debug_write_log(array $trace, array $result = []): bool
+{
+    if (!m360_otp_ippanel_debug_allowed()) {
+        return false;
+    }
+
+    $path = m360_otp_ippanel_debug_log_path();
+    $dir = dirname($path);
+    if (!is_dir($dir) && !mkdir($dir, 0755, true) && !is_dir($dir)) {
+        return false;
+    }
+
+    $entry = [
+        'written_at' => gmdate('c'),
+        'result_ok' => (bool)($result['ok'] ?? false),
+        'result_message' => (string)($result['message'] ?? ''),
+        'trace' => $trace,
+    ];
+    $line = json_encode($entry, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT) . "\n" . str_repeat('-', 72) . "\n";
+
+    return file_put_contents($path, $line, FILE_APPEND | LOCK_EX) !== false;
+}
+
+/**
+ * @return array{ok:bool,message:string,trace?:array<string,mixed>}
+ */
+function m360_otp_send_sms_diagnostic(string $phone, string $code): array
+{
+    if (!m360_otp_ippanel_debug_allowed()) {
+        return ['ok' => false, 'message' => 'Diagnostic mode is CLI-only.'];
+    }
+
+    m360_otp_ippanel_debug_begin();
+    $result = m360_otp_send_sms($phone, $code);
+    $trace = m360_otp_ippanel_debug_end();
+    if ($trace !== null) {
+        $result['trace'] = $trace;
+    }
+
+    return $result;
+}
+
 /**
  * @return array<string, mixed>
  */
@@ -486,7 +625,7 @@ function m360_otp_ippanel_webservice_payload(string $phone, string $message, arr
 }
 
 /**
- * @return array{ok:bool,message:string}
+ * @return array{ok:bool,message:string,debug?:array<string,mixed>}
  */
 function m360_otp_ippanel_send(array $payload, string $apiKey): array
 {
@@ -495,7 +634,15 @@ function m360_otp_ippanel_send(array $payload, string $apiKey): array
         return ['ok' => false, 'message' => M360_OTP_MSG_SMS_FAILED];
     }
 
-    $ch = curl_init('https://edge.ippanel.com/v1/api/send');
+    $endpoint = 'https://edge.ippanel.com/v1/api/send';
+    $method = 'POST';
+    $headers = [
+        'Content-Type: application/json',
+        'Authorization: ' . m360_otp_ippanel_auth_header($apiKey),
+    ];
+    $bodyJson = json_encode($payload, JSON_UNESCAPED_UNICODE);
+
+    $ch = curl_init($endpoint);
     if ($ch === false) {
         m360_otp_log_sms_issue('curl_init', 'failed');
         return ['ok' => false, 'message' => M360_OTP_MSG_SMS_FAILED];
@@ -505,29 +652,52 @@ function m360_otp_ippanel_send(array $payload, string $apiKey): array
         CURLOPT_POST => true,
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_TIMEOUT => 20,
-        CURLOPT_HTTPHEADER => [
-            'Content-Type: application/json',
-            'Authorization: ' . m360_otp_ippanel_auth_header($apiKey),
-        ],
-        CURLOPT_POSTFIELDS => json_encode($payload, JSON_UNESCAPED_UNICODE),
+        CURLOPT_HTTPHEADER => $headers,
+        CURLOPT_POSTFIELDS => $bodyJson,
     ]);
     $raw = curl_exec($ch);
     $status = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
     $curlErr = curl_error($ch);
     curl_close($ch);
 
+    if (!empty($GLOBALS['m360_otp_ippanel_debug_active']) && m360_otp_ippanel_debug_allowed()) {
+        $GLOBALS['m360_otp_ippanel_debug_trace'] = [
+            'timestamp' => gmdate('c'),
+            'provider' => 'ippanel',
+            'endpoint' => $endpoint,
+            'method' => $method,
+            'headers' => m360_otp_debug_sanitize_headers($headers),
+            'request_body' => m360_otp_debug_sanitize_payload($payload),
+            'http_status' => $status,
+            'response_body' => m360_otp_debug_sanitize_text($raw === false ? '' : (string)$raw),
+            'curl_error' => $curlErr,
+        ];
+    }
+
     if ($raw === false || $status < 200 || $status >= 300) {
         m360_otp_log_sms_issue('ippanel_http', 'status=' . $status . ' err=' . $curlErr . ' body=' . substr((string)$raw, 0, 300));
-        return ['ok' => false, 'message' => M360_OTP_MSG_SMS_FAILED];
+        $out = ['ok' => false, 'message' => M360_OTP_MSG_SMS_FAILED];
+        if (!empty($GLOBALS['m360_otp_ippanel_debug_active']) && m360_otp_ippanel_debug_allowed()) {
+            $out['debug'] = $GLOBALS['m360_otp_ippanel_debug_trace'] ?? [];
+        }
+        return $out;
     }
 
     $decoded = json_decode((string)$raw, true);
     if (is_array($decoded) && isset($decoded['meta']['status']) && (bool)$decoded['meta']['status'] === false) {
         m360_otp_log_sms_issue('ippanel_meta', 'status=' . $status . ' body=' . substr((string)$raw, 0, 300));
-        return ['ok' => false, 'message' => M360_OTP_MSG_SMS_FAILED];
+        $out = ['ok' => false, 'message' => M360_OTP_MSG_SMS_FAILED];
+        if (!empty($GLOBALS['m360_otp_ippanel_debug_active']) && m360_otp_ippanel_debug_allowed()) {
+            $out['debug'] = $GLOBALS['m360_otp_ippanel_debug_trace'] ?? [];
+        }
+        return $out;
     }
 
-    return ['ok' => true, 'message' => M360_OTP_MSG_SMS_SENT];
+    $out = ['ok' => true, 'message' => M360_OTP_MSG_SMS_SENT];
+    if (!empty($GLOBALS['m360_otp_ippanel_debug_active']) && m360_otp_ippanel_debug_allowed()) {
+        $out['debug'] = $GLOBALS['m360_otp_ippanel_debug_trace'] ?? [];
+    }
+    return $out;
 }
 
 function m360_otp_normalize_phone(string $phone): ?string
