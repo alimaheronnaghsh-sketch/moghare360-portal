@@ -27,9 +27,126 @@ const M360_ACCESS_MGMT_ROLE_CODE_MAP = [
 /** @var list<string> */
 const M360_ACCESS_MGMT_PROTECTED_ROLE_KEYS = ['owner', 'system_admin'];
 
-function m360_access_mgmt_h(?string $value): string
+if (function_exists('mb_internal_encoding')) {
+    mb_internal_encoding('UTF-8');
+}
+
+/**
+ * Normalize ODBC/SQL Server text for UTF-8 HTML output (does not change DB values).
+ */
+function m360_access_text_from_odbc(mixed $value): string
+{
+    if ($value === null || $value === false) {
+        return '';
+    }
+
+    if (!is_string($value)) {
+        $value = (string)$value;
+    }
+
+    if ($value === '') {
+        return '';
+    }
+
+    if (mb_check_encoding($value, 'UTF-8')) {
+        return $value;
+    }
+
+    if (strlen($value) >= 2 && (strlen($value) % 2) === 0 && str_contains($value, "\0")) {
+        $wide = $value;
+        if (str_starts_with($wide, "\xFF\xFE")) {
+            $wide = substr($wide, 2);
+        }
+        $converted = @iconv('UTF-16LE', 'UTF-8//IGNORE', $wide);
+        if (is_string($converted) && $converted !== '') {
+            return $converted;
+        }
+    }
+
+    foreach (['Windows-1256', 'CP1256', 'ISO-8859-6'] as $encoding) {
+        $converted = @iconv($encoding, 'UTF-8//IGNORE', $value);
+        if (is_string($converted) && $converted !== '' && mb_check_encoding($converted, 'UTF-8')) {
+            return $converted;
+        }
+    }
+
+    return $value;
+}
+
+function m360_access_h(?string $value): string
 {
     return htmlspecialchars((string)$value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+}
+
+function m360_access_mgmt_h(?string $value): string
+{
+    return m360_access_h(m360_access_text_from_odbc($value));
+}
+
+/**
+ * @param list<mixed> $params
+ * @return list<array<string, string>>
+ */
+function m360_access_fetch_rows($connection, string $sql, array $params = []): array
+{
+    if ($connection === false) {
+        return [];
+    }
+
+    $statement = customer_core_execute($connection, $sql, $params);
+    if ($statement === false) {
+        return [];
+    }
+
+    $rows = [];
+
+    if (function_exists('odbc_fetch_array')) {
+        while (true) {
+            $row = @odbc_fetch_array($statement);
+            if (!is_array($row)) {
+                break;
+            }
+
+            $normalized = [];
+            foreach ($row as $name => $cell) {
+                $normalized[strtolower((string)$name)] = $cell === false || $cell === null
+                    ? ''
+                    : m360_access_text_from_odbc((string)$cell);
+            }
+
+            if ($normalized !== []) {
+                $rows[] = $normalized;
+            }
+        }
+
+        return $rows;
+    }
+
+    while (@odbc_fetch_row($statement)) {
+        $row = [];
+        $columnCount = @odbc_num_fields($statement);
+        if ($columnCount === false || $columnCount < 1) {
+            continue;
+        }
+
+        for ($i = 1; $i <= $columnCount; $i++) {
+            $name = @odbc_field_name($statement, $i);
+            if ($name === false) {
+                continue;
+            }
+
+            $cell = @odbc_result($statement, $i);
+            $row[strtolower((string)$name)] = $cell === false || $cell === null
+                ? ''
+                : m360_access_text_from_odbc((string)$cell);
+        }
+
+        if ($row !== []) {
+            $rows[] = $row;
+        }
+    }
+
+    return $rows;
 }
 
 function m360_access_mgmt_post_string(string $key): string

@@ -18,9 +18,26 @@ function m360_access_preview_load($conn, int $userId): array
     $rolesResult = erp_auth_current_roles($conn, $userId);
     $permResult = erp_auth_current_permissions($conn, $userId);
 
+    $roleObjects = $rolesResult['role_objects'] ?? [];
+    foreach ($roleObjects as $idx => $role) {
+        if (!is_array($role)) {
+            continue;
+        }
+        if (isset($role['role_name'])) {
+            $roleObjects[$idx]['role_name'] = m360_access_text_from_odbc((string)$role['role_name']);
+        }
+        if (isset($role['role_key'])) {
+            $roleObjects[$idx]['role_key'] = m360_access_text_from_odbc((string)$role['role_key']);
+        }
+    }
+
+    $user['full_name'] = m360_access_text_from_odbc((string)($user['full_name'] ?? ''));
+    $user['dept_name'] = m360_access_text_from_odbc((string)($user['dept_name'] ?? ''));
+    $user['position_name'] = m360_access_text_from_odbc((string)($user['position_name'] ?? ''));
+
     return [
         'user' => $user,
-        'roles' => $rolesResult['role_objects'] ?? [],
+        'roles' => $roleObjects,
         'permissions' => $permResult['permission_keys'] ?? [],
         'permission_objects' => $permResult['permission_objects'] ?? [],
     ];

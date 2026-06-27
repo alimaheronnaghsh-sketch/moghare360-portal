@@ -10,7 +10,7 @@ function m360_access_role_fetch_by_key($conn, string $roleKey): ?array
         return null;
     }
 
-    $rows = customer_core_fetch_rows(
+    $rows = m360_access_fetch_rows(
         $conn,
         'SELECT TOP 1 role_id, role_key, role_name, access_level, is_active FROM dbo.core_roles WHERE role_key = ?',
         [strtolower(trim($roleKey))]
@@ -25,7 +25,7 @@ function m360_access_role_fetch_by_id($conn, int $roleId): ?array
         return null;
     }
 
-    $rows = customer_core_fetch_rows(
+    $rows = m360_access_fetch_rows(
         $conn,
         'SELECT TOP 1 role_id, role_key, role_name, access_level, is_active FROM dbo.core_roles WHERE role_id = ?',
         [$roleId]
@@ -43,7 +43,7 @@ function m360_access_role_list_assignable($conn, bool $includePrivileged = false
         return [];
     }
 
-    $rows = customer_core_fetch_rows(
+    $rows = m360_access_fetch_rows(
         $conn,
         'SELECT role_id, role_key, role_name, access_level, is_active FROM dbo.core_roles WHERE is_active = 1 ORDER BY sort_order, role_id'
     );
@@ -67,7 +67,7 @@ function m360_access_role_active_for_user($conn, int $userId): array
         return [];
     }
 
-    return customer_core_fetch_rows(
+    return m360_access_fetch_rows(
         $conn,
         'SELECT ur.user_role_id, ur.user_id, ur.role_id, ur.granted_by_request_id, ur.effective_from, ur.expires_at,
                 ur.revoked_at, ur.is_temporary, r.role_key, r.role_name
@@ -137,7 +137,7 @@ function m360_access_role_assign(
     }
 
     $roleId = (int)($role['role_id'] ?? 0);
-    $active = customer_core_fetch_rows(
+    $active = m360_access_fetch_rows(
         $conn,
         'SELECT TOP 1 user_role_id FROM dbo.core_user_roles WHERE user_id = ? AND role_id = ? AND revoked_at IS NULL',
         [$userId, $roleId]
@@ -220,7 +220,7 @@ function m360_access_role_revoke(
         throw new RuntimeException('Database connection unavailable.');
     }
 
-    $row = customer_core_fetch_rows(
+    $row = m360_access_fetch_rows(
         $conn,
         'SELECT TOP 1 ur.user_role_id, ur.role_id, r.role_key
          FROM dbo.core_user_roles ur

@@ -223,7 +223,7 @@ function m360_access_audit_list_history($conn, ?int $userId = null, int $limit =
     $limit = max(1, min(500, $limit));
 
     if ($userId !== null && $userId > 0) {
-        return customer_core_fetch_rows(
+        return m360_access_fetch_rows(
             $conn,
             'SELECT TOP ' . $limit . ' h.history_id, h.user_id, h.request_id, h.change_type, h.entity_type, h.entity_id,
                     h.before_json, h.after_json, h.changed_by_user_id, h.changed_at,
@@ -237,7 +237,7 @@ function m360_access_audit_list_history($conn, ?int $userId = null, int $limit =
         );
     }
 
-    return customer_core_fetch_rows(
+    return m360_access_fetch_rows(
         $conn,
         'SELECT TOP ' . $limit . ' h.history_id, h.user_id, h.request_id, h.change_type, h.entity_type, h.entity_id,
                 h.before_json, h.after_json, h.changed_by_user_id, h.changed_at,

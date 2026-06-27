@@ -133,12 +133,12 @@ function m360_access_user_list_staff($conn): array
         return [];
     }
 
-    $rows = customer_core_fetch_rows(
+    $rows = m360_access_fetch_rows(
         $conn,
         'SELECT u.user_id, u.username, u.full_name, u.email, u.mobile, u.lifecycle_state,
                 u.is_login_enabled, u.is_system_owner, u.created_at,
                 sp.department_id, sp.position_id,
-                d.dept_name, p.position_name
+                d.dept_key, d.dept_name, p.position_key, p.position_name
          FROM dbo.core_users u
          LEFT JOIN dbo.core_staff_profiles sp ON sp.user_id = u.user_id
          LEFT JOIN dbo.core_departments d ON d.department_id = sp.department_id
@@ -148,7 +148,7 @@ function m360_access_user_list_staff($conn): array
 
     foreach ($rows as &$row) {
         $uid = (int)($row['user_id'] ?? 0);
-        $roleRows = customer_core_fetch_rows(
+        $roleRows = m360_access_fetch_rows(
             $conn,
             'SELECT r.role_key FROM dbo.core_user_roles ur INNER JOIN dbo.core_roles r ON r.role_id = ur.role_id WHERE ur.user_id = ? AND ur.revoked_at IS NULL ORDER BY r.sort_order',
             [$uid]
@@ -167,12 +167,12 @@ function m360_access_user_get($conn, int $userId): ?array
         return null;
     }
 
-    $rows = customer_core_fetch_rows(
+    $rows = m360_access_fetch_rows(
         $conn,
         'SELECT u.user_id, u.username, u.full_name, u.email, u.mobile, u.lifecycle_state,
                 u.is_login_enabled, u.is_system_owner, u.created_at, u.updated_at,
                 sp.profile_id, sp.department_id, sp.position_id, sp.notes,
-                d.dept_name, p.position_name
+                d.dept_key, d.dept_name, p.position_key, p.position_name
          FROM dbo.core_users u
          LEFT JOIN dbo.core_staff_profiles sp ON sp.user_id = u.user_id
          LEFT JOIN dbo.core_departments d ON d.department_id = sp.department_id
@@ -193,9 +193,9 @@ function m360_access_user_departments($conn): array
         return [];
     }
 
-    return customer_core_fetch_rows(
+    return m360_access_fetch_rows(
         $conn,
-        'SELECT department_id, dept_key, dept_name FROM dbo.core_departments WHERE is_active = 1 ORDER BY sort_order, department_id'
+        'SELECT department_id, dept_key, dept_name FROM dbo.core_departments WHERE is_active = 1 ORDER BY sort_order, dept_name'
     );
 }
 
@@ -209,16 +209,16 @@ function m360_access_user_positions($conn, int $departmentId = 0): array
     }
 
     if ($departmentId > 0) {
-        return customer_core_fetch_rows(
+        return m360_access_fetch_rows(
             $conn,
-            'SELECT position_id, department_id, position_key, position_name FROM dbo.core_positions WHERE is_active = 1 AND department_id = ? ORDER BY sort_order, position_id',
+            'SELECT position_id, department_id, position_key, position_name FROM dbo.core_positions WHERE is_active = 1 AND department_id = ? ORDER BY sort_order, position_name',
             [$departmentId]
         );
     }
 
-    return customer_core_fetch_rows(
+    return m360_access_fetch_rows(
         $conn,
-        'SELECT position_id, department_id, position_key, position_name FROM dbo.core_positions WHERE is_active = 1 ORDER BY department_id, sort_order, position_id'
+        'SELECT position_id, department_id, position_key, position_name FROM dbo.core_positions WHERE is_active = 1 ORDER BY department_id, sort_order, position_name'
     );
 }
 
