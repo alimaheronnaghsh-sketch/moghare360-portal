@@ -1,0 +1,29 @@
+.m360-qc-page { background: #f8fafc; margin: 0; padding: 1.25rem; color: #0f172a; font-family: inherit; }
+.m360-qc-wrap { max-width: 1100px; margin: 0 auto; }
+.m360-qc-filters { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 1rem; }
+.m360-qc-filters a { padding: 0.38rem 0.75rem; border-radius: 999px; border: 1px solid #cbd5e1; text-decoration: none; color: #334155; font-size: 0.85rem; background: #fff; }
+.m360-qc-filters a.active { background: #7c2d12; color: #fff; border-color: #7c2d12; }
+.m360-qc-table { width: 100%; border-collapse: collapse; font-size: 0.86rem; }
+.m360-qc-table th, .m360-qc-table td { padding: 0.5rem; border-bottom: 1px solid #e2e8f0; text-align: right; }
+.m360-qc-table th { background: #f1f5f9; }
+.m360-qc-btn { display: inline-block; padding: 0.45rem 0.9rem; border: none; border-radius: 0.45rem; background: #7c2d12; color: #fff; text-decoration: none; cursor: pointer; font-size: 0.88rem; }
+.m360-qc-btn.secondary { background: #e2e8f0; color: #1e293b; }
+.m360-qc-btn.danger { background: #b91c1c; }
+.m360-qc-btn.pass { background: #166534; }
+.m360-qc-flash { padding: 0.75rem 1rem; border-radius: 0.45rem; margin-bottom: 1rem; }
+.m360-qc-flash.ok { background: #dcfce7; color: #166534; }
+.m360-qc-flash.err { background: #fee2e2; color: #991b1b; }
+.m360-qc-empty { text-align: center; padding: 2rem; color: #64748b; }
+.m360-qc-back { display: inline-block; margin-bottom: 1rem; color: #7c2d12; text-decoration: none; }
+.m360-qc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+@media (max-width: 720px) { .m360-qc-grid { grid-template-columns: 1fr; } }
+.m360-qc-kv { margin: 0.3rem 0; font-size: 0.9rem; }
+.m360-qc-kv strong { color: #475569; }
+.m360-qc-actions { display: flex; flex-wrap: wrap; gap: 0.25rem; }
+.m360-qc-inline-form { display: inline-block; margin: 0.2rem; }
+.m360-qc-input, .m360-qc-textarea, .m360-qc-select { width: 100%; padding: 0.5rem; border: 1px solid #cbd5e1; border-radius: 0.4rem; box-sizing: border-box; font-family: inherit; }
+.m360-qc-textarea { min-height: 80px; }
+.m360-qc-alert { padding: 0.8rem; border-radius: 0.45rem; background: #fff7ed; border: 1px solid #fed7aa; color: #9a3412; margin: 0.6rem 0; }
+.m360-qc-badge { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 999px; background: #ffedd5; color: #9a3412; font-size: 0.78rem; }
+.m360-qc-item-pass { color: #166534; }
+.m360-qc-item-fail { color: #b91c1c; }

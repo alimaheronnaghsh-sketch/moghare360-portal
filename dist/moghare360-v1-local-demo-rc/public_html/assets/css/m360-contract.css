@@ -1,0 +1,61 @@
+/* MOGHARE360 P1.5 — Intake contract (scoped) */
+.m360-contract-page {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 1rem;
+  font-family: "Vazirmatn", Tahoma, sans-serif;
+  direction: rtl;
+  color: #18181b;
+}
+.m360-contract-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 1rem 0;
+}
+.m360-contract-btn {
+  border: 0;
+  border-radius: 0.5rem;
+  padding: 0.65rem 1.1rem;
+  font-size: 0.95rem;
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-block;
+}
+.m360-contract-btn.primary { background: #166534; color: #fff; }
+.m360-contract-btn.secondary { background: #e4e4e7; color: #18181b; }
+.m360-contract-sign-canvas {
+  width: 100%;
+  max-width: 100%;
+  height: 220px;
+  border: 2px dashed #a1a1aa;
+  border-radius: 0.75rem;
+  touch-action: none;
+  background: #fff;
+}
+.m360-contract-checklist label {
+  display: block;
+  margin: 0.5rem 0;
+  line-height: 1.7;
+}
+.m360-contract-otp-row {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-top: 0.75rem;
+}
+.m360-contract-otp-row input {
+  padding: 0.55rem 0.75rem;
+  border: 1px solid #d4d4d8;
+  border-radius: 0.5rem;
+  font-size: 1rem;
+  min-width: 140px;
+}
+.m360-contract-flash {
+  padding: 0.75rem 1rem;
+  border-radius: 0.5rem;
+  margin-bottom: 1rem;
+}
+.m360-contract-flash.ok { background: #dcfce7; color: #166534; }
+.m360-contract-flash.err { background: #fee2e2; color: #991b1b; }

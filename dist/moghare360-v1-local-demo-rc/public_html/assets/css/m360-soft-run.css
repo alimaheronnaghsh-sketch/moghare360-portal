@@ -1,0 +1,23 @@
+/* MOGHARE360 P9 — Soft run / demo scenario */
+.m360-sr-page { background: #f4f7fb; color: #0f172a; font-family: Tahoma, "Segoe UI", sans-serif; }
+.m360-sr-wrap { max-width: 1280px; margin: 0 auto; padding: 1.25rem; }
+.m360-sr-nav { display: flex; flex-wrap: wrap; gap: .5rem; margin: 1rem 0; }
+.m360-sr-nav a { padding: .45rem .85rem; border-radius: 999px; background: #fff; border: 1px solid #cbd5e1; color: #334155; text-decoration: none; font-size: .88rem; }
+.m360-sr-nav a.active, .m360-sr-nav a:hover { background: #0f4c5c; color: #fff; border-color: #0f4c5c; }
+.m360-sr-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: .75rem; margin: 1rem 0; }
+.m360-sr-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 1rem; }
+.m360-sr-card .val { font-size: 1.4rem; font-weight: 700; color: #0f4c5c; }
+.m360-sr-card .lbl { font-size: .82rem; color: #64748b; margin-top: .25rem; }
+.m360-sr-table { width: 100%; border-collapse: collapse; font-size: .86rem; }
+.m360-sr-table th, .m360-sr-table td { padding: .5rem .4rem; border-bottom: 1px solid #e2e8f0; text-align: right; vertical-align: top; }
+.m360-sr-table th { background: #eef2f7; }
+.m360-sr-badge { display: inline-block; padding: .15rem .45rem; border-radius: 6px; font-size: .75rem; }
+.m360-sr-badge.pass { background: #dcfce7; color: #166534; }
+.m360-sr-badge.warn { background: #fef3c7; color: #92400e; }
+.m360-sr-badge.block { background: #fee2e2; color: #991b1b; }
+.m360-sr-badge.notrun { background: #e2e8f0; color: #475569; }
+.m360-sr-btn { display: inline-block; padding: .35rem .65rem; border-radius: 8px; background: #0f4c5c; color: #fff; text-decoration: none; font-size: .82rem; border: 0; cursor: pointer; }
+.m360-sr-btn.secondary { background: #64748b; }
+.m360-sr-flow { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: .75rem; }
+.m360-sr-flow-item { background: #fff; border: 1px solid #dbeafe; border-radius: 10px; padding: .75rem; }
+.m360-sr-note { color: #64748b; font-size: .85rem; margin: .5rem 0; }

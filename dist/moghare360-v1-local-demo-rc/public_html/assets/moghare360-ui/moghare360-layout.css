@@ -1,0 +1,177 @@
+/*
+ * MOGHARE360 ERP — Layout System
+ * Mission 31 — App shell placeholders & responsive grid
+ */
+
+.m360-app-shell {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: var(--m360-sidebar-width) 1fr;
+  grid-template-rows: var(--m360-toolbar-height) 1fr;
+  grid-template-areas:
+    "sidebar toolbar"
+    "sidebar main";
+  background: var(--m360-bg-app);
+}
+
+.m360-app-sidebar {
+  grid-area: sidebar;
+  background: var(--m360-bg-sidebar);
+  color: var(--m360-color-white);
+  padding: var(--m360-space-4);
+  border-inline-end: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.m360-app-toolbar {
+  grid-area: toolbar;
+  background: var(--m360-bg-toolbar);
+  color: var(--m360-color-white);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 var(--m360-space-6);
+  box-shadow: var(--m360-shadow-sm);
+  position: sticky;
+  top: 0;
+  z-index: var(--m360-z-toolbar);
+}
+
+.m360-app-main {
+  grid-area: main;
+  padding: var(--m360-space-6);
+  overflow-x: auto;
+}
+
+.m360-content-container {
+  width: 100%;
+  max-width: var(--m360-content-max-width);
+  margin-inline: auto;
+}
+
+.m360-page-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--m360-space-3);
+  margin-bottom: var(--m360-space-6);
+}
+
+.m360-toolbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--m360-space-2);
+}
+
+.m360-module-section {
+  margin-bottom: var(--m360-space-8);
+}
+
+.m360-module-section-title {
+  font-size: var(--m360-font-size-lg);
+  font-weight: var(--m360-font-weight-semibold);
+  color: var(--m360-color-primary-800);
+  margin: 0 0 var(--m360-space-4);
+  padding-bottom: var(--m360-space-2);
+  border-bottom: 2px solid var(--m360-color-accent-500);
+}
+
+.m360-grid {
+  display: grid;
+  gap: var(--m360-space-4);
+}
+
+.m360-grid-2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.m360-grid-3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.m360-grid-4 {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.m360-two-column {
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  gap: var(--m360-space-6);
+  align-items: start;
+}
+
+.m360-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--m360-space-4);
+}
+
+.m360-sidebar-brand {
+  font-size: var(--m360-font-size-lg);
+  font-weight: var(--m360-font-weight-bold);
+  margin-bottom: var(--m360-space-6);
+  color: var(--m360-color-accent-400);
+}
+
+.m360-sidebar-nav {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.m360-sidebar-nav li {
+  margin-bottom: var(--m360-space-2);
+}
+
+.m360-sidebar-nav a {
+  display: block;
+  padding: var(--m360-space-2) var(--m360-space-3);
+  border-radius: var(--m360-radius-sm);
+  color: rgba(255, 255, 255, 0.85);
+  text-decoration: none;
+  font-size: var(--m360-font-size-sm);
+}
+
+.m360-sidebar-nav a:hover,
+.m360-sidebar-nav a.is-active {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--m360-color-white);
+}
+
+@media (max-width: 1024px) {
+  .m360-app-shell {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "toolbar"
+      "main";
+  }
+
+  .m360-app-sidebar {
+    display: none;
+  }
+
+  .m360-two-column {
+    grid-template-columns: 1fr;
+  }
+
+  .m360-grid-4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .m360-app-main {
+    padding: var(--m360-space-4);
+  }
+
+  .m360-grid-2,
+  .m360-grid-3,
+  .m360-grid-4 {
+    grid-template-columns: 1fr;
+  }
+
+  .m360-page-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}

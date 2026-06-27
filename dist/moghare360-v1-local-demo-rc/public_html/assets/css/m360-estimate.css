@@ -1,0 +1,25 @@
+.m360-est-page { background: #f8fafc; margin: 0; padding: 1.25rem; color: #0f172a; font-family: inherit; }
+.m360-est-wrap { max-width: 1100px; margin: 0 auto; }
+.m360-est-filters { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 1rem; }
+.m360-est-filters a { padding: 0.38rem 0.75rem; border-radius: 999px; border: 1px solid #cbd5e1; text-decoration: none; color: #334155; font-size: 0.85rem; background: #fff; }
+.m360-est-filters a.active { background: #0f766e; color: #fff; border-color: #0f766e; }
+.m360-est-table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+.m360-est-table th, .m360-est-table td { padding: 0.5rem; border-bottom: 1px solid #e2e8f0; text-align: right; }
+.m360-est-table th { background: #f1f5f9; }
+.m360-est-btn { display: inline-block; padding: 0.45rem 0.9rem; border: none; border-radius: 0.45rem; background: #0f766e; color: #fff; text-decoration: none; cursor: pointer; font-size: 0.88rem; }
+.m360-est-btn.secondary { background: #e2e8f0; color: #1e293b; }
+.m360-est-btn.primary { background: #166534; }
+.m360-est-btn.danger, .m360-est-btn.danger-sm { background: #b91c1c; }
+.m360-est-btn.danger-sm { padding: 0.25rem 0.5rem; font-size: 0.78rem; }
+.m360-est-flash { padding: 0.75rem 1rem; border-radius: 0.45rem; margin-bottom: 1rem; }
+.m360-est-flash.ok { background: #dcfce7; color: #166534; }
+.m360-est-flash.err { background: #fee2e2; color: #991b1b; }
+.m360-est-empty { text-align: center; padding: 2rem; color: #64748b; }
+.m360-est-back { display: inline-block; margin-bottom: 1rem; color: #0f766e; text-decoration: none; }
+.m360-est-input { width: 100%; padding: 0.5rem; margin: 0.35rem 0 0.75rem; border: 1px solid #cbd5e1; border-radius: 0.4rem; box-sizing: border-box; }
+.m360-est-inline-form { display: inline-block; margin: 0.2rem; }
+.m360-est-actions { display: flex; flex-wrap: wrap; gap: 0.25rem; }
+.m360-est-customer { max-width: 520px; margin: 0 auto; }
+.m360-est-legal { font-size: 0.88rem; color: #64748b; line-height: 1.6; margin: 1rem 0; }
+.m360-est-total { font-size: 1.1rem; }
+.m360-est-otp-block { margin: 1rem 0; padding: 1rem; background: #f1f5f9; border-radius: 0.5rem; }

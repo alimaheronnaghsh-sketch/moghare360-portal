@@ -1,0 +1,122 @@
+/*
+ * MOGHARE360 ERP — RTL Typography & Direction
+ * Mission 31 — Persian-first readability rules
+ */
+
+html[dir="rtl"],
+.m360-rtl {
+  direction: rtl;
+  text-align: right;
+}
+
+html[dir="rtl"] body,
+.m360-rtl body {
+  font-family: var(--m360-font-family-sans);
+  font-feature-settings: "kern" 1, "liga" 1;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Readable numerals in mixed Persian/English UI */
+html[dir="rtl"] .m360-num,
+html[dir="rtl"] .m360-kpi-value,
+html[dir="rtl"] .m360-table td[data-type="number"],
+html[dir="rtl"] .m360-badge,
+.m360-rtl .m360-num {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+  letter-spacing: var(--m360-letter-spacing-normal);
+  direction: ltr;
+  unicode-bidi: embed;
+  display: inline-block;
+}
+
+/* English technical tokens remain LTR inside RTL shell */
+html[dir="rtl"] .m360-ltr,
+.m360-rtl .m360-ltr {
+  direction: ltr;
+  unicode-bidi: embed;
+  display: inline-block;
+  text-align: left;
+}
+
+/* Tables */
+html[dir="rtl"] .m360-table th,
+html[dir="rtl"] .m360-table td,
+.m360-rtl .m360-table th,
+.m360-rtl .m360-table td {
+  text-align: right;
+}
+
+html[dir="rtl"] .m360-table th.m360-col-actions,
+html[dir="rtl"] .m360-table td.m360-col-actions {
+  text-align: center;
+}
+
+/* Forms */
+html[dir="rtl"] .m360-form-label,
+.m360-rtl .m360-form-label {
+  text-align: right;
+  display: block;
+}
+
+html[dir="rtl"] .m360-form-input,
+html[dir="rtl"] .m360-form-select,
+html[dir="rtl"] .m360-form-textarea,
+.m360-rtl .m360-form-input,
+.m360-rtl .m360-form-select,
+.m360-rtl .m360-form-textarea {
+  text-align: right;
+}
+
+html[dir="rtl"] .m360-form-input[type="email"],
+html[dir="rtl"] .m360-form-input[type="url"],
+html[dir="rtl"] .m360-form-input.m360-input-ltr,
+.m360-rtl .m360-form-input.m360-input-ltr {
+  direction: ltr;
+  text-align: left;
+}
+
+html[dir="rtl"] .m360-form-hint,
+.m360-rtl .m360-form-hint {
+  text-align: right;
+}
+
+/* Page header meta */
+html[dir="rtl"] .m360-page-header-meta,
+.m360-rtl .m360-page-header-meta {
+  text-align: right;
+}
+
+/* Toolbar button groups */
+html[dir="rtl"] .m360-toolbar-actions,
+.m360-rtl .m360-toolbar-actions {
+  flex-direction: row-reverse;
+}
+
+/* Timeline */
+html[dir="rtl"] .m360-timeline-item,
+.m360-rtl .m360-timeline-item {
+  padding-right: var(--m360-space-6);
+  padding-left: 0;
+  border-right: 3px solid var(--m360-border-color-strong);
+  border-left: none;
+}
+
+/* KPI alignment */
+html[dir="rtl"] .m360-kpi-card,
+.m360-rtl .m360-kpi-card {
+  text-align: right;
+}
+
+/* Demo bilingual sample */
+.m360-bilingual-sample {
+  line-height: var(--m360-line-height-relaxed);
+}
+
+.m360-bilingual-sample .en {
+  direction: ltr;
+  unicode-bidi: embed;
+  display: inline;
+  color: var(--m360-color-neutral-600);
+  font-size: var(--m360-font-size-sm);
+}

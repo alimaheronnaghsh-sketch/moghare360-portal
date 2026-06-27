@@ -1,0 +1,20 @@
+/* MOGHARE360 P11 — RC Final */
+.m360-rcf-page { background: #f1f5f9; color: #0f172a; font-family: Tahoma, "Segoe UI", sans-serif; }
+.m360-rcf-wrap { max-width: 1320px; margin: 0 auto; padding: 1.25rem; }
+.m360-rcf-nav { display: flex; flex-wrap: wrap; gap: .5rem; margin: 1rem 0; }
+.m360-rcf-nav a { padding: .45rem .85rem; border-radius: 999px; background: #fff; border: 1px solid #cbd5e1; color: #334155; text-decoration: none; font-size: .88rem; }
+.m360-rcf-nav a.active, .m360-rcf-nav a:hover { background: #334155; color: #fff; border-color: #334155; }
+.m360-rcf-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: .75rem; margin: 1rem 0; }
+.m360-rcf-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 1rem; }
+.m360-rcf-card .val { font-size: 1.35rem; font-weight: 700; color: #334155; }
+.m360-rcf-card .lbl { font-size: .82rem; color: #64748b; margin-top: .25rem; }
+.m360-rcf-table { width: 100%; border-collapse: collapse; font-size: .84rem; }
+.m360-rcf-table th, .m360-rcf-table td { padding: .5rem .4rem; border-bottom: 1px solid #e2e8f0; text-align: right; vertical-align: top; }
+.m360-rcf-table th { background: #e2e8f0; }
+.m360-rcf-badge { display: inline-block; padding: .15rem .45rem; border-radius: 6px; font-size: .75rem; }
+.m360-rcf-badge.pass { background: #dcfce7; color: #166534; }
+.m360-rcf-badge.warn { background: #fef3c7; color: #92400e; }
+.m360-rcf-badge.block { background: #fee2e2; color: #991b1b; }
+.m360-rcf-btn { display: inline-block; padding: .35rem .65rem; border-radius: 8px; background: #334155; color: #fff; text-decoration: none; font-size: .82rem; }
+.m360-rcf-note { color: #64748b; font-size: .85rem; margin: .5rem 0; }
+.m360-rcf-list { margin: .5rem 0; padding-right: 1.25rem; }

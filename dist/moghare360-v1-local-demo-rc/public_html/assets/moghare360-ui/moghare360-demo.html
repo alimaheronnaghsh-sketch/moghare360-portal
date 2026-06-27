@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>MOGHARE360 — Design System Demo (Mission 31)</title>
+  <link rel="stylesheet" href="moghare360-design-tokens.css">
+  <link rel="stylesheet" href="moghare360-rtl.css">
+  <link rel="stylesheet" href="moghare360-layout.css">
+  <link rel="stylesheet" href="moghare360-components.css">
+</head>
+<body class="m360-rtl">
+  <div class="m360-demo-banner">UI DEMO ONLY — NO PHP — NO DATABASE — NO AUTH CHANGE — LOCAL PROTOTYPE</div>
+
+  <div class="m360-app-shell">
+    <aside class="m360-app-sidebar" aria-label="منوی نمونه">
+      <div class="m360-sidebar-brand">مغاره ۳۶۰ ERP</div>
+      <ul class="m360-sidebar-nav">
+        <li><a href="#" class="is-active">داشبورد Soft Run</a></li>
+        <li><a href="#">کارت‌های کار</a></li>
+        <li><a href="#">عملیات سرویس</a></li>
+        <li><a href="#">پرداخت‌ها</a></li>
+        <li><a href="#">کنترل کیفیت</a></li>
+        <li><a href="#">تحویل</a></li>
+      </ul>
+    </aside>
+
+    <header class="m360-app-toolbar">
+      <span>Soft Run Internal ERP — Design System Demo</span>
+      <div class="m360-toolbar-actions">
+        <button type="button" class="m360-btn m360-btn-secondary m360-btn-sm">راهنما</button>
+        <button type="button" class="m360-btn m360-btn-accent m360-btn-sm">اقدام سریع</button>
+      </div>
+    </header>
+
+    <main class="m360-app-main">
+      <div class="m360-content-container">
+
+        <header class="m360-page-header">
+          <div class="m360-page-header-eyebrow">Mission 31 — UI DNA</div>
+          <h1 class="m360-page-header-title">پایه Design System مغاره ۳۶۰</h1>
+          <p class="m360-page-header-meta m360-bilingual-sample">
+            نمایش اجزای رابط کاربری برای تعمیرگاه صنعتی —
+            <span class="en">Industrial repair shop ERP interface foundation</span>
+          </p>
+        </header>
+
+        <div class="m360-page-toolbar">
+          <div>
+            <span class="m360-badge m360-badge-primary">Soft Run</span>
+            <span class="m360-badge m360-badge-accent">Design Lock</span>
+          </div>
+          <div class="m360-toolbar-actions">
+            <button type="button" class="m360-btn m360-btn-primary">ایجاد نمونه</button>
+            <button type="button" class="m360-btn m360-btn-secondary">بازخوانی</button>
+          </div>
+        </div>
+
+        <section class="m360-module-section">
+          <h2 class="m360-module-section-title">شاخص‌های کلیدی (KPI)</h2>
+          <div class="m360-grid m360-grid-4">
+            <div class="m360-kpi-card">
+              <div class="m360-kpi-label">کارت کار فعال</div>
+              <div class="m360-kpi-value m360-num">12</div>
+              <div class="m360-kpi-meta">JobCard ID sample</div>
+            </div>
+            <div class="m360-kpi-card is-accent">
+              <div class="m360-kpi-label">در انتظار قطعه</div>
+              <div class="m360-kpi-value m360-num">3</div>
+              <div class="m360-kpi-meta">WAITING_PARTS</div>
+            </div>
+            <div class="m360-kpi-card is-warning">
+              <div class="m360-kpi-label">QC معلق</div>
+              <div class="m360-kpi-value m360-num">2</div>
+              <div class="m360-kpi-meta">QC_PENDING</div>
+            </div>
+            <div class="m360-kpi-card is-success">
+              <div class="m360-kpi-label">آماده تحویل</div>
+              <div class="m360-kpi-value m360-num">5</div>
+              <div class="m360-kpi-meta">READY_FOR_DELIVERY</div>
+            </div>
+          </div>
+        </section>
+
+        <section class="m360-module-section">
+          <h2 class="m360-module-section-title">وضعیت کارت کار</h2>
+          <div class="m360-stack" style="flex-direction: row; flex-wrap: wrap; gap: 0.5rem;">
+            <span class="m360-badge m360-badge-neutral">RECEIVED</span>
+            <span class="m360-badge m360-badge-primary">IN_SERVICE</span>
+            <span class="m360-badge m360-badge-warning">WAITING_PARTS</span>
+            <span class="m360-badge m360-badge-info">SERVICE_DONE</span>
+            <span class="m360-badge m360-badge-warning">QC_PENDING</span>
+            <span class="m360-badge m360-badge-success">QC_PASSED</span>
+            <span class="m360-badge m360-badge-danger">QC_FAILED</span>
+            <span class="m360-badge m360-badge-accent">READY_FOR_DELIVERY</span>
+            <span class="m360-badge m360-badge-success">DELIVERED</span>
+          </div>
+        </section>
+
+        <section class="m360-module-section">
+          <div class="m360-two-column">
+            <div class="m360-stack">
+              <article class="m360-card m360-entity-card">
+                <div class="m360-card-header">
+                  <h3 class="m360-card-title">مشتری / خودرو</h3>
+                  <p class="m360-card-subtitle">Customer / Vehicle Card</p>
+                </div>
+                <div class="m360-card-body">
+                  <div class="m360-entity-row"><span class="m360-entity-label">مشتری</span><span class="m360-entity-value">علی رضایی</span></div>
+                  <div class="m360-entity-row"><span class="m360-entity-label">خودرو</span><span class="m360-entity-value">پژو ۲۰۶</span></div>
+                  <div class="m360-entity-row"><span class="m360-entity-label">پلاک</span><span class="m360-entity-value m360-ltr">12ب345-67</span></div>
+                  <div class="m360-entity-row"><span class="m360-entity-label">شماره کارت</span><span class="m360-entity-value m360-num m360-ltr">JC-2026-0001</span></div>
+                </div>
+              </article>
+
+              <article class="m360-card m360-entity-card">
+                <div class="m360-card-header">
+                  <h3 class="m360-card-title">عملیات سرویس</h3>
+                  <p class="m360-card-subtitle">Service Operation Card</p>
+                </div>
+                <div class="m360-card-body">
+                  <div class="m360-entity-row"><span class="m360-entity-label">عنوان</span><span class="m360-entity-value">تعویض روغن و فیلتر</span></div>
+                  <div class="m360-entity-row"><span class="m360-entity-label">وضعیت</span><span class="m360-badge m360-badge-primary">IN_PROGRESS</span></div>
+                  <div class="m360-entity-row"><span class="m360-entity-label">شناسه</span><span class="m360-entity-value m360-num">1</span></div>
+                </div>
+              </article>
+            </div>
+
+            <div class="m360-stack">
+              <article class="m360-card m360-entity-card">
+                <div class="m360-card-header">
+                  <h3 class="m360-card-title">پیش‌نمایش پرداخت</h3>
+                  <p class="m360-card-subtitle">Payment Preview Card</p>
+                </div>
+                <div class="m360-card-body">
+                  <div class="m360-entity-row"><span class="m360-entity-label">دریافت‌شده</span><span class="m360-entity-value m360-num">۱٬۰۰۰٬۰۰۰ IRR</span></div>
+                  <div class="m360-entity-row"><span class="m360-entity-label">نوع</span><span class="m360-entity-value">ADVANCE</span></div>
+                  <div class="m360-entity-row"><span class="m360-entity-label">وضعیت</span><span class="m360-badge m360-badge-success">RECEIVED</span></div>
+                </div>
+              </article>
+
+              <article class="m360-card m360-entity-card">
+                <div class="m360-card-header">
+                  <h3 class="m360-card-title">QC / تحویل</h3>
+                  <p class="m360-card-subtitle">QC &amp; Delivery Status Card</p>
+                </div>
+                <div class="m360-card-body">
+                  <div class="m360-entity-row"><span class="m360-entity-label">QC</span><span class="m360-badge m360-badge-success">PASSED</span></div>
+                  <div class="m360-entity-row"><span class="m360-entity-label">تحویل</span><span class="m360-badge m360-badge-accent">READY</span></div>
+                  <div class="m360-entity-row"><span class="m360-entity-label">مجاز</span><span class="m360-entity-value">بله</span></div>
+                </div>
+              </article>
+            </div>
+          </div>
+        </section>
+
+        <section class="m360-module-section">
+          <h2 class="m360-module-section-title">جدول نمونه</h2>
+          <div class="m360-table-wrap">
+            <table class="m360-table">
+              <thead>
+                <tr>
+                  <th>شناسه</th>
+                  <th>کارت کار</th>
+                  <th>وضعیت</th>
+                  <th>مبلغ</th>
+                  <th class="m360-col-actions">عملیات</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="m360-num" data-type="number">1</td>
+                  <td>JC-2026-0001</td>
+                  <td><span class="m360-badge m360-badge-success">QC_PASSED</span></td>
+                  <td class="m360-num" data-type="number">۱٬۰۰۰٬۰۰۰</td>
+                  <td class="m360-col-actions"><button type="button" class="m360-btn m360-btn-ghost m360-btn-sm">مشاهده</button></td>
+                </tr>
+                <tr>
+                  <td class="m360-num" data-type="number">2</td>
+                  <td>JC-2026-0002</td>
+                  <td><span class="m360-badge m360-badge-warning">WAITING_PARTS</span></td>
+                  <td class="m360-num" data-type="number">—</td>
+                  <td class="m360-col-actions"><button type="button" class="m360-btn m360-btn-ghost m360-btn-sm">مشاهده</button></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="m360-module-section">
+          <div class="m360-grid m360-grid-2">
+            <div>
+              <h2 class="m360-module-section-title">فرم نمونه</h2>
+              <div class="m360-card">
+                <div class="m360-card-body">
+                  <div class="m360-form-group">
+                    <label class="m360-form-label" for="demo-jobcard">شناسه کارت کار</label>
+                    <input class="m360-form-input m360-input-ltr m360-num" id="demo-jobcard" type="text" value="1" readonly>
+                    <div class="m360-form-hint">نمونه فیلد عددی — JobCard ID</div>
+                  </div>
+                  <div class="m360-form-group">
+                    <label class="m360-form-label" for="demo-note">یادداشت QC</label>
+                    <textarea class="m360-form-textarea" id="demo-note" rows="3" placeholder="بازرسی نهایی انجام شد"></textarea>
+                  </div>
+                  <div class="m360-form-group">
+                    <label class="m360-form-label" for="demo-status">وضعیت</label>
+                    <select class="m360-form-select" id="demo-status">
+                      <option>PASSED</option>
+                      <option>FAILED</option>
+                    </select>
+                  </div>
+                  <button type="button" class="m360-btn m360-btn-primary">ثبت نمونه</button>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <h2 class="m360-module-section-title">هشدارها و تایم‌لاین</h2>
+              <div class="m360-stack">
+                <div class="m360-alert m360-alert-success">
+                  <div>
+                    <div class="m360-alert-title">عملیات موفق</div>
+                    QC Check Created OK — نمونه پیام موفقیت
+                  </div>
+                </div>
+                <div class="m360-alert m360-alert-warning">
+                  <div>
+                    <div class="m360-alert-title">توجه Soft Run</div>
+                    این صفحه فقط نمایشی است و به دیتابیس متصل نیست.
+                  </div>
+                </div>
+                <div class="m360-alert m360-alert-danger">
+                  <div>
+                    <div class="m360-alert-title">مسدود</div>
+                    SOFT RUN BLOCKED — QC not PASSED
+                  </div>
+                </div>
+
+                <ul class="m360-timeline">
+                  <li class="m360-timeline-item">
+                    <div class="m360-timeline-time m360-num">۱۴۰۴/۰۱/۱۵ — 10:30</div>
+                    <div class="m360-timeline-title">ثبت کارت کار</div>
+                    <div class="m360-timeline-body">JOBCARD_CREATED</div>
+                  </li>
+                  <li class="m360-timeline-item">
+                    <div class="m360-timeline-time m360-num">۱۴۰۴/۰۱/۱۵ — 14:00</div>
+                    <div class="m360-timeline-title">QC تأیید شد</div>
+                    <div class="m360-timeline-body">QC_CHECK_CREATED — PASSED</div>
+                  </li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="m360-module-section">
+          <div class="m360-diagnostic-block">
+            <h3 class="m360-diagnostic-block-title">Safe Diagnostic Block</h3>
+            <p>بلوک امن تشخیص — فقط برای محیط توسعه. بدون افشای مسیر سرور یا اتصال دیتابیس.</p>
+          </div>
+        </section>
+
+        <section class="m360-module-section">
+          <div class="m360-empty-state">
+            <div class="m360-empty-state-icon">📭</div>
+            <h3 class="m360-empty-state-title">حالت خالی</h3>
+            <p class="m360-empty-state-text">هنوز رکوردی برای نمایش وجود ندارد. این یک نمونه Empty State است.</p>
+            <button type="button" class="m360-btn m360-btn-accent">ایجاد اولین رکورد</button>
+          </div>
+        </section>
+
+      </div>
+    </main>
+  </div>
+</body>
+</html>

@@ -1,0 +1,94 @@
+/* MOGHARE360 — Phase 12.5 Brand & Localization */
+.m125bl-page {
+  background: #0f1419;
+  color: #e8ecef;
+  min-height: 100vh;
+  font-family: Vazirmatn, Tahoma, "Segoe UI", Arial, sans-serif;
+}
+.m125bl-wrap { max-width: 1180px; margin: 0 auto; padding: 1.25rem 1rem 2.5rem; }
+.m125bl-banner {
+  background: linear-gradient(90deg, #0a0f0a, #1a2e1a);
+  border: 1px solid #2d5a2d;
+  color: #7cfc7c;
+  text-align: center;
+  padding: .65rem 1rem;
+  font-size: .85rem;
+  border-radius: 8px;
+  margin-bottom: 1.25rem;
+}
+.m125bl-hero { margin-bottom: 1.25rem; }
+.m125bl-hero h1 { margin: 0 0 .35rem; font-size: 1.65rem; color: #f0f4f8; }
+.m125bl-hero p { margin: 0; color: #9aa8b5; }
+.m125bl-section-title { margin: 0 0 1rem; font-size: 1.12rem; color: #c5d4e0; }
+.m125bl-brand-header {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 1.25rem;
+  background: linear-gradient(135deg, #12181f 0%, #1a222c 100%);
+  border: 1px solid #2a3540;
+  border-radius: 12px;
+  padding: 1.25rem;
+  margin-bottom: 1.25rem;
+}
+.m125bl-logo { max-width: 140px; max-height: 140px; border-radius: 50%; border: 2px solid #39ff14; }
+.m125bl-logo-fallback {
+  width: 120px; height: 120px; border-radius: 50%;
+  background: #1a222c; border: 2px solid #39ff14;
+  display: flex; align-items: center; justify-content: center;
+  text-align: center; font-weight: 700; font-size: .75rem; color: #39ff14;
+  line-height: 1.4; padding: .5rem;
+}
+.m125bl-kpi-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: .75rem; margin-bottom: 1.25rem;
+}
+.m125bl-kpi {
+  background: #1a222c; border: 1px solid #2a3540;
+  border-radius: 10px; padding: .85rem 1rem;
+}
+.m125bl-kpi .label { font-size: .76rem; color: #8a9aab; margin-bottom: .2rem; }
+.m125bl-kpi .value { font-size: 1.1rem; font-weight: 600; color: #f0f4f8; }
+.m125bl-kpi-neon { border-color: #2d5a2d; box-shadow: 0 0 12px rgba(57, 255, 20, .08); }
+.m125bl-nav-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: .75rem; }
+.m125bl-nav-card {
+  display: block; padding: 1rem; background: #1a222c;
+  border: 1px solid #2a3540; border-radius: 10px;
+  text-decoration: none; color: #e8ecef;
+}
+.m125bl-nav-card:hover { border-color: #39ff14; box-shadow: 0 0 16px rgba(57, 255, 20, .1); }
+.m125bl-nav-title { display: block; font-weight: 600; margin-bottom: .2rem; }
+.m125bl-nav-sub { display: block; font-size: .8rem; color: #8a9aab; }
+.m125bl-badge {
+  display: inline-block; padding: .18rem .5rem; border-radius: 999px;
+  font-size: .72rem; font-weight: 600;
+}
+.m125bl-badge-ok { background: #1a3d2a; color: #7cfc7c; border: 1px solid #2d5a2d; }
+.m125bl-badge-warn { background: #3d3520; color: #ffd966; border: 1px solid #6b5a20; }
+.m125bl-badge-fail { background: #3d2020; color: #ff8a8a; border: 1px solid #6b2020; }
+.m125bl-badge-muted { background: #2a3540; color: #9aa8b5; }
+.m125bl-badge-neon { background: #0f2a0f; color: #39ff14; border: 1px solid #39ff14; }
+.m125bl-badge-gold { background: #2a2418; color: #d4af37; border: 1px solid #6b5a20; }
+.m125bl-warning-box {
+  background: #2a2418; border: 1px solid #6b5a20;
+  border-radius: 8px; padding: .75rem 1rem; margin-bottom: 1rem; font-size: .88rem;
+}
+.m125bl-boundary-box {
+  background: #12181f; border: 1px solid #2a3540;
+  border-radius: 10px; padding: 1rem; margin-bottom: 1.25rem;
+}
+.m125bl-boundary-box ul { margin: .5rem 0 0; padding-right: 1.2rem; }
+.m125bl-color-swatch {
+  display: inline-block; width: 2.5rem; height: 2.5rem;
+  border-radius: 6px; border: 1px solid #2a3540; vertical-align: middle; margin-left: .5rem;
+}
+.m125bl-btn-disabled {
+  display: inline-block; padding: .55rem 1.1rem;
+  background: #2a3540; color: #6a7a8a;
+  border-radius: 8px; cursor: not-allowed; font-size: .9rem;
+}
+.m125bl-footer { margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #2a3540; font-size: .86rem; }
+.m125bl-footer a { color: #7cfc7c; text-decoration: none; }
+.m125bl-footer a:hover { text-decoration: underline; }
+.m125bl-card-dark {
+  background: #1a222c; border: 1px solid #2a3540;
+  border-radius: 10px; padding: 1rem 1.15rem; margin-bottom: 1rem;
+}
+@media (max-width: 640px) { .m125bl-kpi-grid { grid-template-columns: repeat(2, 1fr); } }
