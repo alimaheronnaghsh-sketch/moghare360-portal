@@ -1,9 +1,12 @@
 # MOGHARE360 ERP local/private config
 private/erp-config.php
+private/m360-otp-config.php
 private/production-users.json
 private/production-site-config.json
 public_html/mirror-config.php
 *.local.php
+*otp-config.local.php
+*.secret.php
 .env
 .env.*
 !.env.example

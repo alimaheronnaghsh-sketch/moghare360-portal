@@ -6,6 +6,7 @@ declare(strict_types=1);
  */
 
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'mirror-layout.php';
+require_once __DIR__ . DIRECTORY_SEPARATOR . 'm360-otp-config-loader.php';
 
 function m360_otp_json_headers(): void
 {
@@ -52,7 +53,6 @@ function m360_otp_json_fail(string $message, int $status = 400, array $data = []
     exit;
 }
 
-const M360_OTP_TTL_SECONDS = 120;
 const M360_OTP_MAX_ATTEMPTS = 5;
 const M360_OTP_RESEND_SECONDS = 60;
 const M360_OTP_MSG_SMS_INACTIVE = 'امکان ارسال پیامک در حال حاضر فعال نیست.';
@@ -62,27 +62,31 @@ const M360_OTP_MSG_SMS_SENT = 'کد تأیید برای شما ارسال شد.'
 /** @return array<string, mixed> */
 function m360_otp_load_config(): array
 {
-    static $config = null;
-    if ($config !== null) {
-        return $config;
+    return m360_otp_config_merged();
+}
+
+function m360_otp_ttl_seconds(): int
+{
+    $cfg = m360_otp_load_config();
+    $minutes = m360_otp_config_int($cfg, 5, 'otpExpireMinutes', 'M360_OTP_EXPIRE_MINUTES');
+    if ($minutes < 1) {
+        $minutes = 5;
+    }
+    if ($minutes > 30) {
+        $minutes = 30;
     }
 
-    $local = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'mirror-config.php';
-    if (is_file($local)) {
-        $loaded = require $local;
-        $config = is_array($loaded) ? $loaded : [];
-        return $config;
+    return $minutes * 60;
+}
+
+function m360_otp_is_production_host(): bool
+{
+    $host = m360_otp_request_host();
+    if ($host === '') {
+        return false;
     }
 
-    $example = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'mirror-config.example.php';
-    if (is_file($example)) {
-        $loaded = require $example;
-        $config = is_array($loaded) ? $loaded : [];
-        return $config;
-    }
-
-    $config = [];
-    return $config;
+    return str_contains($host, 'moghareh360.ir');
 }
 
 function m360_otp_cfg_value(array $keys, string $default = ''): string
@@ -139,28 +143,34 @@ function m360_otp_sms_settings(): array
         'SMS_PROVIDER_NAME',
     ]));
     $apiKey = m360_otp_cfg_value([
+        'M360_IPPANEL_API_KEY',
         'M360_SMS_API_KEY',
         'SMS_API_KEY',
         'IPPANEL_API_KEY',
         'ippanelApiKey',
     ]);
     $sender = m360_otp_cfg_value([
+        'M360_IPPANEL_SENDER',
         'M360_SMS_SENDER',
         'SMS_SENDER',
         'IPPANEL_SENDER',
         'ippanelSender',
     ]);
     $patternId = m360_otp_cfg_value([
+        'ippanelPatternCode',
+        'M360_IPPANEL_PATTERN_CODE',
+        'IPPANEL_PATTERN_CODE',
         'M360_SMS_PATTERN_ID',
         'SMS_PATTERN_ID',
         'IPPANEL_PATTERN_ID',
         'ippanelPatternId',
     ]);
+    $otpVariable = m360_otp_ippanel_otp_variable_name();
 
     if ($provider === '' && !empty($cfg['SMS_OTP_ENABLED']) && !empty($cfg['SMS_GATEWAY_CONFIGURED'])) {
         $provider = 'ippanel';
     }
-    if ($provider === '' && $apiKey !== '') {
+    if ($provider === '' && $apiKey !== '' && !m360_otp_is_placeholder_value($apiKey)) {
         $provider = 'ippanel';
     }
 
@@ -169,7 +179,27 @@ function m360_otp_sms_settings(): array
         'api_key' => $apiKey,
         'sender' => $sender,
         'pattern_id' => $patternId,
+        'otp_variable' => $otpVariable,
     ];
+}
+
+function m360_otp_ippanel_otp_variable_name(): string
+{
+    $name = m360_otp_cfg_value([
+        'ippanelOtpVariableName',
+        'M360_IPPANEL_OTP_VARIABLE_NAME',
+        'IPPANEL_OTP_VARIABLE_NAME',
+    ], 'OTP');
+    $name = trim($name);
+    if ($name === '') {
+        return 'OTP';
+    }
+    $name = trim($name, '%');
+    if ($name === '') {
+        return 'OTP';
+    }
+
+    return $name;
 }
 
 function m360_otp_log_sms_not_configured(): void
@@ -243,7 +273,19 @@ function m360_otp_is_localhost_host(): bool
 
 function m360_otp_can_use_dev_code(): bool
 {
-    return m360_otp_is_localhost();
+    if (m360_otp_is_production_host()) {
+        return false;
+    }
+    if (!m360_otp_is_localhost()) {
+        return false;
+    }
+
+    $cfg = m360_otp_load_config();
+    if (m360_otp_config_bool($cfg, 'useFakeOtp', 'M360_OTP_USE_FAKE')) {
+        return true;
+    }
+
+    return m360_otp_is_local_test_mode();
 }
 
 function m360_otp_get_dev_code(): string
@@ -252,7 +294,17 @@ function m360_otp_get_dev_code(): string
         return '';
     }
 
+    $fromConfig = m360_otp_test_code_from_config();
+    if ($fromConfig !== null) {
+        return $fromConfig;
+    }
+
     return '123456';
+}
+
+function m360_otp_should_display_dev_code(): bool
+{
+    return m360_otp_can_use_dev_code() && m360_otp_is_localhost() && !m360_otp_is_production_host();
 }
 
 function m360_otp_cfg_bool(string $key): bool
@@ -304,6 +356,10 @@ function m360_otp_is_local_test_mode(): bool
 
 function m360_otp_dev_fallback_message(): string
 {
+    if (!m360_otp_should_display_dev_code()) {
+        return 'کد تست لوکال فعال شد.';
+    }
+
     $code = m360_otp_get_dev_code();
     if ($code === '') {
         return 'کد تست لوکال فعال شد.';
@@ -320,7 +376,7 @@ function m360_otp_store_pending(string $normalized, string $code, string $succes
     m360_otp_session_start();
     $_SESSION['otp_phone'] = $normalized;
     $_SESSION['otp_hash'] = password_hash($code, PASSWORD_DEFAULT);
-    $_SESSION['otp_expires_at'] = time() + M360_OTP_TTL_SECONDS;
+    $_SESSION['otp_expires_at'] = time() + m360_otp_ttl_seconds();
     $_SESSION['otp_attempts'] = 0;
     $_SESSION['otp_last_sent_at'] = time();
 
@@ -340,14 +396,22 @@ function m360_otp_sms_configured(): bool
             return false;
         }
 
-        $ok = $s['api_key'] !== '' && $s['sender'] !== '';
+        $ok = $s['api_key'] !== ''
+            && $s['sender'] !== ''
+            && !m360_otp_is_placeholder_value((string)$s['api_key'])
+            && !m360_otp_is_placeholder_value((string)$s['sender']);
         if (!$ok) {
             m360_otp_log_sms_not_configured();
         }
         return $ok;
     }
 
-    $ok = $s['api_key'] !== '' && $s['sender'] !== '' && $s['pattern_id'] !== '';
+    $ok = $s['api_key'] !== ''
+        && $s['sender'] !== ''
+        && $s['pattern_id'] !== ''
+        && !m360_otp_is_placeholder_value((string)$s['api_key'])
+        && !m360_otp_is_placeholder_value((string)$s['sender'])
+        && !m360_otp_is_placeholder_value((string)$s['pattern_id']);
     if (!$ok) {
         m360_otp_log_sms_not_configured();
     }
@@ -389,13 +453,19 @@ function m360_otp_ippanel_from_number(string $sender): string
  */
 function m360_otp_ippanel_pattern_payload(string $phone, string $code, array $settings): array
 {
+    $varName = trim((string)($settings['otp_variable'] ?? 'OTP'));
+    if ($varName === '' || str_starts_with($varName, '%')) {
+        $varName = 'OTP';
+    }
+    $varName = trim($varName, '%');
+
     return [
         'sending_type' => 'pattern',
         'from_number' => m360_otp_ippanel_from_number((string)$settings['sender']),
         'code' => (string)$settings['pattern_id'],
         'recipients' => [m360_otp_ippanel_recipient($phone)],
         'params' => [
-            'code' => $code,
+            $varName => $code,
         ],
     ];
 }

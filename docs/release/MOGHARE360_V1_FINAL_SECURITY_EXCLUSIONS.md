@@ -37,8 +37,17 @@
 
 ## Forbidden OTP Behavior
 
-- Fake OTP enabled on production
-- Hardcoded production OTP bypass (e.g. 1234 on production)
+- Fake OTP enabled on production hosts (moghareh360.ir)
+- Hardcoded production OTP bypass
+- API keys / pattern codes in committed repo files
+- Pattern variable key `%OTP%` in payload (use `OTP`)
+
+## OTP Provider Config (P11.1)
+
+- Real credentials: `private/m360-otp-config.php` (gitignored) or environment variables
+- Example only: `private/m360-otp-config.example.php`
+- `useFakeOtp` allowed only on localhost when explicitly enabled
+- IPPanel pattern variable name: `OTP` (provider template uses `%OTP%`)
 
 ## Auth / Config Lock
 

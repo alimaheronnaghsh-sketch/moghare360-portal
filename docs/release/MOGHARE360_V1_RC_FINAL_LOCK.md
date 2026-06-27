@@ -25,6 +25,7 @@ After P11 lock, **no new workflow domains** are in scope for V1:
 3. **Packaging** — local demo zip via approved PowerShell script
 4. **Documentation** — release and demo docs updates
 5. **Owner signoff** — formal acceptance of V1 RC boundaries
+6. **OTP provider config** — bugfix patches to `m360-otp-helper` / private OTP config only (P11.1+)
 
 ## Verification Pages
 

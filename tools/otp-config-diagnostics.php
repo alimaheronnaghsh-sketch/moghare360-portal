@@ -15,13 +15,17 @@ $root = dirname(__DIR__);
 require_once $root . DIRECTORY_SEPARATOR . 'public_html' . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-otp-helper.php';
 
 $configPath = $root . DIRECTORY_SEPARATOR . 'public_html' . DIRECTORY_SEPARATOR . 'mirror-config.php';
+$privateOtpPath = $root . DIRECTORY_SEPARATOR . 'private' . DIRECTORY_SEPARATOR . 'm360-otp-config.php';
 $configFound = is_file($configPath);
+$privateOtpFound = is_file($privateOtpPath);
 $settings = m360_otp_sms_settings();
 
 echo "MOGHARE360 OTP Config Diagnostics\n";
 echo str_repeat('-', 40) . "\n";
-echo 'config_file_found: ' . ($configFound ? 'yes' : 'no') . "\n";
+echo 'mirror_config_found: ' . ($configFound ? 'yes' : 'no') . "\n";
+echo 'private_otp_config_found: ' . ($privateOtpFound ? 'yes' : 'no') . "\n";
 echo 'config_path: ' . ($configFound ? 'public_html/mirror-config.php' : 'missing') . "\n";
+echo 'private_otp_path: ' . ($privateOtpFound ? 'private/m360-otp-config.php' : 'missing') . "\n";
 echo 'provider: ' . (($settings['provider'] ?? '') !== '' ? (string)$settings['provider'] : 'empty') . "\n";
 echo 'api_key_present: ' . (($settings['api_key'] ?? '') !== '' ? 'yes' : 'no') . "\n";
 echo 'api_key_length: ' . strlen((string)($settings['api_key'] ?? '')) . "\n";
