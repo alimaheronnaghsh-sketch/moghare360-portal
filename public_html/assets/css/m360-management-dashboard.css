@@ -1,0 +1,28 @@
+/* MOGHARE360 P8 — Management dashboard (read-only) */
+.m360-mgmt-page { background: #f8fafc; color: #0f172a; font-family: Tahoma, "Segoe UI", sans-serif; }
+.m360-mgmt-wrap { max-width: 1280px; margin: 0 auto; padding: 1.25rem; }
+.m360-mgmt-nav { display: flex; flex-wrap: wrap; gap: .5rem; margin: 1rem 0; }
+.m360-mgmt-nav a { padding: .45rem .85rem; border-radius: 999px; background: #fff; border: 1px solid #cbd5e1; color: #334155; text-decoration: none; font-size: .9rem; }
+.m360-mgmt-nav a.active, .m360-mgmt-nav a:hover { background: #1e3a5f; color: #fff; border-color: #1e3a5f; }
+.m360-mgmt-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: .75rem; margin: 1rem 0; }
+.m360-mgmt-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 1rem; box-shadow: 0 1px 2px rgba(15,23,42,.04); }
+.m360-mgmt-card .val { font-size: 1.6rem; font-weight: 700; color: #1e3a5f; }
+.m360-mgmt-card .lbl { font-size: .85rem; color: #64748b; margin-top: .25rem; }
+.m360-mgmt-card.warn .val { color: #b45309; }
+.m360-mgmt-card.crit .val { color: #b91c1c; }
+.m360-mgmt-filters a { margin-left: .35rem; padding: .35rem .7rem; border-radius: 8px; text-decoration: none; color: #475569; border: 1px solid #e2e8f0; background: #fff; }
+.m360-mgmt-filters a.active { background: #1e3a5f; color: #fff; }
+.m360-mgmt-table { width: 100%; border-collapse: collapse; font-size: .88rem; }
+.m360-mgmt-table th, .m360-mgmt-table td { padding: .55rem .45rem; border-bottom: 1px solid #e2e8f0; text-align: right; vertical-align: top; }
+.m360-mgmt-table th { background: #f1f5f9; color: #334155; }
+.m360-mgmt-badge { display: inline-block; padding: .15rem .45rem; border-radius: 6px; font-size: .75rem; background: #e2e8f0; }
+.m360-mgmt-badge.ok { background: #dcfce7; color: #166534; }
+.m360-mgmt-badge.warn { background: #fef3c7; color: #92400e; }
+.m360-mgmt-badge.crit { background: #fee2e2; color: #991b1b; }
+.m360-mgmt-btn { display: inline-block; padding: .35rem .65rem; border-radius: 8px; background: #1e3a5f; color: #fff; text-decoration: none; font-size: .82rem; }
+.m360-mgmt-btn.secondary { background: #64748b; }
+.m360-mgmt-empty { color: #64748b; padding: 1rem 0; }
+.m360-mgmt-timeline { list-style: none; padding: 0; margin: 0; border-right: 3px solid #cbd5e1; }
+.m360-mgmt-timeline li { padding: .65rem 1rem .65rem 0; position: relative; }
+.m360-mgmt-timeline li::before { content: ''; width: 10px; height: 10px; background: #1e3a5f; border-radius: 50%; position: absolute; right: -6px; top: .85rem; }
+.m360-mgmt-section-title { margin: 1.25rem 0 .5rem; font-size: 1.05rem; color: #1e293b; }

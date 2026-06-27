@@ -1,57 +1,104 @@
 <?php
 declare(strict_types=1);
 
-require_once __DIR__ . '/includes/erp-business-ready-helper.php';
+header('Content-Type: text/html; charset=UTF-8');
+header('X-Robots-Tag: noindex, nofollow');
 
-$connection = false;
-$errorMessage = '';
-$kpi = business_ready_get_kpi_summary(false);
+require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-management-kpi-helper.php';
+require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-owner-control-helper.php';
 
-try {
-    $connection = business_ready_db();
-    if ($connection === false) throw new RuntimeException('اتصال برقرار نشد.');
-    br_require_auth($connection, 'business.ready.dashboard');
-    $kpi = business_ready_get_kpi_summary($connection);
-} catch (Throwable) {
-    $errorMessage = 'داشبورد مدیریت قابل بارگذاری نیست.';
-} finally {
-    if ($connection !== false) @odbc_close($connection);
+m360_mgmt_require_staff();
+
+$period = isset($_GET['period']) ? strtolower(trim((string)$_GET['period'])) : 'today';
+if (!isset(M360_MGMT_PERIOD_LABELS_FA[$period])) {
+    $period = 'today';
 }
 
-br_render_head('داشبورد مدیریت MOGHARE360');
-echo '<div class="p9br-hero"><h1>داشبورد مدیریت MOGHARE360</h1><p>Management Reporting — read-only</p></div>';
-if ($errorMessage !== '') echo '<div class="p1cc-card p1cc-error"><p>' . br_h($errorMessage) . '</p></div>';
+$conn = customer_core_db();
+$cards = $conn !== false ? m360_mgmt_dashboard_cards($conn, $period) : [];
+$highRisk = $conn !== false ? m360_mgmt_high_risk_rows($conn, 20) : [];
 
-echo '<div class="p9br-kpi-grid">';
-$cards = [
-    'operation_open' => 'عملیات باز', 'operation_ready' => 'آماده تحویل', 'operation_delivered' => 'تحویل‌شده',
-    'waiting_approval' => 'انتظار تأیید', 'waiting_parts' => 'انتظار قطعه',
-    'total_payable' => 'جمع قابل پرداخت', 'total_paid' => 'جمع پرداخت‌شده', 'total_remaining' => 'مانده',
-    'crm_pending_followup' => 'پیگیری CRM معوق', 'active_employees' => 'کارمند فعال',
+$cardDefs = [
+    ['key' => 'open_jobcards', 'label' => 'پرونده باز'],
+    ['key' => 'closed_jobcards', 'label' => 'بسته‌شده'],
+    ['key' => 'waiting_approval', 'label' => 'منتظر تأیید'],
+    ['key' => 'approved_for_work', 'label' => 'تأیید برای کار'],
+    ['key' => 'ready_for_qc', 'label' => 'آماده QC'],
+    ['key' => 'delivery_ready', 'label' => 'آماده تحویل'],
+    ['key' => 'settlement_pending', 'label' => 'در انتظار تسویه'],
+    ['key' => 'overdue_24h', 'label' => 'معوق ۲۴س', 'class' => 'warn'],
+    ['key' => 'overdue_48h', 'label' => 'معوق ۴۸س', 'class' => 'warn'],
+    ['key' => 'overdue_72h', 'label' => 'معوق ۷۲س', 'class' => 'crit'],
+    ['key' => 'rework_required', 'label' => 'Rework'],
+    ['key' => 'final_invoice_total', 'label' => 'جمع فاکتور نهایی', 'money' => true],
+    ['key' => 'paid_amount', 'label' => 'وصول‌شده', 'money' => true],
+    ['key' => 'remaining_amount', 'label' => 'مانده', 'money' => true, 'class' => 'warn'],
 ];
-foreach ($cards as $k => $l) {
-    $v = $kpi[$k] ?? 0;
-    if (str_contains($k, 'total_')) $v = business_ready_format_amount($v);
-    echo '<div class="p9br-kpi"><div class="label">' . br_h($l) . '</div><div class="value m360-num">' . br_h((string)$v) . '</div></div>';
-}
-echo '<div class="p9br-kpi p9br-kpi-highlight"><div class="label">Readiness Score</div><div class="value m360-num">' . br_h((string)($kpi['readiness_score'] ?? 0)) . '%</div></div>';
-echo '</div>';
-
-echo '<div class="p1cc-card"><h2 class="p9br-section-title">گزارش‌های مدیریتی</h2><div class="p1cc-nav-grid">';
-$reports = [
-    ['erp-kpi-report.php', 'گزارش KPI', 'KPI و snapshot'],
-    ['erp-operation-performance-report.php', 'عملکرد عملیات', 'Stage / QC / Delivery'],
-    ['erp-financial-preview-report.php', 'پیش‌نمایش مالی', 'غیر رسمی'],
-    ['erp-crm-report.php', 'گزارش CRM', 'پیگیری و VIP'],
-    ['erp-inventory-pressure-report.php', 'فشار انبار', 'موجودی و خرید'],
-    ['erp-staff-performance-preview.php', 'عملکرد پرسنل', 'HR preview'],
-    ['erp-soft-run-audit.php', 'Soft Run Audit', 'چک‌لیست آمادگی'],
-    ['moghare360-final-release-report.php', 'گزارش نهایی Commercial', 'Phase 10'],
-    ['erp-stabilization-dashboard.php', 'داشبورد پایداری', 'Phase 11 RC1'],
-];
-foreach ($reports as [$url, $title, $sub]) {
-    echo '<a class="p1cc-nav-card" href="' . br_h($url) . '"><span class="p1cc-nav-title">' . br_h($title) . '</span><span class="p1cc-nav-sub">' . br_h($sub) . '</span></a>';
-}
-echo '</div></div>';
-
-br_render_foot();
+?>
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>داشبورد مدیریت MOGHARE360</title>
+    <link rel="stylesheet" href="assets/moghare360-ui/moghare360-soft-run-release.css">
+    <link rel="stylesheet" href="assets/css/m360-management-dashboard.css">
+</head>
+<body class="m360-mgmt-page">
+<div class="w1c-wrap m360-mgmt-wrap">
+    <header class="w1c-banner">
+        <h1>داشبورد مدیریت</h1>
+        <p>نمای read-only عملیاتی — P1 تا P7</p>
+    </header>
+    <nav class="m360-mgmt-nav">
+        <?php foreach (m360_mgmt_nav_links() as $link): ?>
+            <a href="<?= m360_mgmt_h($link['href']) ?>" class="<?= $link['href'] === 'erp-management-dashboard.php' ? 'active' : '' ?>"><?= m360_mgmt_h($link['label']) ?></a>
+        <?php endforeach; ?>
+        <a href="erp-jobcard-timeline.php">Timeline</a>
+    </nav>
+    <div class="m360-mgmt-filters">
+        <?php foreach (M360_MGMT_PERIOD_LABELS_FA as $code => $label): ?>
+            <a href="?period=<?= m360_mgmt_h($code) ?>" class="<?= $period === $code ? 'active' : '' ?>"><?= m360_mgmt_h($label) ?></a>
+        <?php endforeach; ?>
+    </div>
+    <?php if ($conn === false): ?>
+        <section class="w1c-card"><p>اتصال به پایگاه داده برقرار نشد.</p></section>
+    <?php else: ?>
+        <div class="m360-mgmt-cards">
+            <?php foreach ($cardDefs as $def):
+                $val = $cards[(string)$def['key']] ?? 0;
+                $cls = (string)($def['class'] ?? '');
+            ?>
+                <div class="m360-mgmt-card <?= m360_mgmt_h($cls) ?>">
+                    <div class="val"><?= m360_mgmt_h(!empty($def['money']) ? number_format((float)$val) : (string)$val) ?></div>
+                    <div class="lbl"><?= m360_mgmt_h((string)$def['label']) ?></div>
+                </div>
+            <?php endforeach; ?>
+        </div>
+        <h2 class="m360-mgmt-section-title">پرونده‌های پرریسک</h2>
+        <section class="w1c-card">
+            <?php if ($highRisk === []): ?>
+                <p class="m360-mgmt-empty">پرونده پرریسک فعالی ثبت نشده است.</p>
+            <?php else: ?>
+                <table class="m360-mgmt-table">
+                    <thead><tr><th>کارت کار</th><th>مشتری</th><th>مرحله</th><th>ریسک</th><th>سن (ساعت)</th><th></th></tr></thead>
+                    <tbody>
+                    <?php foreach ($highRisk as $r): ?>
+                        <tr>
+                            <td><?= m360_mgmt_h((string)$r['jobcard_id']) ?></td>
+                            <td><?= m360_mgmt_h((string)($r['customer_name'] ?? '-')) ?></td>
+                            <td><?= m360_mgmt_h((string)($r['current_stage_label_fa'] ?? '-')) ?></td>
+                            <td><?= m360_mgmt_h((string)($r['risk_flags_text'] ?? '-')) ?></td>
+                            <td><?= m360_mgmt_h((string)($r['age_hours'] ?? '0')) ?></td>
+                            <td><a class="m360-mgmt-btn secondary" href="<?= m360_mgmt_h((string)$r['timeline_href']) ?>">Timeline</a></td>
+                        </tr>
+                    <?php endforeach; ?>
+                    </tbody>
+                </table>
+            <?php endif; ?>
+        </section>
+    <?php endif; ?>
+</div>
+<script src="assets/js/m360-management-dashboard.js"></script>
+</body>
+</html>
