@@ -28,10 +28,17 @@ if ($user === null) {
     exit;
 }
 
-$departments = m360_access_user_departments($conn);
-$positions = m360_access_user_positions($conn, (int)($user['department_id'] ?? 0));
+$departments = m360_access_user_departments_for_staff_form($conn, false);
+$positionsJson = m360_access_user_positions_json_for_form($conn, false);
+$deptNamesJson = m360_access_user_dept_labels_json_for_form($conn, false);
+
+$selectedDepartmentId = (int)($user['department_id'] ?? 0);
+$selectedPositionId = (int)($user['position_id'] ?? 0);
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
+    $selectedDepartmentId = (int)m360_access_mgmt_post_string('department_id');
+    $selectedPositionId = (int)m360_access_mgmt_post_string('position_id');
+
     try {
         m360_access_mgmt_require_post_csrf();
         m360_access_user_guard_target($conn, $actorId, $userId);
@@ -39,13 +46,15 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             'display_name' => m360_access_mgmt_post_string('display_name'),
             'mobile' => m360_access_mgmt_post_string('mobile'),
             'email' => m360_access_mgmt_post_string('email'),
-            'department_id' => (int)m360_access_mgmt_post_string('department_id'),
-            'position_id' => (int)m360_access_mgmt_post_string('position_id'),
+            'department_id' => $selectedDepartmentId,
+            'position_id' => $selectedPositionId,
             'lifecycle_state' => m360_access_mgmt_post_string('lifecycle_state'),
             'is_login_enabled' => m360_access_mgmt_post_string('is_login_enabled') !== '' ? 1 : 0,
         ]);
         $success = (string)($result['message'] ?? 'Updated');
         $user = m360_access_user_get($conn, $userId) ?? $user;
+        $selectedDepartmentId = (int)($user['department_id'] ?? $selectedDepartmentId);
+        $selectedPositionId = (int)($user['position_id'] ?? $selectedPositionId);
     } catch (Throwable $e) {
         $error = $e->getMessage();
     }
@@ -68,18 +77,15 @@ echo '<label for="display_name">نام نمایشی *</label><input id="display_
 echo '<label for="mobile">موبایل</label><input id="mobile" name="mobile" value="' . m360_access_mgmt_h((string)($user['mobile'] ?? '')) . '">';
 echo '<p>نمایش امن: ' . m360_access_mgmt_h(m360_access_mgmt_mask_mobile((string)($user['mobile'] ?? ''))) . '</p>';
 echo '<label for="email">ایمیل</label><input id="email" name="email" type="email" value="' . m360_access_mgmt_h((string)($user['email'] ?? '')) . '">';
-echo '<label for="department_id">واحد</label><select id="department_id" name="department_id"><option value="">—</option>';
-foreach ($departments as $d) {
-    $sel = (string)($d['department_id'] ?? '') === (string)($user['department_id'] ?? '') ? ' selected' : '';
-    echo '<option value="' . m360_access_mgmt_h((string)($d['department_id'] ?? '')) . '"' . $sel . '>' . m360_access_mgmt_h((string)($d['dept_name'] ?? '')) . '</option>';
-}
-echo '</select>';
-echo '<label for="position_id">سمت</label><select id="position_id" name="position_id"><option value="">—</option>';
-foreach ($positions as $p) {
-    $sel = (string)($p['position_id'] ?? '') === (string)($user['position_id'] ?? '') ? ' selected' : '';
-    echo '<option value="' . m360_access_mgmt_h((string)($p['position_id'] ?? '')) . '"' . $sel . '>' . m360_access_mgmt_h((string)($p['position_name'] ?? '')) . '</option>';
-}
-echo '</select>';
+
+m360_access_user_render_department_position_fields(
+    $departments,
+    $positionsJson,
+    $deptNamesJson,
+    $selectedDepartmentId,
+    $selectedPositionId
+);
+
 echo '<label for="lifecycle_state">lifecycle_state</label><select id="lifecycle_state" name="lifecycle_state">';
 foreach (m360_access_mgmt_lifecycle_options() as $val => $label) {
     $sel = $val === (string)($user['lifecycle_state'] ?? '') ? ' selected' : '';

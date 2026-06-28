@@ -5,6 +5,12 @@ require_once __DIR__ . DIRECTORY_SEPARATOR . 'm360-access-management-helper.php'
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'm360-access-audit-helper.php';
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'm360-access-role-helper.php';
 
+/** Persian error when position.department_id does not match selected department. */
+const M360_ACCESS_POSITION_DEPT_MISMATCH_FA = 'سمت انتخاب‌شده با واحد انتخاب‌شده همخوانی ندارد.';
+
+/** Hidden from routine staff create dropdown (owner/system_admin use separate paths). */
+const M360_ACCESS_ROUTINE_HIDDEN_DEPT_KEYS = ['executive_management'];
+
 function m360_access_user_next_id($conn): int
 {
     if ($conn === false) {
@@ -91,6 +97,152 @@ function m360_access_user_validate_position($conn, int $positionId, int $departm
     }
 
     return (int)($count ?? '0') > 0;
+}
+
+function m360_access_user_require_department_position_pair($conn, int $departmentId, int $positionId): void
+{
+    if ($conn === false) {
+        throw new RuntimeException('Database connection unavailable.');
+    }
+
+    if ($positionId > 0 && $departmentId <= 0) {
+        throw new RuntimeException(M360_ACCESS_POSITION_DEPT_MISMATCH_FA);
+    }
+
+    if ($departmentId > 0 && !m360_access_user_validate_department($conn, $departmentId)) {
+        throw new RuntimeException('واحد انتخاب‌شده معتبر نیست.');
+    }
+
+    if ($positionId > 0 && !m360_access_user_validate_position($conn, $positionId, $departmentId)) {
+        throw new RuntimeException(M360_ACCESS_POSITION_DEPT_MISMATCH_FA);
+    }
+}
+
+/**
+ * @return list<array<string, string>>
+ */
+function m360_access_user_departments_for_staff_form($conn, bool $hideExecutive = true): array
+{
+    $rows = m360_access_user_departments($conn);
+
+    if (!$hideExecutive || $conn === false) {
+        return $rows;
+    }
+
+    return array_values(array_filter(
+        $rows,
+        static fn(array $row): bool => !in_array(
+            (string)($row['dept_key'] ?? ''),
+            M360_ACCESS_ROUTINE_HIDDEN_DEPT_KEYS,
+            true
+        )
+    ));
+}
+
+/**
+ * @return array<string, list<array{position_id:string,position_key:string,position_name:string}>>
+ */
+function m360_access_user_positions_by_department_map($conn, bool $hideExecutive = true): array
+{
+    if ($conn === false) {
+        return [];
+    }
+
+    $map = [];
+    foreach (m360_access_user_departments_for_staff_form($conn, $hideExecutive) as $department) {
+        $departmentId = (int)($department['department_id'] ?? 0);
+        if ($departmentId <= 0) {
+            continue;
+        }
+
+        $positions = [];
+        foreach (m360_access_user_positions($conn, $departmentId) as $position) {
+            $positions[] = [
+                'position_id' => (string)($position['position_id'] ?? ''),
+                'position_key' => (string)($position['position_key'] ?? ''),
+                'position_name' => (string)($position['position_name'] ?? ''),
+            ];
+        }
+
+        $map[(string)$departmentId] = $positions;
+    }
+
+    return $map;
+}
+
+/**
+ * @return array<string, string> department_id => dept_name
+ */
+function m360_access_user_dept_label_map($conn, bool $hideExecutive = true): array
+{
+    $names = [];
+    foreach (m360_access_user_departments_for_staff_form($conn, $hideExecutive) as $department) {
+        $departmentId = (string)($department['department_id'] ?? '');
+        if ($departmentId === '') {
+            continue;
+        }
+        $names[$departmentId] = (string)($department['dept_name'] ?? '');
+    }
+
+    return $names;
+}
+
+function m360_access_user_positions_json_for_form($conn, bool $hideExecutive = true): string
+{
+    $json = json_encode(
+        m360_access_user_positions_by_department_map($conn, $hideExecutive),
+        JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR
+    );
+
+    return str_replace('</', '<\/', $json);
+}
+
+function m360_access_user_dept_labels_json_for_form($conn, bool $hideExecutive = true): string
+{
+    $json = json_encode(
+        m360_access_user_dept_label_map($conn, $hideExecutive),
+        JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR
+    );
+
+    return str_replace('</', '<\/', $json);
+}
+
+function m360_access_user_render_department_position_fields(
+    array $departments,
+    string $positionsJson,
+    string $departmentNamesJson,
+    int $selectedDepartmentId = 0,
+    int $selectedPositionId = 0,
+    bool $positionRequired = false
+): void {
+    $requiredAttr = $positionRequired ? ' required' : '';
+    $posDisabled = $selectedDepartmentId > 0 ? '' : ' disabled';
+
+    echo '<p class="m360-access-help">ابتدا واحد را انتخاب کنید تا سمت‌های همان واحد نمایش داده شود.</p>';
+    echo '<label for="department_id">واحد</label>';
+    echo '<select id="department_id" name="department_id"><option value="">—</option>';
+    foreach ($departments as $department) {
+        $departmentId = (string)($department['department_id'] ?? '');
+        $selected = $selectedDepartmentId > 0 && $departmentId === (string)$selectedDepartmentId ? ' selected' : '';
+        echo '<option value="' . m360_access_mgmt_h($departmentId) . '"' . $selected . '>';
+        echo m360_access_mgmt_h((string)($department['dept_name'] ?? ''));
+        echo '</option>';
+    }
+    echo '</select>';
+
+    echo '<label for="position_id">سمت</label>';
+    echo '<p id="m360-access-dept-label" class="m360-access-muted" aria-live="polite"></p>';
+    echo '<select id="position_id" name="position_id"' . $posDisabled . $requiredAttr;
+    echo ' data-selected-position="' . m360_access_mgmt_h((string)$selectedPositionId) . '">';
+    echo '<option value="">—</option>';
+    if ($selectedDepartmentId > 0 && $selectedPositionId > 0) {
+        echo '<option value="' . m360_access_mgmt_h((string)$selectedPositionId) . '" selected>…</option>';
+    }
+    echo '</select>';
+
+    echo '<script type="application/json" id="m360-access-positions-by-dept">' . $positionsJson . '</script>';
+    echo '<script type="application/json" id="m360-access-dept-names">' . $departmentNamesJson . '</script>';
+    echo '<script src="assets/js/m360-access-position-filter.js"></script>';
 }
 
 function m360_access_user_hash_password(string $plainPassword): string
@@ -303,13 +455,7 @@ function m360_access_user_create($conn, int $actorUserId, array $input): array
 
     m360_access_role_guard_privileged($mapped['role_key'], $actorUserId, $conn);
 
-    if ($departmentId > 0 && !m360_access_user_validate_department($conn, $departmentId)) {
-        throw new RuntimeException('Invalid department.');
-    }
-
-    if ($positionId > 0 && !m360_access_user_validate_position($conn, $positionId, $departmentId)) {
-        throw new RuntimeException('Invalid position.');
-    }
+    m360_access_user_require_department_position_pair($conn, $departmentId, $positionId);
 
     if (!array_key_exists($lifecycle, m360_access_mgmt_lifecycle_options())) {
         throw new RuntimeException('Invalid lifecycle_state.');
@@ -409,13 +555,7 @@ function m360_access_user_update($conn, int $actorUserId, int $userId, array $in
         throw new RuntimeException('Invalid lifecycle_state.');
     }
 
-    if ($departmentId > 0 && !m360_access_user_validate_department($conn, $departmentId)) {
-        throw new RuntimeException('Invalid department.');
-    }
-
-    if ($positionId > 0 && !m360_access_user_validate_position($conn, $positionId, $departmentId)) {
-        throw new RuntimeException('Invalid position.');
-    }
+    m360_access_user_require_department_position_pair($conn, $departmentId, $positionId);
 
     $ok = customer_core_execute(
         $conn,
