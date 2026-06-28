@@ -12,6 +12,12 @@ const M360_ACCESS_MGMT_CSRF = 'access_mgmt_p114';
 const M360_ACCESS_MGMT_MIN_STAFF_USER_ID = 20001;
 const M360_ACCESS_MGMT_MIGRATION_SOURCE = 'ACCESS_MGMT_UI';
 
+/** Persian error when access request row cannot be created or resolved for role grant. */
+const M360_ACCESS_ROLE_GRANT_REQUEST_FAILED_FA = 'ثبت درخواست دسترسی برای تخصیص نقش انجام نشد.';
+
+/** Persian error when access request row cannot be created or resolved for role revoke. */
+const M360_ACCESS_ROLE_REVOKE_REQUEST_FAILED_FA = 'ثبت درخواست دسترسی برای لغو نقش انجام نشد.';
+
 /** @var array<string, array{role_key:string, erp_role_code:string, label_fa:string}> */
 const M360_ACCESS_MGMT_ROLE_CODE_MAP = [
     'OWNER' => ['role_key' => 'owner', 'erp_role_code' => 'OWNER', 'label_fa' => 'مالک'],
@@ -393,4 +399,33 @@ function m360_access_mgmt_effective_access_label($conn, int $userId): string
     );
 
     return ((int)($roleCount ?? '0')) > 0 ? 'EFFECTIVE' : 'NO_ROLE';
+}
+
+function m360_access_mgmt_tx_begin($conn): bool
+{
+    return $conn !== false && @odbc_autocommit($conn, false);
+}
+
+function m360_access_mgmt_tx_commit($conn): bool
+{
+    if ($conn === false) {
+        return false;
+    }
+
+    $ok = @odbc_commit($conn);
+    @odbc_autocommit($conn, true);
+
+    return $ok;
+}
+
+function m360_access_mgmt_tx_rollback($conn): bool
+{
+    if ($conn === false) {
+        return false;
+    }
+
+    $ok = @odbc_rollback($conn);
+    @odbc_autocommit($conn, true);
+
+    return $ok;
 }

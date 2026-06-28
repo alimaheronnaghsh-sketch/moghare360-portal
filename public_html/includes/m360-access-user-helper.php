@@ -464,38 +464,54 @@ function m360_access_user_create($conn, int $actorUserId, array $input): array
     $passwordHash = m360_access_user_hash_password($tempPassword);
     $userId = m360_access_user_next_id($conn);
 
-    $insertOk = customer_core_execute(
-        $conn,
-        'INSERT INTO dbo.core_users (
-            user_id, username, password_hash, full_name, email, mobile,
-            lifecycle_state, is_system_owner, is_login_enabled,
-            created_at, created_by_user_id
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, SYSUTCDATETIME(), ?)',
-        [
-            $userId,
-            $username,
-            $passwordHash,
-            $displayName,
-            $email !== '' ? $email : null,
-            $mobile !== '' ? $mobile : null,
-            $lifecycle,
-            $loginEnabled,
-            $actorUserId,
-        ]
-    );
+    $txStarted = m360_access_mgmt_tx_begin($conn);
 
-    if ($insertOk === false) {
-        throw new RuntimeException('Failed to create core_users row.');
+    try {
+        $insertOk = customer_core_execute(
+            $conn,
+            'INSERT INTO dbo.core_users (
+                user_id, username, password_hash, full_name, email, mobile,
+                lifecycle_state, is_system_owner, is_login_enabled,
+                created_at, created_by_user_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, SYSUTCDATETIME(), ?)',
+            [
+                $userId,
+                $username,
+                $passwordHash,
+                $displayName,
+                $email !== '' ? $email : null,
+                $mobile !== '' ? $mobile : null,
+                $lifecycle,
+                $loginEnabled,
+                $actorUserId,
+            ]
+        );
+
+        if ($insertOk === false) {
+            throw new RuntimeException('Failed to create core_users row.');
+        }
+
+        if (!m360_access_user_upsert_profile($conn, $userId, $departmentId, $positionId)) {
+            throw new RuntimeException('Failed to create staff profile.');
+        }
+
+        $companyId = m360_access_mgmt_default_company_id($conn);
+        if ($companyId > 0 && !m360_access_role_upsert_company_user($conn, $companyId, $userId, $mapped['erp_role_code'])) {
+            throw new RuntimeException('Failed to bind user to company.');
+        }
+
+        m360_access_role_assign($conn, $actorUserId, $userId, $mapped['role_key'], 'Initial role on staff create');
+
+        if ($txStarted && !m360_access_mgmt_tx_commit($conn)) {
+            throw new RuntimeException('Transaction commit failed after staff create.');
+        }
+        $txStarted = false;
+    } catch (Throwable $e) {
+        if ($txStarted) {
+            m360_access_mgmt_tx_rollback($conn);
+        }
+        throw $e;
     }
-
-    m360_access_user_upsert_profile($conn, $userId, $departmentId, $positionId);
-
-    $companyId = m360_access_mgmt_default_company_id($conn);
-    if ($companyId > 0) {
-        m360_access_role_upsert_company_user($conn, $companyId, $userId, $mapped['erp_role_code']);
-    }
-
-    m360_access_role_assign($conn, $actorUserId, $userId, $mapped['role_key'], 'Initial role on staff create');
 
     m360_access_audit_log_operation(
         $conn,

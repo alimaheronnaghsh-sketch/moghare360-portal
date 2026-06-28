@@ -12,7 +12,45 @@ function m360_access_audit_json(array $payload): string
 
 function m360_access_audit_request_number(int $subjectUserId, string $suffix): string
 {
-    return 'AMGMT-' . gmdate('YmdHis') . '-' . $subjectUserId . '-' . strtoupper(preg_replace('/[^A-Z0-9]/', '', $suffix) ?? 'X');
+    $clean = strtoupper(preg_replace('/[^A-Z0-9]/', '', $suffix) ?? 'X');
+    $clean = substr($clean, 0, 8);
+
+    return 'ARM-' . gmdate('YmdHis') . '-' . $subjectUserId . ($clean !== '' ? '-' . $clean : '');
+}
+
+function m360_access_audit_fetch_request_id($conn, string $requestNumber): ?int
+{
+    if ($conn === false) {
+        return null;
+    }
+
+    $value = customer_core_scalar(
+        $conn,
+        'SELECT TOP 1 request_id FROM dbo.core_access_requests WHERE request_number = ? ORDER BY request_id DESC',
+        [$requestNumber]
+    );
+
+    if ($value === null || !is_numeric($value)) {
+        return null;
+    }
+
+    $requestId = (int)$value;
+
+    return $requestId > 0 ? $requestId : null;
+}
+
+function m360_access_audit_resolve_insert_id($conn, string $requestNumber): ?int
+{
+    if ($conn === false) {
+        return null;
+    }
+
+    $scopeId = customer_core_scope_identity($conn);
+    if ($scopeId !== null && $scopeId > 0) {
+        return $scopeId;
+    }
+
+    return m360_access_audit_fetch_request_id($conn, $requestNumber);
 }
 
 /**
@@ -26,7 +64,7 @@ function m360_access_audit_ensure_request(
     string $justification,
     string $suffix = 'OP'
 ): ?int {
-    if ($conn === false) {
+    if ($conn === false || $subjectUserId <= 0 || $actorUserId <= 0) {
         return null;
     }
 
@@ -35,14 +73,9 @@ function m360_access_audit_ensure_request(
     }
 
     $requestNumber = m360_access_audit_request_number($subjectUserId, $suffix);
-    $existing = customer_core_scalar(
-        $conn,
-        'SELECT TOP 1 request_id FROM dbo.core_access_requests WHERE request_number = ?',
-        [$requestNumber]
-    );
-
-    if ($existing !== null && (int)$existing > 0) {
-        return (int)$existing;
+    $existing = m360_access_audit_fetch_request_id($conn, $requestNumber);
+    if ($existing !== null) {
+        return $existing;
     }
 
     $ok = customer_core_execute(
@@ -51,12 +84,14 @@ function m360_access_audit_ensure_request(
             request_number, request_type, request_state, priority,
             subject_user_id, requested_by_user_id, justification,
             owner_acknowledged, is_emergency, migration_source,
-            submitted_at, decided_at, applied_at, applied_by_user_id, created_at
+            submitted_at, decided_at, applied_at, applied_by_user_id,
+            created_at, updated_at
         ) VALUES (
             ?, ?, N\'APPLIED\', N\'NORMAL\',
             ?, ?, ?,
-            1, 1, ?,
-            SYSUTCDATETIME(), SYSUTCDATETIME(), SYSUTCDATETIME(), ?, SYSUTCDATETIME()
+            1, 0, ?,
+            SYSUTCDATETIME(), SYSUTCDATETIME(), SYSUTCDATETIME(), ?,
+            SYSUTCDATETIME(), SYSUTCDATETIME()
         )',
         [
             $requestNumber,
@@ -73,9 +108,7 @@ function m360_access_audit_ensure_request(
         return null;
     }
 
-    $newId = customer_core_scope_identity($conn);
-
-    return $newId !== null && $newId > 0 ? $newId : null;
+    return m360_access_audit_resolve_insert_id($conn, $requestNumber);
 }
 
 function m360_access_audit_record_change(
@@ -127,7 +160,7 @@ function m360_access_audit_record_event(
     string $entityType,
     ?int $entityId,
     array $details,
-    bool $isEmergency = true
+    bool $isEmergency = false
 ): bool {
     if ($conn === false || !customer_core_table_exists($conn, 'core_audit_logs')) {
         return false;
@@ -205,7 +238,7 @@ function m360_access_audit_log_operation(
         $entityType,
         $entityId,
         array_merge($after ?? [], ['change_type' => $changeType, 'reason' => $reason]),
-        true
+        false
     );
 
     return $historyOk || $auditOk;

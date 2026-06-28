@@ -118,6 +118,23 @@ function m360_access_role_upsert_company_user($conn, int $companyId, int $userId
     ) !== false;
 }
 
+function m360_access_role_fetch_user_role_id($conn, int $userId, int $roleId, int $requestId): int
+{
+    if ($conn === false) {
+        return 0;
+    }
+
+    $value = customer_core_scalar(
+        $conn,
+        'SELECT TOP 1 user_role_id FROM dbo.core_user_roles
+         WHERE user_id = ? AND role_id = ? AND granted_by_request_id = ?
+         ORDER BY user_role_id DESC',
+        [$userId, $roleId, $requestId]
+    );
+
+    return $value !== null && is_numeric($value) ? (int)$value : 0;
+}
+
 function m360_access_role_assign(
     $conn,
     int $actorUserId,
@@ -144,20 +161,25 @@ function m360_access_role_assign(
     );
 
     if (($active[0] ?? null) !== null) {
-        return ['ok' => true, 'message' => 'Role already active.', 'user_role_id' => (int)($active[0]['user_role_id'] ?? 0)];
+        return [
+            'ok' => true,
+            'message' => 'Role already active.',
+            'user_role_id' => (int)($active[0]['user_role_id'] ?? 0),
+        ];
     }
 
+    $justification = $reason ?? ('Access Management role grant for ' . (string)$role['role_key']);
     $requestId = m360_access_audit_ensure_request(
         $conn,
         $actorUserId,
         $userId,
         'ROLE_GRANT',
-        $reason ?? 'Role assigned via access management UI',
+        $justification,
         'ROLE'
     );
 
     if ($requestId === null) {
-        throw new RuntimeException('Could not create access request for role grant.');
+        throw new RuntimeException(M360_ACCESS_ROLE_GRANT_REQUEST_FAILED_FA);
     }
 
     $ok = customer_core_execute(
@@ -168,10 +190,13 @@ function m360_access_role_assign(
     );
 
     if ($ok === false) {
-        throw new RuntimeException('Role assignment failed.');
+        throw new RuntimeException('تخصیص نقش در پایگاه داده انجام نشد.');
     }
 
-    $userRoleId = customer_core_scope_identity($conn) ?? 0;
+    $userRoleId = m360_access_role_fetch_user_role_id($conn, $userId, $roleId, $requestId);
+    if ($userRoleId <= 0) {
+        $userRoleId = customer_core_scope_identity($conn) ?? 0;
+    }
 
     $mapped = m360_access_mgmt_resolve_role_key((string)$role['role_key']);
     if ($mapped !== null) {
@@ -181,16 +206,23 @@ function m360_access_role_assign(
         }
     }
 
+    $afterPayload = [
+        'user_id' => $userId,
+        'role_id' => $roleId,
+        'role_key' => (string)$role['role_key'],
+        'request_id' => $requestId,
+    ];
+
     m360_access_audit_record_change(
         $conn,
         $userId,
         $requestId,
         'ACCESS_MGMT_ROLE_GRANTED',
         'core_user_roles',
-        $userRoleId > 0 ? $userRoleId : null,
+        $userRoleId > 0 ? $userRoleId : $roleId,
         $actorUserId,
         null,
-        ['role_key' => (string)$role['role_key'], 'role_id' => $roleId],
+        $afterPayload,
         $reason
     );
 
@@ -201,9 +233,9 @@ function m360_access_role_assign(
         $userId,
         $requestId,
         'core_user_roles',
-        $userRoleId > 0 ? $userRoleId : null,
-        ['role_key' => (string)$role['role_key'], 'reason' => $reason],
-        true
+        $userRoleId > 0 ? $userRoleId : $roleId,
+        array_merge($afterPayload, ['reason' => $reason]),
+        false
     );
 
     return ['ok' => true, 'message' => 'Role assigned.', 'user_role_id' => $userRoleId, 'request_id' => $requestId];
@@ -235,17 +267,18 @@ function m360_access_role_revoke(
 
     m360_access_role_guard_privileged((string)($row['role_key'] ?? ''), $actorUserId, $conn);
 
+    $justification = $reason ?? ('Access Management role revoke for ' . (string)($row['role_key'] ?? ''));
     $requestId = m360_access_audit_ensure_request(
         $conn,
         $actorUserId,
         $userId,
         'ACCESS_DOWNGRADE',
-        $reason ?? 'Role revoked via access management UI',
+        $justification,
         'REVOKE'
     );
 
     if ($requestId === null) {
-        throw new RuntimeException('Could not create access request for role revoke.');
+        throw new RuntimeException(M360_ACCESS_ROLE_REVOKE_REQUEST_FAILED_FA);
     }
 
     $ok = customer_core_execute(
@@ -267,7 +300,7 @@ function m360_access_role_revoke(
         $userRoleId,
         $actorUserId,
         ['role_key' => (string)($row['role_key'] ?? ''), 'user_role_id' => $userRoleId],
-        ['revoked' => true],
+        ['revoked' => true, 'request_id' => $requestId],
         $reason
     );
 
@@ -279,8 +312,8 @@ function m360_access_role_revoke(
         $requestId,
         'core_user_roles',
         $userRoleId,
-        ['role_key' => (string)($row['role_key'] ?? ''), 'reason' => $reason],
-        true
+        ['role_key' => (string)($row['role_key'] ?? ''), 'reason' => $reason, 'request_id' => $requestId],
+        false
     );
 
     return ['ok' => true, 'message' => 'Role revoked.', 'request_id' => $requestId];
