@@ -12,28 +12,46 @@ if (PHP_SAPI !== 'cli') {
 }
 
 $root = dirname(__DIR__);
-require_once $root . DIRECTORY_SEPARATOR . 'public_html' . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-otp-helper.php';
+require_once $root . DIRECTORY_SEPARATOR . 'public_html' . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-otp-config-loader.php';
 
-$configPath = $root . DIRECTORY_SEPARATOR . 'public_html' . DIRECTORY_SEPARATOR . 'mirror-config.php';
-$privateOtpPath = $root . DIRECTORY_SEPARATOR . 'private' . DIRECTORY_SEPARATOR . 'm360-otp-config.php';
-$configFound = is_file($configPath);
-$privateOtpFound = is_file($privateOtpPath);
-$settings = m360_otp_sms_settings();
+$report = m360_otp_config_diagnostics_report();
 
 echo "MOGHARE360 OTP Config Diagnostics\n";
-echo str_repeat('-', 40) . "\n";
-echo 'mirror_config_found: ' . ($configFound ? 'yes' : 'no') . "\n";
-echo 'private_otp_config_found: ' . ($privateOtpFound ? 'yes' : 'no') . "\n";
-echo 'config_path: ' . ($configFound ? 'public_html/mirror-config.php' : 'missing') . "\n";
-echo 'private_otp_path: ' . ($privateOtpFound ? 'private/m360-otp-config.php' : 'missing') . "\n";
-echo 'provider: ' . (($settings['provider'] ?? '') !== '' ? (string)$settings['provider'] : 'empty') . "\n";
-echo 'api_key_present: ' . (($settings['api_key'] ?? '') !== '' ? 'yes' : 'no') . "\n";
-echo 'api_key_length: ' . strlen((string)($settings['api_key'] ?? '')) . "\n";
-echo 'sender_present: ' . (($settings['sender'] ?? '') !== '' ? 'yes' : 'no') . "\n";
-echo 'pattern_present: ' . (($settings['pattern_id'] ?? '') !== '' ? 'yes' : 'no') . "\n";
-echo 'sms_configured: ' . (m360_otp_sms_configured() ? 'yes' : 'no') . "\n";
-echo 'localhost_dev_enabled: ' . (m360_otp_can_use_dev_code() ? 'yes' : 'no') . "\n";
-echo str_repeat('-', 40) . "\n";
+echo str_repeat('-', 60) . "\n";
+echo 'provider: ' . (string)($report['provider'] ?? 'empty') . "\n";
+echo 'mirror_config_found: ' . (!empty($report['sources']['mirror_config_found']) ? 'yes' : 'no') . "\n";
+echo 'private_otp_config_found: ' . (!empty($report['sources']['private_otp_config_found']) ? 'yes' : 'no') . "\n";
+echo 'primary_private_path: ' . (string)($report['sources']['primary_private_path'] ?? 'private/m360-otp-config.php') . "\n";
+echo 'api_key_status: ' . (string)($report['api_key']['status'] ?? 'unknown') . "\n";
+echo 'api_key_masked: ' . (string)($report['api_key']['masked'] ?? '') . "\n";
+echo 'api_key_length: ' . (string)($report['api_key']['length'] ?? '0') . "\n";
+echo 'sender_status: ' . (string)($report['sender']['status'] ?? 'unknown') . "\n";
+echo 'sender_masked: ' . (string)($report['sender']['masked'] ?? '') . "\n";
+echo 'pattern_code_status: ' . (string)($report['pattern_code']['status'] ?? 'unknown') . "\n";
+echo 'pattern_code_masked: ' . (string)($report['pattern_code']['masked'] ?? '') . "\n";
+echo 'pattern_variable_status: ' . (string)($report['pattern_variable']['status'] ?? 'unknown') . "\n";
+echo 'pattern_variable_value: ' . (string)($report['pattern_variable']['value'] ?? 'OTP') . "\n";
+echo 'sms_configured: ' . (!empty($report['sms_configured']) ? 'yes' : 'no') . "\n";
+
+$warnings = is_array($report['warnings'] ?? null) ? $report['warnings'] : [];
+if ($warnings === []) {
+    echo "warnings: (none)\n";
+} else {
+    echo "warnings:\n";
+    foreach ($warnings as $warning) {
+        echo '  - ' . $warning . "\n";
+    }
+}
+
+echo "payload_preview:\n";
+echo json_encode($report['payload_preview'] ?? [], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT) . "\n";
+
+echo str_repeat('-', 60) . "\n";
+$pass = !empty($report['pass']);
+echo 'RESULT: ' . ($pass ? 'PASS' : 'FAIL') . "\n";
+if (!$pass) {
+    echo 'reason: ' . (string)($report['fail_reason'] ?? 'unknown') . "\n";
+}
 echo "No secrets are printed. Rotate SMS API key if it was ever exposed.\n";
 
-exit(0);
+exit($pass ? 0 : 1);

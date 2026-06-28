@@ -82,11 +82,45 @@ function ippanel_diag_print_trace(array $trace, bool $resultOk, string $resultMe
 }
 
 $args = ippanel_diag_parse_args($argv);
+$dryRun = in_array('--dry-run', $argv, true);
 $mobile = $args['mobile'];
 $otp = preg_replace('/\D+/', '', $args['otp']) ?? '';
 
+if ($dryRun) {
+    require_once $root . DIRECTORY_SEPARATOR . 'public_html' . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-otp-config-loader.php';
+    $report = m360_otp_config_diagnostics_report();
+    echo "MOGHARE360 IPPanel Dry-Run Diagnostic (no HTTP request)\n";
+    echo str_repeat('=', 72) . "\n";
+    ippanel_diag_print_line('provider', (string)($report['provider'] ?? ''));
+    ippanel_diag_print_line('api_key_status', (string)($report['api_key']['status'] ?? ''));
+    ippanel_diag_print_line('api_key_masked', (string)($report['api_key']['masked'] ?? ''));
+    ippanel_diag_print_line('sender_status', (string)($report['sender']['status'] ?? ''));
+    ippanel_diag_print_line('pattern_code_status', (string)($report['pattern_code']['status'] ?? ''));
+    ippanel_diag_print_line('pattern_variable', (string)($report['pattern_variable']['value'] ?? 'OTP'));
+    ippanel_diag_print_line('sms_configured', !empty($report['sms_configured']) ? 'yes' : 'no');
+    $warnings = is_array($report['warnings'] ?? null) ? $report['warnings'] : [];
+    if ($warnings === []) {
+        echo "warnings: (none)\n";
+    } else {
+        echo "warnings:\n";
+        foreach ($warnings as $warning) {
+            echo '  - ' . $warning . "\n";
+        }
+    }
+    echo "payload_preview:\n";
+    echo json_encode($report['payload_preview'] ?? [], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT) . "\n";
+    echo str_repeat('=', 72) . "\n";
+    $pass = !empty($report['pass']);
+    ippanel_diag_print_line('RESULT', $pass ? 'PASS' : 'FAIL');
+    if (!$pass) {
+        ippanel_diag_print_line('reason', (string)($report['fail_reason'] ?? ''));
+    }
+    exit($pass ? 0 : 1);
+}
+
 if ($mobile === '' || $otp === '') {
     fwrite(STDERR, "Usage: php tools/test-ippanel-request-response-diagnostic.php --mobile=09XXXXXXXXX --otp=123456\n");
+    fwrite(STDERR, "       php tools/test-ippanel-request-response-diagnostic.php --dry-run\n");
     exit(1);
 }
 

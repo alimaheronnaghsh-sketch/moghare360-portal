@@ -157,6 +157,7 @@ function m360_otp_sms_settings(): array
         'ippanelSender',
     ]);
     $patternId = m360_otp_cfg_value([
+        'M360_SMS_PATTERN_CODE',
         'ippanelPatternCode',
         'M360_IPPANEL_PATTERN_CODE',
         'IPPANEL_PATTERN_CODE',
@@ -186,6 +187,8 @@ function m360_otp_sms_settings(): array
 function m360_otp_ippanel_otp_variable_name(): string
 {
     $name = m360_otp_cfg_value([
+        'M360_SMS_PATTERN_VARIABLE',
+        'IPPANEL_OTP_VARIABLE',
         'ippanelOtpVariableName',
         'M360_IPPANEL_OTP_VARIABLE_NAME',
         'IPPANEL_OTP_VARIABLE_NAME',
