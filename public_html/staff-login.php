@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'mirror-api-client.php';
+require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-staff-home-helper.php';
 
 $result = null;
 $username = '';
@@ -15,6 +16,21 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         'password' => $password,
         'mirror' => true,
     ]);
+
+    if (($result['ok'] ?? false) === true) {
+        $apiRoot = is_array($result['data'] ?? null) ? $result['data'] : [];
+        $payload = is_array($apiRoot['data'] ?? null) ? $apiRoot['data'] : [];
+        m360_staff_home_sync_session_from_login_payload($payload);
+
+        $redirect = trim((string)($payload['redirect_url'] ?? M360_STAFF_HOME_REDIRECT_PATH));
+        if ($redirect !== '' && !preg_match('#^[a-zA-Z0-9_./?=&%-]+$#', $redirect)) {
+            $redirect = M360_STAFF_HOME_REDIRECT_PATH;
+        }
+        if (!str_contains($redirect, '://') && !str_starts_with($redirect, '//')) {
+            header('Location: ' . $redirect);
+            exit;
+        }
+    }
 }
 
 mirror_render_head('ورود پرسنل', 'staff');

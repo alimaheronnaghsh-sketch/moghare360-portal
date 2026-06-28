@@ -65,6 +65,7 @@ try {
         'company_id' => $tenant['company_id'],
         'session_token' => session_id(),
         'csrf_token' => $csrf,
+        'redirect_url' => 'erp-staff-home.php',
     ]);
 } catch (Throwable) {
     mogh_api_fail('ورود ناموفق بود.', 500);
