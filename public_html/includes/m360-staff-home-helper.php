@@ -12,6 +12,14 @@ const M360_STAFF_HOME_UNKNOWN_WARNING_FA = 'برای این کاربر هنوز 
 const M360_STAFF_HOME_MISSING_ROUTE_FA = 'این صفحه هنوز در مسیر نصب‌شده موجود نیست.';
 const M360_STAFF_HOME_REDIRECT_PATH = 'erp-staff-home.php';
 
+const M360_OWNER_LOGIN_REDIRECT_PRIMARY = 'erp-product-home.php';
+
+/** @var list<string> */
+const M360_OWNER_LOGIN_REDIRECT_FALLBACKS = [
+    'erp-owner-control-center.php',
+    'erp-management-dashboard.php',
+];
+
 /** @var list<string> */
 const M360_STAFF_HOME_ADMIN_ROLE_CODES = ['OWNER', 'SYSTEM_ADMIN'];
 
@@ -63,6 +71,47 @@ function m360_staff_home_sync_session_from_login_payload(array $payload): void
     $_SESSION['erp_username'] = (string)($payload['username'] ?? '');
     $_SESSION['erp_company_id'] = (int)($payload['company_id'] ?? 0);
     $_SESSION['erp_login_timestamp'] = time();
+}
+
+function m360_owner_login_resolve_redirect_path(): string
+{
+    foreach (array_merge([M360_OWNER_LOGIN_REDIRECT_PRIMARY], M360_OWNER_LOGIN_REDIRECT_FALLBACKS) as $file) {
+        if (m360_nav_file_exists($file)) {
+            return $file;
+        }
+    }
+
+    return M360_OWNER_LOGIN_REDIRECT_PRIMARY;
+}
+
+function m360_owner_login_sync_session_from_login_payload(array $payload): void
+{
+    m360_staff_home_sync_session_from_login_payload($payload);
+
+    if ((int)($payload['user_id'] ?? 0) > 0) {
+        $_SESSION['erp_is_owner'] = 1;
+    }
+}
+
+function m360_owner_login_redirect_after_success(array $payload): bool
+{
+    m360_owner_login_sync_session_from_login_payload($payload);
+
+    $redirect = trim((string)($payload['redirect_url'] ?? m360_owner_login_resolve_redirect_path()));
+    if ($redirect !== '' && !preg_match('#^[a-zA-Z0-9_./?=&%-]+$#', $redirect)) {
+        $redirect = m360_owner_login_resolve_redirect_path();
+    }
+
+    if (str_contains($redirect, '://') || str_starts_with($redirect, '//')) {
+        return true;
+    }
+
+    if (!headers_sent()) {
+        header('Location: ' . $redirect);
+        exit;
+    }
+
+    return true;
 }
 
 /**

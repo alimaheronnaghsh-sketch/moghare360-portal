@@ -64,6 +64,7 @@ try {
         'company_id' => $tenant['company_id'],
         'session_token' => session_id(),
         'csrf_token' => $csrf,
+        'redirect_url' => 'erp-product-home.php',
     ]);
 } catch (Throwable) {
     mogh_api_fail('ورود مالک ناموفق بود.', 500);

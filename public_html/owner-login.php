@@ -2,9 +2,11 @@
 declare(strict_types=1);
 
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'mirror-api-client.php';
+require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-staff-home-helper.php';
 
 $result = null;
 $username = '';
+$redirectPending = false;
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     $username = trim((string)($_POST['username'] ?? ''));
@@ -14,6 +16,12 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         'password' => $password,
         'mirror' => true,
     ]);
+
+    if (($result['ok'] ?? false) === true) {
+        $apiRoot = is_array($result['data'] ?? null) ? $result['data'] : [];
+        $payload = is_array($apiRoot['data'] ?? null) ? $apiRoot['data'] : [];
+        $redirectPending = m360_owner_login_redirect_after_success($payload);
+    }
 }
 
 mirror_render_head('ورود مدیریت', 'staff');
@@ -23,7 +31,12 @@ mirror_render_head('ورود مدیریت', 'staff');
     <p>این بخش مخصوص مدیران مجاز است. پس از ورود، سطح دسترسی شما به‌صورت خودکار تعیین می‌شود.</p>
 </section>
 
-<?php if ($result !== null): ?>
+<?php if ($redirectPending): ?>
+    <div class="m360-alert m360-alert-info">ورود موفق بود، در حال انتقال به داشبورد...</div>
+    <p><a class="m360-btn" href="<?= mirror_h(m360_owner_login_resolve_redirect_path()) ?>">ادامه به داشبورد</a></p>
+<?php endif; ?>
+
+<?php if ($result !== null && !$redirectPending): ?>
     <div class="m360-alert <?= ($result['ok'] ?? false) ? 'm360-alert-info' : 'm360-alert-error' ?>">
         <?= mirror_h((string)($result['message'] ?? '')) ?>
     </div>
