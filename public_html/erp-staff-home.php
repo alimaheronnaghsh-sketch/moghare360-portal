@@ -11,7 +11,8 @@ $ctx = m360_staff_home_load_context($conn);
 
 $userId = (int)($ctx['user_id'] ?? 0);
 $isUnknown = !empty($ctx['is_unknown']);
-$routes = is_array($ctx['allowed_routes'] ?? null) ? $ctx['allowed_routes'] : [];
+$workbenchGroups = is_array($ctx['workbench_groups'] ?? null) ? $ctx['workbench_groups'] : [];
+$roleStartQuestion = trim((string)($ctx['role_start_question'] ?? ''));
 
 ?><!DOCTYPE html>
 <html lang="fa" dir="rtl">
@@ -31,19 +32,22 @@ $routes = is_array($ctx['allowed_routes'] ?? null) ? $ctx['allowed_routes'] : []
     <header class="m360-staff-banner">
         <h1><?= m360_staff_home_h((string)($ctx['landing_label'] ?? 'داشبورد پرسنل')) ?></h1>
         <p><?= m360_staff_home_h((string)($ctx['access_summary'] ?? '')) ?></p>
+        <?php if ($roleStartQuestion !== ''): ?>
+        <p class="m360-staff-start-question"><?= m360_staff_home_h($roleStartQuestion) ?></p>
+        <?php endif; ?>
     </header>
 
     <section class="m360-staff-card">
-        <h2>شناسه کاربر</h2>
+        <h2>اطلاعات کاربر</h2>
         <div class="m360-staff-grid">
-            <div class="m360-staff-kpi"><div class="val"><?= m360_staff_home_h((string)$userId) ?></div><div class="lbl">user_id</div></div>
+            <div class="m360-staff-kpi"><div class="val"><?= m360_staff_home_h((string)$userId) ?></div><div class="lbl">شناسه کاربری</div></div>
             <div class="m360-staff-kpi"><div class="val"><?= m360_staff_home_h((string)($ctx['username'] ?? '')) ?></div><div class="lbl">نام کاربری</div></div>
-            <div class="m360-staff-kpi"><div class="val"><?= m360_staff_home_h((string)($ctx['full_name'] ?? '')) ?></div><div class="lbl">نام نمایشی</div></div>
-            <div class="m360-staff-kpi"><div class="val"><?= m360_staff_home_h((string)($ctx['role_code'] ?? 'UNKNOWN')) ?></div><div class="lbl">role_code</div></div>
-            <div class="m360-staff-kpi"><div class="val"><?= m360_staff_home_h((string)($ctx['department_name'] ?? '—')) ?></div><div class="lbl">واحد</div></div>
-            <div class="m360-staff-kpi"><div class="val"><?= m360_staff_home_h((string)($ctx['position_name'] ?? '—')) ?></div><div class="lbl">سمت</div></div>
+            <div class="m360-staff-kpi"><div class="val"><?= m360_staff_home_h_db($ctx['full_name'] ?? '') ?></div><div class="lbl">نام نمایشی</div></div>
+            <div class="m360-staff-kpi"><div class="val"><?= m360_staff_home_h((string)($ctx['role_label_fa'] ?? m360_staff_home_role_label_fa((string)($ctx['role_code'] ?? 'UNKNOWN')))) ?></div><div class="lbl">نقش</div></div>
+            <div class="m360-staff-kpi"><div class="val"><?= m360_staff_home_h_db($ctx['department_name'] ?? '—') ?></div><div class="lbl">واحد</div></div>
+            <div class="m360-staff-kpi"><div class="val"><?= m360_staff_home_h_db($ctx['position_name'] ?? '—') ?></div><div class="lbl">سمت</div></div>
             <?php if ((int)($ctx['permission_count'] ?? 0) > 0): ?>
-            <div class="m360-staff-kpi"><div class="val"><?= m360_staff_home_h((string)(int)$ctx['permission_count']) ?></div><div class="lbl">تعداد Permission مؤثر</div></div>
+            <div class="m360-staff-kpi"><div class="val"><?= m360_staff_home_h((string)(int)$ctx['permission_count']) ?></div><div class="lbl">سطح دسترسی</div></div>
             <?php endif; ?>
         </div>
     </section>
@@ -51,13 +55,9 @@ $routes = is_array($ctx['allowed_routes'] ?? null) ? $ctx['allowed_routes'] : []
     <?php if ($isUnknown): ?>
         <div class="m360-staff-alert-warn"><?= m360_staff_home_h(M360_STAFF_HOME_UNKNOWN_WARNING_FA) ?></div>
     <?php else: ?>
-        <section class="m360-staff-card">
-            <h2>صفحات مجاز برای نقش شما</h2>
-            <div class="m360-staff-routes">
-                <?php foreach ($routes as $route): ?>
-                    <?php m360_staff_home_render_route_card($route, $userId); ?>
-                <?php endforeach; ?>
-            </div>
+        <section class="m360-staff-card m360-staff-workbench">
+            <h2>میز کار روزانه</h2>
+            <?php m360_staff_home_render_workbench($workbenchGroups, $userId); ?>
         </section>
     <?php endif; ?>
 </div>
