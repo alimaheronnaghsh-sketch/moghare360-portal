@@ -5,6 +5,7 @@ header('Content-Type: text/html; charset=UTF-8');
 header('X-Robots-Tag: noindex, nofollow');
 
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-intake-contract-helper.php';
+require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-operational-shell-helper.php';
 
 m360_intake_contract_require_staff();
 
@@ -20,10 +21,12 @@ $contracts = $conn !== false ? m360_intake_contract_list($conn, $statusFilter ==
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>قراردادهای پذیرش</title>
     <link rel="stylesheet" href="assets/moghare360-ui/moghare360-soft-run-release.css">
+    <link rel="stylesheet" href="<?= m360_operational_shell_h(m360_operational_shell_css_href()) ?>">
     <link rel="stylesheet" href="assets/css/m360-contract.css">
 </head>
 <body style="background:#f8fafc;margin:0;padding:1.25rem;">
 <div class="w1c-wrap m360-contract-page">
+    <?php m360_operational_shell_render_board('intake_contracts'); ?>
     <header class="w1c-banner">
         <h1>قراردادهای پذیرش</h1>
         <p>تولید، ارسال و پیگیری امضای مشتری</p>

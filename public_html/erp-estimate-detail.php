@@ -6,6 +6,7 @@ header('X-Robots-Tag: noindex, nofollow');
 
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-estimate-helper.php';
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-technical-operation-helper.php';
+require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-operational-shell-helper.php';
 
 m360_estimate_require_staff();
 
@@ -48,10 +49,22 @@ $canSend = $est !== null && $items !== [] && in_array(strtoupper((string)($est['
     <title>جزئیات برآورد</title>
     <link rel="stylesheet" href="assets/moghare360-ui/moghare360-soft-run-release.css">
     <link rel="stylesheet" href="assets/css/m360-estimate.css">
+    <link rel="stylesheet" href="<?= m360_operational_shell_h(m360_operational_shell_css_href()) ?>">
 </head>
 <body class="m360-est-page">
 <div class="w1c-wrap m360-est-wrap">
-    <a href="erp-estimate-board.php" class="m360-est-back">← بازگشت</a>
+    <?php
+    $opsStrip = null;
+    if ($jc !== null) {
+        $estStatus = $est !== null ? strtoupper((string)($est['estimate_status'] ?? '')) : '';
+        $opsStrip = m360_operational_shell_build_jobcard_strip($conn, $jc, 'estimate', $estStatus, [], '');
+        $opsStrip['doc_type_fa'] = 'سند برآورد';
+        if ($estimateId > 0) {
+            $opsStrip['record_label_fa'] = 'JobCard: ' . $jobcardId . ' — برآورد: ' . $estimateId;
+        }
+    }
+    m360_operational_shell_render_detail('estimate_detail', 'erp-estimate-board.php', $jobcardId, $opsStrip);
+    ?>
     <?php if ($flash !== ''): ?><div class="m360-est-flash <?= $flashOk ? 'ok' : 'err' ?>"><?= m360_estimate_h($flash) ?></div><?php endif; ?>
 
     <?php if ($jc === null): ?>

@@ -9,6 +9,7 @@ header('Content-Type: text/html; charset=UTF-8');
 header('X-Robots-Tag: noindex, nofollow');
 
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-reception-jobcard-helper.php';
+require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-operational-shell-helper.php';
 
 m360_reception_jobcard_require_staff();
 
@@ -56,6 +57,7 @@ function p2_jc_action_form(string $action, int $jobcardId, string $label, string
     <meta name="robots" content="noindex, nofollow">
     <title>جزئیات کارت کار — پذیرش</title>
     <link rel="stylesheet" href="assets/moghare360-ui/moghare360-soft-run-release.css">
+    <link rel="stylesheet" href="<?= m360_operational_shell_h(m360_operational_shell_css_href()) ?>">
     <style>
         .p2-jc-detail { max-width: 960px; margin: 0 auto; }
         .p2-jc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
@@ -79,7 +81,13 @@ function p2_jc_action_form(string $action, int $jobcardId, string $label, string
 </head>
 <body style="background:#f8fafc;margin:0;padding:1.25rem;color:#18181b;">
 <div class="w1c-wrap p2-jc-detail">
-    <a class="p2-jc-back" href="erp-reception-jobcards.php">← بازگشت به لیست</a>
+    <?php
+    $opsStrip = null;
+    if ($jobcard !== null) {
+        $opsStrip = m360_operational_shell_build_jobcard_strip($conn, $jobcard, 'reception', $status, $allowed);
+    }
+    m360_operational_shell_render_detail('reception_detail', 'erp-reception-jobcards.php', $jobcardId, $opsStrip);
+    ?>
 
     <header class="w1c-banner">
         <h1>جزئیات کارت کار</h1>

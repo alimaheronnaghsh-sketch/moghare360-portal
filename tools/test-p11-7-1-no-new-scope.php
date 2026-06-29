@@ -49,7 +49,7 @@ $results[] = p1171n_pass('no recent SQL migration edits assumed', !$sqlChanged);
 $results[] = p1171n_pass('staff home still requires session helper', str_contains($helper, 'm360_staff_home_require_session'));
 $results[] = p1171n_pass('no core_permissions mutation', !preg_match('/core_permissions/i', $helper));
 $results[] = p1171n_pass('no core_roles mutation', !preg_match('/INSERT\s+INTO\s+.*core_roles/i', $helper));
-$results[] = p1171n_pass('backlog documents manager reference not engine', str_contains($helper, 'impersonation خام'));
+$results[] = p1171n_pass('backlog documents manager reference not engine', str_contains($helper, 'موتور Override مدیریتی') && str_contains($helper, 'غیرمجاز در V1'));
 $results[] = p1171n_pass('P15 backlog labels present', str_contains($helper, 'P15 / HR Self-Service'));
 
 $pass = 0;

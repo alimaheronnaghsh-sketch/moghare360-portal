@@ -6,6 +6,7 @@ header('X-Robots-Tag: noindex, nofollow');
 
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-final-invoice-helper.php';
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-settlement-helper.php';
+require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-operational-shell-helper.php';
 
 m360_fi_require_staff();
 
@@ -122,10 +123,18 @@ if ($varianceStatus === 'BLOCKED' || $varianceStatus === 'OVERRIDE_REQUIRED') {
     <title>جزئیات فاکتور نهایی</title>
     <link rel="stylesheet" href="assets/moghare360-ui/moghare360-soft-run-release.css">
     <link rel="stylesheet" href="assets/css/m360-final-delivery.css">
+    <link rel="stylesheet" href="<?= m360_operational_shell_h(m360_operational_shell_css_href()) ?>">
 </head>
 <body class="m360-fi-page">
 <div class="w1c-wrap m360-fi-wrap">
-    <a href="erp-final-invoice-board.php" class="m360-fi-back">← بازگشت به برد فاکتور نهایی</a>
+    <?php
+    $opsStrip = null;
+    if ($jc !== null) {
+        $opsStrip = m360_operational_shell_build_jobcard_strip($conn, $jc, 'invoice', $invoiceStatus, $allowed, $gateMessage);
+        $opsStrip['doc_type_fa'] = 'سند فاکتور نهایی';
+    }
+    m360_operational_shell_render_detail('invoice_detail', 'erp-final-invoice-board.php', $jobcardId, $opsStrip);
+    ?>
     <?php if ($flash !== ''): ?><div class="m360-fi-flash <?= $flashOk ? 'ok' : 'err' ?>"><?= m360_fi_h($flash) ?></div><?php endif; ?>
 
     <?php if ($jc === null): ?>

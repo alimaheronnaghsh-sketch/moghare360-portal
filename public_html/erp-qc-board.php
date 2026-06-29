@@ -5,6 +5,7 @@ header('Content-Type: text/html; charset=UTF-8');
 header('X-Robots-Tag: noindex, nofollow');
 
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-qc-helper.php';
+require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-operational-shell-helper.php';
 
 m360_qc_require_staff();
 
@@ -21,9 +22,11 @@ $rows = $conn !== false ? m360_qc_board_list($conn, $filter === 'ALL' ? null : $
     <title>برد QC و بازبینی نهایی</title>
     <link rel="stylesheet" href="assets/moghare360-ui/moghare360-soft-run-release.css">
     <link rel="stylesheet" href="assets/css/m360-qc.css">
+    <link rel="stylesheet" href="<?= m360_operational_shell_h(m360_operational_shell_css_href()) ?>">
 </head>
 <body class="m360-qc-page">
 <div class="w1c-wrap m360-qc-wrap">
+    <?php m360_operational_shell_render_board('qc_board'); ?>
     <header class="w1c-banner">
         <h1>برد QC و بازبینی نهایی</h1>
         <p>کنترل کیفیت — Pass/Fail — Rework — آمادگی تحویل</p>

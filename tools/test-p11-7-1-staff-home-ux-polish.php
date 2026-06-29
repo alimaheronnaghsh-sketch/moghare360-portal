@@ -112,9 +112,9 @@ $results[] = p1171u_pass('TECHNICIAN no permission preview', !p1171u_has_preview
 
 $ownerBacklog = array_filter(
     m360_staff_home_workbench_items('OWNER'),
-    static fn(array $i): bool => ($i['card_type'] ?? '') === 'backlog' && str_contains((string)($i['label_fa'] ?? ''), 'مرجع')
+    static fn(array $i): bool => ($i['group_key'] ?? '') === M360_STAFF_HOME_GROUP_MANAGER_REF
 );
-$results[] = p1171u_pass('OWNER manager reference backlog', count($ownerBacklog) >= 1);
+$results[] = p1171u_pass('OWNER manager reference bridge group', count($ownerBacklog) >= 10);
 
 $hrBacklog = array_filter(
     m360_staff_home_workbench_items('RECEPTION'),

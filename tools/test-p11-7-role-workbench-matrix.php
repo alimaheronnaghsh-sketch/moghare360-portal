@@ -26,7 +26,7 @@ function p117m_has_group(string $role, string $groupKey): bool
 
 $results = [];
 $labels = m360_staff_home_workbench_group_labels();
-$results[] = p117m_pass('workbench group labels defined', count($labels) === 5);
+$results[] = p117m_pass('workbench group labels defined', count($labels) === 7);
 $results[] = p117m_pass('today group label', ($labels[M360_STAFF_HOME_GROUP_TODAY] ?? '') === 'کار امروز');
 $results[] = p117m_pass('role start questions for RECEPTION', trim(m360_staff_home_role_start_questions()['RECEPTION'] ?? '') !== '');
 

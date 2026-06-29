@@ -9,6 +9,7 @@ header('Content-Type: text/html; charset=UTF-8');
 header('X-Robots-Tag: noindex, nofollow');
 
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-reception-jobcard-helper.php';
+require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-operational-shell-helper.php';
 
 m360_reception_jobcard_require_staff();
 
@@ -37,6 +38,7 @@ if ($dbOk) {
     <meta name="robots" content="noindex, nofollow">
     <title>کارت‌های کار پذیرش</title>
     <link rel="stylesheet" href="assets/moghare360-ui/moghare360-soft-run-release.css">
+    <link rel="stylesheet" href="<?= m360_operational_shell_h(m360_operational_shell_css_href()) ?>">
     <style>
         .p2-jc-wrap { max-width: 1240px; margin: 0 auto; }
         .p2-jc-filters { display: flex; flex-wrap: wrap; gap: 0.45rem; margin-bottom: 0.75rem; }
@@ -57,6 +59,7 @@ if ($dbOk) {
 </head>
 <body style="background:#f8fafc;margin:0;padding:1.25rem;color:#18181b;">
 <div class="w1c-wrap p2-jc-wrap">
+    <?php m360_operational_shell_render_board('reception_jobcards'); ?>
     <header class="w1c-banner">
         <h1>کارت‌های کار پذیرش</h1>
         <p>پیگیری مراجعه، ثبت ورود و آماده‌سازی فنی</p>

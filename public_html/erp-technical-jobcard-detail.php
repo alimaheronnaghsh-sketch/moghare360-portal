@@ -9,6 +9,7 @@ header('Content-Type: text/html; charset=UTF-8');
 header('X-Robots-Tag: noindex, nofollow');
 
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-technical-operation-helper.php';
+require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-operational-shell-helper.php';
 
 m360_technical_require_staff();
 
@@ -58,6 +59,7 @@ function p3_tech_form(string $action, int $jobcardId, string $label, string $cla
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>جزئیات فنی — کارت کار</title>
     <link rel="stylesheet" href="assets/moghare360-ui/moghare360-soft-run-release.css">
+    <link rel="stylesheet" href="<?= m360_operational_shell_h(m360_operational_shell_css_href()) ?>">
     <style>
         .p3-detail { max-width: 1000px; margin: 0 auto; }
         .p3-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
@@ -81,7 +83,14 @@ function p3_tech_form(string $action, int $jobcardId, string $label, string $cla
 </head>
 <body style="background:#f8fafc;margin:0;padding:1.25rem;color:#0f172a;">
 <div class="w1c-wrap p3-detail">
-    <a class="p3-back" href="erp-technical-board.php">← بازگشت به برد فنی</a>
+    <?php
+    $opsStrip = null;
+    if ($jobcard !== null) {
+        $opsAllowed = m360_technician_workflow_allowed_actions($jobcard, $gatesOk);
+        $opsStrip = m360_operational_shell_build_jobcard_strip($conn, $jobcard, 'technical', $effective, $opsAllowed, $gateMessage);
+    }
+    m360_operational_shell_render_detail('technical_detail', 'erp-technical-board.php', $jobcardId, $opsStrip);
+    ?>
 
     <header class="w1c-banner">
         <h1>جزئیات فنی کارت کار</h1>

@@ -10,8 +10,10 @@ require_once __DIR__ . DIRECTORY_SEPARATOR . 'm360-navigation-registry.php';
 
 const M360_STAFF_HOME_UNKNOWN_WARNING_FA = 'برای این کاربر هنوز نقش عملیاتی معتبر تعریف نشده است.';
 const M360_STAFF_HOME_MISSING_ROUTE_FA = 'این صفحه هنوز در مسیر نصب‌شده موجود نیست.';
-const M360_STAFF_HOME_INFO_ROUTE_FA = 'این صفحه از مسیر تابلو یا فهرست باز می‌شود — شناسه JobCard یا درخواست لازم است.';
-const M360_STAFF_HOME_NOTE_ROUTE_FA = 'این عملیات از داخل پرونده انتخاب‌شده انجام می‌شود — ورود مستقیم ممکن نیست.';
+const M360_STAFF_HOME_INFO_ROUTE_FA = 'این صفحه از مسیر تابلو یا پرونده مربوط باز می‌شود.';
+const M360_STAFF_HOME_NOTE_ROUTE_FA = 'این عملیات داخل پرونده انتخاب‌شده انجام می‌شود و ورود مستقیم ممکن نیست.';
+const M360_STAFF_HOME_STATUS_GUIDED_FA = 'راهنمای مسیر';
+const M360_STAFF_HOME_STATUS_ACTION_FA = 'عملیات داخلی';
 const M360_STAFF_HOME_BACKLOG_FA = 'نیازمند تکمیل در فاز بعدی — لینک غیرفعال است.';
 const M360_STAFF_HOME_GUIDED_BTN_FA = 'راهنمای مسیر';
 const M360_STAFF_HOME_REDIRECT_PATH = 'erp-staff-home.php';
@@ -20,7 +22,24 @@ const M360_STAFF_HOME_GROUP_TODAY = 'today';
 const M360_STAFF_HOME_GROUP_FOLLOWUP = 'followup';
 const M360_STAFF_HOME_GROUP_OPERATIONS = 'operations';
 const M360_STAFF_HOME_GROUP_REPORTS = 'reports';
+const M360_STAFF_HOME_GROUP_MANAGER_REF = 'manager_ref';
+const M360_STAFF_HOME_GROUP_COORDINATION_REF = 'coordination_ref';
 const M360_STAFF_HOME_GROUP_BACKLOG = 'backlog';
+const M360_STAFF_HOME_BTN_BOARD_FA = 'مشاهده تابلو';
+const M360_STAFF_HOME_BTN_REPORT_FA = 'مشاهده گزارش';
+const M360_STAFF_HOME_RUNTIME_HOLD_FA = 'نیازمند بررسی عملیاتی';
+
+/** @var array<string, array{status_fa:string,description_fa:string}> */
+const M360_STAFF_HOME_RUNTIME_NOT_READY = [
+    'erp-jobcard-part-use.php' => [
+        'status_fa' => 'نیازمند بازبینی عملیاتی',
+        'description_fa' => 'این مسیر هنوز محصولی‌سازی نشده و تا اصلاح صفحه مقصد از میز کار فعال نمی‌شود.',
+    ],
+    'erp-payment-tracking.php' => [
+        'status_fa' => 'نیازمند بررسی عملیاتی',
+        'description_fa' => 'مسیر پرداخت تا رفع خطای بارگذاری از میز کار فعال نیست.',
+    ],
+];
 
 const M360_OWNER_LOGIN_REDIRECT_PRIMARY = 'erp-product-home.php';
 
@@ -224,14 +243,16 @@ function m360_staff_home_scope_backlog_items(string $roleCode): array
     $items = [];
 
     if (m360_staff_home_is_admin_role($roleCode)) {
-        $items[] = m360_staff_home_item(
-            $g(M360_STAFF_HOME_GROUP_BACKLOG),
-            'محیط مرجع مدیر/مالک',
-            '',
-            'برای انجام کارهای گیرکرده پرسنل — نیازمند طراحی کنترل‌شده در فاز مستقل. باید با ثبت Audit انجام شود، نه impersonation خام.',
-            $roleCode,
-            'backlog'
-        );
+        foreach (
+            [
+                ['انجام کار به جای پرسنل / Impersonation', 'غیرمجاز در V1 — اقدام مدیر باید با هویت خود مدیر و Audit انجام شود.'],
+                ['موتور Override مدیریتی', 'نیازمند طراحی امنیتی مستقل — فعلاً فقط مسیر ناوبری مرجع داریم، نه عبور از گیت‌ها.'],
+                ['افزایش Permission نقش‌ها', 'نیازمند فاز مستقل دسترسی — P11.8-A هیچ permission جدیدی اضافه نمی‌کند.'],
+                ['HR Self-Service', 'نیازمند P15 / backlog'],
+            ] as [$label, $desc]
+        ) {
+            $items[] = m360_staff_home_item($g(M360_STAFF_HOME_GROUP_BACKLOG), $label, '', $desc, $roleCode, 'backlog');
+        }
     }
 
     foreach (
@@ -249,6 +270,132 @@ function m360_staff_home_scope_backlog_items(string $roleCode): array
     return $items;
 }
 
+/**
+ * P11.8-A — safe board/list reference card.
+ *
+ * @return array<string, string>
+ */
+function m360_staff_home_bridge_ref_item(
+    string $groupKey,
+    string $labelFa,
+    string $file,
+    string $descriptionFa,
+    string $roleCode,
+    string $cardType = 'ref'
+): array {
+    return m360_staff_home_item($groupKey, $labelFa, $file, $descriptionFa, $roleCode, $cardType);
+}
+
+/**
+ * @return list<array<string, string>>
+ */
+function m360_staff_home_admin_manager_bridge_items(string $roleCode): array
+{
+    $g = M360_STAFF_HOME_GROUP_MANAGER_REF;
+    $preview = 'erp-access-permission-preview.php';
+
+    $items = [
+        m360_staff_home_bridge_ref_item($g, 'درخواست‌های آنلاین', 'erp-reception-online-requests.php', 'مشاهده تابلو پذیرش آنلاین — مرجع عملیاتی', $roleCode),
+        m360_staff_home_bridge_ref_item($g, 'JobCardهای پذیرش', 'erp-reception-jobcards.php', 'مشاهده تابلو JobCard پذیرش', $roleCode),
+        m360_staff_home_bridge_ref_item($g, 'قراردادهای پذیرش', 'erp-intake-contracts.php', 'مشاهده تابلو گیت قرارداد', $roleCode),
+        m360_staff_home_bridge_ref_item($g, 'تابلوی فنی', 'erp-technical-board.php', 'مرجع تخصیص و عیب‌یابی', $roleCode),
+        m360_staff_home_bridge_ref_item($g, 'تابلوی اجرای کار', 'erp-work-execution-board.php', 'مرجع پیگیری اجرای کارگاه', $roleCode),
+        m360_staff_home_item($g, 'تایم‌لاین JobCard', 'erp-jobcard-timeline.php', 'مسیر از پرونده باز می‌شود — شناسه JobCard لازم است', $roleCode, 'info'),
+        m360_staff_home_bridge_ref_item($g, 'تابلوی موجودی', 'erp-stock-board.php', 'مرجع وضعیت انبار', $roleCode),
+        m360_staff_home_bridge_ref_item($g, 'رزرو قطعه', 'erp-part-reserve.php', 'مرجع رزرو قطعه برای JobCard', $roleCode),
+        m360_staff_home_bridge_ref_item($g, 'مصرف قطعه JobCard', 'erp-jobcard-part-use.php', 'ورود از تابلو/فهرست — شناسه JobCard لازم است', $roleCode),
+        m360_staff_home_bridge_ref_item($g, 'ثبت درخواست خرید', 'erp-purchase-request-create.php', 'ورود ایمن به فرم درخواست خرید', $roleCode),
+        m360_staff_home_bridge_ref_item($g, 'پیگیری پرداخت', 'erp-payment-tracking.php', 'مرجع وضعیت پرداخت', $roleCode),
+        m360_staff_home_bridge_ref_item($g, 'برد برآورد', 'erp-estimate-board.php', 'مرجع گیت تأیید برآورد', $roleCode),
+        m360_staff_home_bridge_ref_item($g, 'فاکتور نهایی', 'erp-final-invoice-board.php', 'مرجع فاکتور و صورتحساب', $roleCode),
+        m360_staff_home_item($g, 'جزئیات تسویه', 'erp-settlement-detail.php', 'مسیر از پرونده باز می‌شود — از برد فاکتور/JobCard', $roleCode, 'info'),
+        m360_staff_home_bridge_ref_item($g, 'تابلوی QC', 'erp-qc-board.php', 'مرجع کنترل کیفیت', $roleCode),
+        m360_staff_home_bridge_ref_item($g, 'کنترل تحویل', 'erp-delivery-control.php', 'مرجع آمادگی تحویل', $roleCode),
+        m360_staff_home_bridge_ref_item($g, 'پیش‌نمایش دسترسی', $preview, 'ابزار تشخیص دسترسی کاربر — مدیریتی', $roleCode, 'diag'),
+        m360_staff_home_bridge_ref_item($g, 'نقشه مسیرها', 'erp-route-map.php', 'فهرست کامل مسیرهای نصب‌شده', $roleCode, 'diag'),
+        m360_staff_home_bridge_ref_item($g, 'مرکز کنترل مالک', 'erp-owner-control-center.php', 'نظارت read-only پرونده‌های پرریسک', $roleCode, 'diag'),
+        m360_staff_home_bridge_ref_item($g, 'داشبورد مدیریت', 'erp-management-dashboard.php', 'شاخص‌های read-only عملیاتی', $roleCode, 'diag'),
+    ];
+
+    if (!m360_staff_home_route_exists('erp-purchase-request-list.php')) {
+        $items[] = m360_staff_home_item(
+            $g,
+            'فهرست درخواست خرید',
+            'erp-purchase-request-list.php',
+            'صفحه فهرست درخواست خرید هنوز ساخته نشده است.',
+            $roleCode,
+            'backlog'
+        );
+    }
+
+    return $items;
+}
+
+/**
+ * @return list<array<string, string>>
+ */
+function m360_staff_home_service_manager_coordination_bridge_items(string $roleCode): array
+{
+    $g = M360_STAFF_HOME_GROUP_COORDINATION_REF;
+
+    return [
+        m360_staff_home_bridge_ref_item($g, 'JobCardهای پذیرش', 'erp-reception-jobcards.php', 'مرجع هماهنگی — نمایش برای پیگیری پذیرش', $roleCode, 'ref_coord'),
+        m360_staff_home_bridge_ref_item($g, 'قراردادهای پذیرش', 'erp-intake-contracts.php', 'مرجع هماهنگی — گیت قرارداد', $roleCode, 'ref_coord'),
+        m360_staff_home_item($g, 'تایم‌لاین JobCard', 'erp-jobcard-timeline.php', 'مسیر از پرونده باز می‌شود — شناسه JobCard لازم است', $roleCode, 'info'),
+        m360_staff_home_bridge_ref_item($g, 'رزرو قطعه', 'erp-part-reserve.php', 'مرجع هماهنگی — انبار', $roleCode, 'ref_coord'),
+        m360_staff_home_bridge_ref_item($g, 'مصرف قطعه JobCard', 'erp-jobcard-part-use.php', 'مرجع هماهنگی — ثبت مصرف', $roleCode, 'ref_coord'),
+        m360_staff_home_bridge_ref_item($g, 'پیگیری پرداخت', 'erp-payment-tracking.php', 'نمایش برای پیگیری — مرجع مالی', $roleCode, 'ref_coord'),
+        m360_staff_home_bridge_ref_item($g, 'برد برآورد', 'erp-estimate-board.php', 'نمایش برای پیگیری — مرجع مالی', $roleCode, 'ref_coord'),
+        m360_staff_home_bridge_ref_item($g, 'فاکتور نهایی', 'erp-final-invoice-board.php', 'نمایش برای پیگیری — مرجع مالی', $roleCode, 'ref_coord'),
+    ];
+}
+
+/**
+ * @return list<array<string, string>>
+ */
+function m360_staff_home_manager_bridge_items(string $roleCode): array
+{
+    $roleCode = strtoupper(trim($roleCode));
+    if (m360_staff_home_is_admin_role($roleCode)) {
+        return m360_staff_home_admin_manager_bridge_items($roleCode);
+    }
+    if ($roleCode === 'SERVICE_MANAGER') {
+        return m360_staff_home_service_manager_coordination_bridge_items($roleCode);
+    }
+
+    return [];
+}
+
+function m360_staff_home_has_manager_bridge(string $roleCode): bool
+{
+    return m360_staff_home_manager_bridge_items($roleCode) !== [];
+}
+
+function m360_staff_home_is_runtime_ready(string $file): bool
+{
+    return !isset(M360_STAFF_HOME_RUNTIME_NOT_READY[$file]);
+}
+
+/**
+ * @param list<array<string, string>> $items
+ * @return list<array<string, string>>
+ */
+function m360_staff_home_apply_runtime_hold(array $items): array
+{
+    foreach ($items as $i => $item) {
+        $file = (string)($item['file'] ?? '');
+        if ($file === '' || !isset(M360_STAFF_HOME_RUNTIME_NOT_READY[$file])) {
+            continue;
+        }
+        $meta = M360_STAFF_HOME_RUNTIME_NOT_READY[$file];
+        $items[$i]['card_type'] = 'runtime_hold';
+        $items[$i]['description_fa'] = $meta['description_fa'];
+        $items[$i]['runtime_status_fa'] = $meta['status_fa'];
+    }
+
+    return $items;
+}
+
 function m360_staff_home_usage_path_fa(array $item): string
 {
     $cardType = (string)($item['card_type'] ?? 'nav');
@@ -258,6 +405,8 @@ function m360_staff_home_usage_path_fa(array $item): string
         'info' => $desc !== '' ? 'مسیر استفاده: ' . $desc : 'مسیر استفاده: از تابلو یا فهرست مرتبط',
         'note' => 'مسیر استفاده: از پرونده یا عملیات انتخاب‌شده',
         'backlog' => 'مسیر استفاده: —',
+        'ref', 'ref_coord' => $desc !== '' ? 'مسیر استفاده: ' . $desc : 'مسیر استفاده: مشاهده تابلو',
+        'diag' => $desc !== '' ? 'مسیر استفاده: ' . $desc : 'مسیر استفاده: ابزار تشخیص مدیریتی',
         default => $desc !== '' ? 'مسیر استفاده: ' . $desc : 'مسیر استفاده: ورود مستقیم از میز کار',
     };
 }
@@ -272,6 +421,8 @@ function m360_staff_home_workbench_group_labels(): array
         M360_STAFF_HOME_GROUP_FOLLOWUP => 'پیگیری و جزئیات',
         M360_STAFF_HOME_GROUP_OPERATIONS => 'عملیات مجاز',
         M360_STAFF_HOME_GROUP_REPORTS => 'گزارش‌های مرتبط',
+        M360_STAFF_HOME_GROUP_MANAGER_REF => 'مرجع عملیاتی One-Day Run',
+        M360_STAFF_HOME_GROUP_COORDINATION_REF => 'مرجع هماهنگی سالن',
         M360_STAFF_HOME_GROUP_BACKLOG => 'موارد غیرفعال / نیازمند تکمیل',
     ];
 }
@@ -435,7 +586,7 @@ function m360_staff_home_workbench_items(string $roleCode): array
                 m360_staff_home_item($g(M360_STAFF_HOME_GROUP_OPERATIONS), 'عملیات اجرای کار', 'erp-work-execution-action.php', 'از جزئیات اجرای کار', $roleCode, 'note'),
             ],
             [
-                m360_staff_home_item($g(M360_STAFF_HOME_GROUP_REPORTS), 'تایم‌لاین JobCard', 'erp-jobcard-timeline.php', 'تاریخچه و رویدادهای پرونده', $roleCode),
+                m360_staff_home_item($g(M360_STAFF_HOME_GROUP_REPORTS), 'تایم‌لاین JobCard', 'erp-jobcard-timeline.php', 'از مسیر پرونده JobCard باز می‌شود — مشاهده تاریخچه و رویدادها', $roleCode, 'info'),
             ]
         ),
         'TECHNICIAN' => array_merge(
@@ -507,7 +658,11 @@ function m360_staff_home_workbench_items(string $roleCode): array
         default => [],
     };
 
-    return array_merge($items, m360_staff_home_scope_backlog_items($roleCode));
+    return m360_staff_home_apply_runtime_hold(array_merge(
+        $items,
+        m360_staff_home_manager_bridge_items($roleCode),
+        m360_staff_home_scope_backlog_items($roleCode)
+    ));
 }
 
 /**
@@ -720,8 +875,23 @@ function m360_staff_home_route_status(array $item): string
     if ($cardType === 'backlog') {
         return 'نیازمند تکمیل';
     }
+    if ($cardType === 'runtime_hold') {
+        return (string)($item['runtime_status_fa'] ?? M360_STAFF_HOME_RUNTIME_HOLD_FA);
+    }
+    if ($cardType === 'ref_coord') {
+        return 'مرجع هماهنگی';
+    }
+    if ($cardType === 'ref') {
+        return 'مرجع';
+    }
+    if ($cardType === 'diag') {
+        return 'ابزار تشخیص';
+    }
+    if ($cardType === 'info') {
+        return M360_STAFF_HOME_STATUS_GUIDED_FA;
+    }
     if ($cardType === 'note') {
-        return 'موجود';
+        return M360_STAFF_HOME_STATUS_ACTION_FA;
     }
     if ($file === '') {
         return 'نیازمند تکمیل';
@@ -739,6 +909,11 @@ function m360_staff_home_route_status_class(array $item): string
 
     return match ($label) {
         'موجود' => 'present',
+        'مرجع', 'مرجع هماهنگی' => 'reference',
+        'ابزار تشخیص' => 'diag',
+        M360_STAFF_HOME_STATUS_GUIDED_FA => 'guided',
+        M360_STAFF_HOME_STATUS_ACTION_FA => 'action',
+        'نیازمند بازبینی عملیاتی', 'نیازمند بررسی عملیاتی' => 'runtime-hold',
         'غیرفعال' => 'disabled',
         default => 'backlog',
     };
@@ -749,8 +924,18 @@ function m360_staff_home_item_clickable(array $item): bool
     $cardType = (string)($item['card_type'] ?? 'nav');
     $file = (string)($item['file'] ?? '');
 
-    if ($cardType === 'backlog' || $cardType === 'note' || $cardType === 'info') {
+    if ($cardType === 'backlog' || $cardType === 'runtime_hold' || $cardType === 'note' || $cardType === 'info') {
         return false;
+    }
+    if (!m360_staff_home_is_runtime_ready($file)) {
+        return false;
+    }
+    if (in_array($cardType, ['ref', 'ref_coord', 'diag', 'nav'], true)) {
+        if ($file === '' || m360_staff_home_is_action_endpoint($file)) {
+            return false;
+        }
+
+        return m360_staff_home_route_exists($file);
     }
     if ($file === '' || m360_staff_home_is_action_endpoint($file)) {
         return false;
@@ -777,8 +962,20 @@ function m360_staff_home_render_workbench_item(array $item, int $userId): void
     if ($cardType === 'backlog') {
         $class .= ' is-backlog';
     }
+    if ($cardType === 'runtime_hold') {
+        $class .= ' is-runtime-hold';
+    }
     if ($cardType === 'note') {
         $class .= ' is-note';
+    }
+    if ($cardType === 'info') {
+        $class .= ' is-info';
+    }
+    if (in_array($cardType, ['ref', 'ref_coord'], true)) {
+        $class .= ' is-ref';
+    }
+    if ($cardType === 'diag') {
+        $class .= ' is-diag';
     }
 
     $dataRoute = $file !== '' ? ' data-route="' . m360_staff_home_h($file) . '"' : '';
@@ -792,7 +989,12 @@ function m360_staff_home_render_workbench_item(array $item, int $userId): void
 
     if ($clickable) {
         $href = m360_staff_home_route_href($file, $userId);
-        echo '<a class="m360-staff-btn" href="' . m360_staff_home_h($href) . '">ورود به صفحه</a>';
+        $btnLabel = match ($cardType) {
+            'ref', 'ref_coord' => M360_STAFF_HOME_BTN_BOARD_FA,
+            'diag' => M360_STAFF_HOME_BTN_REPORT_FA,
+            default => 'ورود به صفحه',
+        };
+        echo '<a class="m360-staff-btn" href="' . m360_staff_home_h($href) . '">' . m360_staff_home_h($btnLabel) . '</a>';
     } elseif ($cardType === 'info') {
         echo '<p class="m360-staff-missing">' . m360_staff_home_h(M360_STAFF_HOME_INFO_ROUTE_FA) . '</p>';
         echo '<span class="m360-staff-btn disabled" aria-disabled="true">' . m360_staff_home_h(M360_STAFF_HOME_GUIDED_BTN_FA) . '</span>';
@@ -800,6 +1002,9 @@ function m360_staff_home_render_workbench_item(array $item, int $userId): void
         echo '<p class="m360-staff-note">' . m360_staff_home_h(M360_STAFF_HOME_NOTE_ROUTE_FA) . '</p>';
     } elseif ($cardType === 'backlog') {
         echo '<p class="m360-staff-missing">' . m360_staff_home_h(M360_STAFF_HOME_BACKLOG_FA) . '</p>';
+    } elseif ($cardType === 'runtime_hold') {
+        echo '<p class="m360-staff-missing">' . m360_staff_home_h((string)($item['description_fa'] ?? M360_STAFF_HOME_RUNTIME_HOLD_FA)) . '</p>';
+        echo '<span class="m360-staff-btn disabled" aria-disabled="true">' . m360_staff_home_h(M360_STAFF_HOME_RUNTIME_HOLD_FA) . '</span>';
     } else {
         echo '<p class="m360-staff-missing">' . m360_staff_home_h(M360_STAFF_HOME_MISSING_ROUTE_FA) . '</p>';
     }
@@ -817,6 +1022,8 @@ function m360_staff_home_render_workbench(array $workbenchGroups, int $userId): 
         M360_STAFF_HOME_GROUP_FOLLOWUP,
         M360_STAFF_HOME_GROUP_OPERATIONS,
         M360_STAFF_HOME_GROUP_REPORTS,
+        M360_STAFF_HOME_GROUP_MANAGER_REF,
+        M360_STAFF_HOME_GROUP_COORDINATION_REF,
         M360_STAFF_HOME_GROUP_BACKLOG,
     ];
 
@@ -826,7 +1033,13 @@ function m360_staff_home_render_workbench(array $workbenchGroups, int $userId): 
             continue;
         }
         echo '<section class="m360-staff-workbench-group">';
-        echo '<h2 class="m360-staff-group-title">' . m360_staff_home_h($labels[$groupKey] ?? $groupKey) . '</h2>';
+        $groupClass = 'm360-staff-group-title';
+        if ($groupKey === M360_STAFF_HOME_GROUP_MANAGER_REF) {
+            $groupClass .= ' m360-staff-group-title-bridge';
+        } elseif ($groupKey === M360_STAFF_HOME_GROUP_COORDINATION_REF) {
+            $groupClass .= ' m360-staff-group-title-coordination';
+        }
+        echo '<h2 class="' . m360_staff_home_h($groupClass) . '">' . m360_staff_home_h($labels[$groupKey] ?? $groupKey) . '</h2>';
         echo '<div class="m360-staff-routes">';
         foreach ($items as $item) {
             m360_staff_home_render_workbench_item($item, $userId);

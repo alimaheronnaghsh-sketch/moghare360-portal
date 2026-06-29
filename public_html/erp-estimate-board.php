@@ -5,6 +5,7 @@ header('Content-Type: text/html; charset=UTF-8');
 header('X-Robots-Tag: noindex, nofollow');
 
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-estimate-helper.php';
+require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-operational-shell-helper.php';
 
 m360_estimate_require_staff();
 
@@ -21,9 +22,11 @@ $rows = $conn !== false ? m360_estimate_board_list($conn, $filter === 'ALL' ? nu
     <title>برد برآورد هزینه</title>
     <link rel="stylesheet" href="assets/moghare360-ui/moghare360-soft-run-release.css">
     <link rel="stylesheet" href="assets/css/m360-estimate.css">
+    <link rel="stylesheet" href="<?= m360_operational_shell_h(m360_operational_shell_css_href()) ?>">
 </head>
 <body class="m360-est-page">
 <div class="w1c-wrap m360-est-wrap">
+    <?php m360_operational_shell_render_board('estimate_board'); ?>
     <header class="w1c-banner">
         <h1>برد برآورد و تأیید</h1>
         <p>برآورد هزینه — تأیید مشتری — گیت قطعه و مالی</p>

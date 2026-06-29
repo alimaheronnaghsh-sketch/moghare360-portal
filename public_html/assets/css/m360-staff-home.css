@@ -16,12 +16,23 @@
 .m360-staff-route-card.is-missing { opacity: .78; border-style: dashed; }
 .m360-staff-route-card.is-backlog { border-color: #6b4f1d; background: #221c14; }
 .m360-staff-route-card.is-note { border-color: #3a4654; background: #171e28; }
+.m360-staff-route-card.is-info { border-color: #475569; background: #171e28; border-style: dashed; }
 .m360-staff-route-head { display: flex; flex-wrap: wrap; gap: .35rem; justify-content: space-between; align-items: flex-start; margin-bottom: .35rem; }
 .m360-staff-route-card h3 { margin: 0; font-size: 1rem; flex: 1 1 auto; }
 .m360-staff-status { font-size: .72rem; padding: .15rem .45rem; border-radius: 999px; background: #2a3544; white-space: nowrap; }
 .m360-staff-status-present { background: #14532d; color: #bbf7d0; }
 .m360-staff-status-disabled { background: #7f1d1d; color: #fecaca; }
 .m360-staff-status-backlog { background: #713f12; color: #fde68a; }
+.m360-staff-status-reference { background: #1e3a5f; color: #bfdbfe; }
+.m360-staff-status-diag { background: #312e81; color: #c7d2fe; }
+.m360-staff-status-guided { background: #334155; color: #cbd5e1; }
+.m360-staff-status-action { background: #3d2f4a; color: #e9d5ff; }
+.m360-staff-status-runtime-hold { background: #7c2d12; color: #fed7aa; }
+.m360-staff-route-card.is-runtime-hold { border-color: #c2410c; background: #1c1410; border-style: dashed; }
+.m360-staff-route-card.is-ref { border-color: #2563eb; }
+.m360-staff-route-card.is-diag { border-color: #4338ca; }
+.m360-staff-group-title-bridge { color: #93c5fd; }
+.m360-staff-group-title-coordination { color: #7dd3fc; }
 .m360-staff-route-desc { margin: 0 0 .45rem; font-size: .86rem; opacity: .9; }
 .m360-staff-route-meta { margin: 0 0 .55rem; font-size: .78rem; opacity: .82; line-height: 1.45; }
 .m360-staff-route-card[data-route] { position: relative; }

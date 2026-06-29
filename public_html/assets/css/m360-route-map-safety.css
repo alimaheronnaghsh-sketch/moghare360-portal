@@ -1,0 +1,81 @@
+.m360-rmap-view-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin: 0 0 1rem;
+}
+.m360-rmap-view-tab {
+    display: inline-block;
+    padding: 0.45rem 0.85rem;
+    border-radius: 8px;
+    text-decoration: none;
+    font-size: 0.88rem;
+    border: 1px solid #cbd5e1;
+    color: #334155;
+    background: #fff;
+}
+.m360-rmap-view-tab.active {
+    background: #1e3a8a;
+    color: #fff;
+    border-color: #1e3a8a;
+}
+.m360-rmap-summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 0.65rem;
+    margin-bottom: 1rem;
+}
+.m360-rmap-summary-card {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 0.65rem 0.75rem;
+}
+.m360-rmap-summary-card .val { font-size: 1.2rem; font-weight: 700; color: #0f172a; }
+.m360-rmap-summary-card .lbl { font-size: 0.75rem; color: #64748b; margin-top: 0.15rem; }
+.m360-rmap-table td { vertical-align: top; }
+.m360-rmap-title { font-weight: 600; color: #0f172a; margin-bottom: 0.2rem; }
+.m360-rmap-path {
+    display: inline-block;
+    font-size: 0.78rem;
+    direction: ltr;
+    text-align: left;
+    unicode-bidi: embed;
+}
+.m360-rmap-path-active { color: #1d4ed8; text-decoration: none; }
+.m360-rmap-path-active:hover { text-decoration: underline; }
+.m360-rmap-path-tech { color: #0f766e; text-decoration: none; }
+.m360-rmap-path-disabled {
+    color: #64748b;
+    background: #f1f5f9;
+    padding: 0.15rem 0.35rem;
+    border-radius: 4px;
+}
+.m360-rmap-badge {
+    display: inline-block;
+    font-size: 0.72rem;
+    padding: 0.15rem 0.45rem;
+    border-radius: 999px;
+    white-space: nowrap;
+}
+.m360-rmap-badge-operational { background: #dcfce7; color: #166534; }
+.m360-rmap-badge-guided { background: #e2e8f0; color: #334155; }
+.m360-rmap-badge-action { background: #f3e8ff; color: #6b21a8; }
+.m360-rmap-badge-api { background: #fee2e2; color: #991b1b; }
+.m360-rmap-badge-customer { background: #ffedd5; color: #9a3412; }
+.m360-rmap-badge-diagnostic { background: #dbeafe; color: #1e40af; }
+.m360-rmap-badge-runtime { background: #ffedd5; color: #c2410c; border: 1px dashed #fdba74; }
+.m360-rmap-file-present { background: #ecfdf5; color: #047857; }
+.m360-rmap-file-missing { background: #fef3c7; color: #92400e; }
+.m360-rmap-reason { font-size: 0.78rem; color: #64748b; margin-top: 0.25rem; line-height: 1.45; }
+.m360-rmap-link-active { color: #166534; font-weight: 600; }
+.m360-rmap-link-disabled { color: #94a3b8; }
+.m360-rmap-note {
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    border-radius: 8px;
+    padding: 0.65rem 0.85rem;
+    margin-bottom: 1rem;
+    font-size: 0.86rem;
+    color: #1e3a8a;
+}

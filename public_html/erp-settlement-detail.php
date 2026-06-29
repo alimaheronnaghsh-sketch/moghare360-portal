@@ -7,6 +7,7 @@ header('X-Robots-Tag: noindex, nofollow');
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-settlement-helper.php';
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-final-invoice-helper.php';
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-jobcard-close-helper.php';
+require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-operational-shell-helper.php';
 
 m360_fi_require_staff();
 
@@ -76,11 +77,21 @@ $settleStatus = (string)(is_array($settlement) ? ($settlement['settlement_status
     <title>کنترل تسویه</title>
     <link rel="stylesheet" href="assets/moghare360-ui/moghare360-soft-run-release.css">
     <link rel="stylesheet" href="assets/css/m360-estimate.css">
+    <link rel="stylesheet" href="<?= m360_operational_shell_h(m360_operational_shell_css_href()) ?>">
     <style>.m360-est-grid{display:grid;grid-template-columns:1fr 1fr;gap:1rem}.m360-est-kv{margin:.3rem 0;font-size:.9rem}.m360-est-kv strong{color:#475569}.m360-est-badge{display:inline-block;padding:.15rem .5rem;border-radius:999px;background:#ccfbf1;color:#0f766e;font-size:.78rem}.m360-est-alert{padding:.8rem;border-radius:.45rem;background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;margin:.6rem 0}@media(max-width:720px){.m360-est-grid{grid-template-columns:1fr}}</style>
 </head>
 <body class="m360-est-page">
 <div class="w1c-wrap m360-est-wrap">
-    <a href="erp-final-invoice-detail.php?jobcard_id=<?= (int)$jobcardId ?>" class="m360-est-back">← بازگشت به فاکتور نهایی</a>
+    <?php
+    $opsStrip = null;
+    if ($jc !== null) {
+        $jcRow = is_array($settlement) ? array_merge($jc, $settlement) : $jc;
+        $settleAllowed = $canRelease ? ['close_jobcard'] : [];
+        $opsStrip = m360_operational_shell_build_jobcard_strip($conn, $jcRow, 'settlement', $settleStatus, $settleAllowed, $releaseMessage);
+        $opsStrip['doc_type_fa'] = 'سند تسویه';
+    }
+    m360_operational_shell_render_detail('settlement_detail', 'erp-final-invoice-detail.php?jobcard_id=' . $jobcardId, $jobcardId, $opsStrip);
+    ?>
     <?php if ($flash !== ''): ?><div class="m360-est-flash <?= $flashOk ? 'ok' : 'err' ?>"><?= m360_fi_h($flash) ?></div><?php endif; ?>
 
     <?php if ($jc === null): ?>

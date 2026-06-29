@@ -9,6 +9,7 @@ header('Content-Type: text/html; charset=UTF-8');
 header('X-Robots-Tag: noindex, nofollow');
 
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-technical-operation-helper.php';
+require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-operational-shell-helper.php';
 
 m360_technical_require_staff();
 
@@ -37,6 +38,7 @@ if ($dbOk) {
     <meta name="robots" content="noindex, nofollow">
     <title>برد عملیات فنی</title>
     <link rel="stylesheet" href="assets/moghare360-ui/moghare360-soft-run-release.css">
+    <link rel="stylesheet" href="<?= m360_operational_shell_h(m360_operational_shell_css_href()) ?>">
     <style>
         .p3-tech-wrap { max-width: 1260px; margin: 0 auto; }
         .p3-tech-filters { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 0.65rem; }
@@ -54,6 +56,7 @@ if ($dbOk) {
 </head>
 <body style="background:#f8fafc;margin:0;padding:1.25rem;color:#0f172a;">
 <div class="w1c-wrap p3-tech-wrap">
+    <?php m360_operational_shell_render_board('technical_board'); ?>
     <header class="w1c-banner">
         <h1>برد عملیات فنی</h1>
         <p>پرونده‌های آماده فنی — عیب‌یابی و اجرای سرویس</p>

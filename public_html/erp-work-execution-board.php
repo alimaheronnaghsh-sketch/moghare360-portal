@@ -5,6 +5,7 @@ header('Content-Type: text/html; charset=UTF-8');
 header('X-Robots-Tag: noindex, nofollow');
 
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-work-execution-helper.php';
+require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-operational-shell-helper.php';
 
 m360_work_require_staff();
 
@@ -21,9 +22,11 @@ $rows = $conn !== false ? m360_work_board_list($conn, $filter === 'ALL' ? null :
     <title>برد اجرای کار</title>
     <link rel="stylesheet" href="assets/moghare360-ui/moghare360-soft-run-release.css">
     <link rel="stylesheet" href="assets/css/m360-work-execution.css">
+    <link rel="stylesheet" href="<?= m360_operational_shell_h(m360_operational_shell_css_href()) ?>">
 </head>
 <body class="m360-wx-page">
 <div class="w1c-wrap m360-wx-wrap">
+    <?php m360_operational_shell_render_board('work_board'); ?>
     <header class="w1c-banner">
         <h1>برد اجرای کار</h1>
         <p>پس از تأیید برآورد — مصرف قطعه — تکمیل فنی — آماده QC</p>

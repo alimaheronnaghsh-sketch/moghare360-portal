@@ -5,6 +5,7 @@ header('Content-Type: text/html; charset=UTF-8');
 header('X-Robots-Tag: noindex, nofollow');
 
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-qc-helper.php';
+require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-operational-shell-helper.php';
 
 m360_qc_require_staff();
 
@@ -68,10 +69,18 @@ function m360_qc_form(string $action, int $jobcardId, int $qcCheckId, string $la
     <title>جزئیات QC</title>
     <link rel="stylesheet" href="assets/moghare360-ui/moghare360-soft-run-release.css">
     <link rel="stylesheet" href="assets/css/m360-qc.css">
+    <link rel="stylesheet" href="<?= m360_operational_shell_h(m360_operational_shell_css_href()) ?>">
 </head>
 <body class="m360-qc-page">
 <div class="w1c-wrap m360-qc-wrap">
-    <a href="erp-qc-board.php" class="m360-qc-back">← بازگشت به برد QC</a>
+    <?php
+    $opsStrip = null;
+    if ($jc !== null) {
+        $opsStrip = m360_operational_shell_build_jobcard_strip($conn, $jc, 'qc', $qcStatus, $allowed, $gateMessage);
+        $opsStrip['doc_type_fa'] = 'سند QC';
+    }
+    m360_operational_shell_render_detail('qc_detail', 'erp-qc-board.php', $jobcardId, $opsStrip);
+    ?>
     <?php if ($flash !== ''): ?><div class="m360-qc-flash <?= $flashOk ? 'ok' : 'err' ?>"><?= m360_qc_h($flash) ?></div><?php endif; ?>
 
     <?php if ($jc === null): ?>
