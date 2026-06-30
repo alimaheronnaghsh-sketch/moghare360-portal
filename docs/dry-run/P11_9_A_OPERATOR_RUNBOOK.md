@@ -17,6 +17,41 @@
 
 ---
 
+## 1a. Demo staff provisioning (P11.9-B preflight)
+
+**Before dry run:** owner provisions six demo staff users.
+
+| Step | Action |
+|------|--------|
+| 1 | Owner login → **`erp-access-management.php`** |
+| 2 | **«+ ایجاد پرسنل»** → **`erp-access-user-create.php`** |
+| 3 | Create each user with UI `role_code` per role checklist |
+| 4 | Temporary password entered manually — **never** in repo, log, or screenshots |
+| 5 | Each user logs in via `staff-login.php` → confirm Staff Home |
+
+**Demo users (UI role codes):**
+
+| Username | UI role_code |
+|----------|--------------|
+| `demo.reception` | RECEPTION |
+| `demo.service.manager` | SERVICE_MANAGER |
+| `demo.technician` | TECHNICIAN |
+| `demo.parts` | **PARTS** (not INVENTORY) |
+| `demo.finance` | FINANCE |
+| `demo.qc` | QC |
+
+**Do not use for provisioning:**
+
+- `erp-v1-unit-access-console.php` — read-only; no user creation
+- `erp-access-request-admin.php` — not demo user provisioning
+- Raw SQL or `private/production-users.json` import — not P11.9-B path unless a future phase approves
+
+**STOP if:** Access Management cannot create users; **`PARTS`** or **`SERVICE_MANAGER`** missing from UI role dropdown.
+
+See `P11_9_A_ROLE_PROVISIONING_CHECKLIST.md` for full checklist.
+
+---
+
 ## 2. Starting point — Staff Home
 
 Every staff role begins at:

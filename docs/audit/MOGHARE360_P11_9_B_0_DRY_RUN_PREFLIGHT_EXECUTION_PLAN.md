@@ -144,12 +144,27 @@ git log --oneline -n 5
 
 **Purpose:** Manual creation through Access Management only.
 
+**Authoritative path:** `erp-access-management.php` → `erp-access-user-create.php` (P11.4 UI — P11.9-B-FIX-A).
+
+**Do not use:**
+
+- `erp-v1-unit-access-console.php` — read-only route console; points to production JSON import; **not** dry-run user creation
+- `erp-access-request-admin.php` — read-only access requests; **not** user provisioning
+- Raw SQL or `private/production-users.json` + PowerShell import — production bootstrap only; **not** P11.9-B unless a future phase explicitly approves
+
 **Required demo users:** `demo.reception`, `demo.service.manager`, `demo.technician`, `demo.parts`, `demo.finance`, `demo.qc`  
 **Owner:** existing owner/admin user
 
+**UI role codes:** RECEPTION, **SERVICE_MANAGER**, TECHNICIAN, **PARTS** (not INVENTORY), FINANCE, QC
+
+**Role notes:**
+
+- **`PARTS`** in Access Management UI — Unit Console / production JSON may show **`INVENTORY`** for the same function; P11.9-B preflight must use **`PARTS`** in UI
+- **`SERVICE_MANAGER`** is valid in Access Management UI but **not** in production JSON template — create via UI for dry run
+
 **Rules:** No passwords in repo; no password screenshots; passwords stored outside repo; no raw SQL user creation unless future explicit approval; each user logs in once and confirms Staff Home.
 
-**Decision:** If any role cannot be created or cannot login → **STOP** before dry run.
+**Decision:** If any role cannot be created or cannot login → **STOP** before dry run. If **`PARTS`** or **`SERVICE_MANAGER`** missing from UI dropdown → **STOP** and report. Do not switch to JSON/import/raw SQL without a new approved phase.
 
 #### Phase 5 — M360-DEMO JobCard readiness
 
@@ -236,7 +251,11 @@ See §11.
 
 ## 5. Demo Staff Provisioning Plan
 
-**Method:** `erp-access-management.php` → `erp-access-user-create.php` only.
+**Method:** `erp-access-management.php` → `erp-access-user-create.php` only (P11.9-B-FIX-A).
+
+**Not the dry-run path:** `erp-v1-unit-access-console.php` (read-only); `erp-access-request-admin.php`; raw SQL; `private/production-users.json` import unless a future approved phase.
+
+**UI role codes:** use **`PARTS`** (not INVENTORY) and **`SERVICE_MANAGER`** (not in production JSON template).
 
 ### Demo Staff Provisioning Plan Table
 

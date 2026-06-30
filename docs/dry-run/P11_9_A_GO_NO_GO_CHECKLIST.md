@@ -48,8 +48,17 @@ Complete **before** dry run execution (not part of P11.9-A automation).
 ### Security
 
 - ☐ No passwords stored in repo/docs/log
+- ☐ No password screenshots captured
 - ☐ No OTP secrets exposed
 - ☐ No plan for manual DB fixes during run
+
+### Demo staff provisioning (P11.9-B)
+
+- ☐ All six demo users created via **`erp-access-management.php` → `erp-access-user-create.php`**
+- ☐ **`PARTS`** UI role used for `demo.parts` (not INVENTORY)
+- ☐ **`SERVICE_MANAGER`** UI role used for `demo.service.manager`
+- ☐ Unit Access Console **not** used for user creation
+- ☐ Private JSON import **not** used for P11.9-B demo users
 
 ---
 
@@ -57,6 +66,9 @@ Complete **before** dry run execution (not part of P11.9-A automation).
 
 - ☐ Owner cannot log in
 - ☐ Any required role cannot log in
+- ☐ Access Management cannot create required demo users
+- ☐ **`PARTS`** or **`SERVICE_MANAGER`** unavailable in Access Management UI role dropdown
+- ☐ Operator attempted demo provisioning via Unit Access Console, JSON import, or raw SQL without approved phase
 - ☐ No fresh M360-DEMO JobCard identified
 - ☐ Staff Home broken for any role
 - ☐ Route Map operational view broken
