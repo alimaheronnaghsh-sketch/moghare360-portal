@@ -28,7 +28,7 @@ renderFlashes();
     </label>
     <div class="action-row">
       <button class="btn primary" type="submit">ارسال کد تایید</button>
-      <a class="btn ghost" href="index.php">بازگشت</a>
+      <a class="btn ghost" href="./">بازگشت</a>
     </div>
   </form>
 </main>

@@ -62,7 +62,7 @@ function mirror_sms_otp_enabled(): bool
 
 function mirror_public_asset_version(): string
 {
-    return 'full-replace-v2';
+    return 'fix-f-v2';
 }
 
 function mirror_render_head(string $title, string $activeNav = ''): void
@@ -70,9 +70,15 @@ function mirror_render_head(string $title, string $activeNav = ''): void
     $logo = mirror_logo_path();
     header('Content-Type: text/html; charset=UTF-8');
     header('X-Robots-Tag: noindex, nofollow');
+    header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+    header('Pragma: no-cache');
+    header('Expires: 0');
 
     echo '<!DOCTYPE html><html lang="fa" dir="rtl"><head>';
     echo '<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">';
+    echo '<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">';
+    echo '<meta http-equiv="Pragma" content="no-cache">';
+    echo '<meta http-equiv="Expires" content="0">';
     echo '<meta name="robots" content="noindex,nofollow">';
     echo '<meta name="theme-color" content="#22c55e">';
     echo '<link rel="manifest" href="manifest.webmanifest">';
@@ -84,7 +90,7 @@ function mirror_render_head(string $title, string $activeNav = ''): void
 
     echo '<header class="m360-public-header">';
     echo '<div class="m360-public-header__inner">';
-    echo '<a href="index.php" class="m360-public-brand">';
+    echo '<a href="./" class="m360-public-brand">';
     if ($logo !== '') {
         echo '<img class="m360-public-brand__logo m360-public-logo" src="' . mirror_h($logo) . '" alt="MOGHAREH360">';
     }
@@ -94,7 +100,7 @@ function mirror_render_head(string $title, string $activeNav = ''): void
     echo '</span></a>';
     echo '<nav class="m360-public-nav" aria-label="منوی اصلی">';
     $links = [
-        'index' => ['index.php', 'خانه'],
+        'index' => ['./', 'خانه'],
         'customer' => ['customer-request.php', 'مشتری'],
         'staff' => ['staff-login.php', 'پرسنل'],
     ];
@@ -102,7 +108,6 @@ function mirror_render_head(string $title, string $activeNav = ''): void
         $cls = 'm360-public-nav__link' . ($activeNav === $key ? ' is-active' : '');
         echo '<a class="' . $cls . '" href="' . mirror_h($href) . '">' . mirror_h($label) . '</a>';
     }
-    echo '<a class="m360-public-nav__link m360-public-nav__link--mgmt" href="owner-login.php">ورود مدیریتی</a>';
     echo '</nav></div></header>';
     echo '<main class="m360-public-main">';
 }
@@ -114,6 +119,6 @@ function mirror_render_foot(): void
     echo '© <span class="m360-brand-latin" lang="en" dir="ltr">MOGHAREH360</span> — تمامی حقوق محفوظ است.';
     echo '<div class="m360-install-hint">برای نصب اپلیکیشن: از منوی مرورگر «افزودن به صفحه اصلی» را انتخاب کنید.</div>';
     echo '</footer></div>';
-    echo '<script>if("serviceWorker" in navigator){navigator.serviceWorker.register("service-worker.js").catch(function(){});}</script>';
+    echo '<script>(function(){if("serviceWorker"in navigator){navigator.serviceWorker.getRegistrations().then(function(r){r.forEach(function(x){x.unregister();});});}if(window.caches&&caches.keys){caches.keys().then(function(k){k.forEach(function(n){caches.delete(n);});});}window.addEventListener("pageshow",function(e){if(e.persisted){window.location.reload();}});})();</script>';
     echo '</body></html>';
 }

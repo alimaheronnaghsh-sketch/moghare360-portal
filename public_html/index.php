@@ -3,155 +3,170 @@ declare(strict_types=1);
 
 header('Content-Type: text/html; charset=UTF-8');
 header('X-Robots-Tag: noindex, nofollow');
+header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+header('Pragma: no-cache');
+header('Expires: 0');
+
+require_once __DIR__ . '/includes/m360-access-management-helper.php';
+
+erp_auth_context_start();
+
+$sessionUserId = erp_auth_context_session_user_id();
+$conn = m360_access_mgmt_db();
+$isAdmin = $sessionUserId !== null
+    && $sessionUserId > 0
+    && m360_access_mgmt_actor_is_admin($conn, $sessionUserId);
+
+function m360_admin_index_h(string $value): string
+{
+    return htmlspecialchars($value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+}
+
+function m360_admin_index_page_exists(string $relative): bool
+{
+    return is_file(__DIR__ . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relative));
+}
+
+/** @return list<array{title:string,desc:string,href:string}> */
+function m360_admin_index_hub_links(): array
+{
+    $candidates = [
+        [
+            'title' => 'مدیریت کاربران و دسترسی‌ها',
+            'desc' => 'ایجاد پرسنل، تخصیص نقش و پیش‌نمایش دسترسی',
+            'href' => 'erp-access-management.php',
+        ],
+        [
+            'title' => 'کنسول مادر V1',
+            'desc' => 'نمای کلی واحدها و مسیرهای مدیریتی نرم‌افزار',
+            'href' => 'erp-v1-master-console.php',
+        ],
+        [
+            'title' => 'وضعیت محصول',
+            'desc' => 'ورود محصولی و ماژول‌های عملیاتی ERP',
+            'href' => 'erp-product-home.php',
+        ],
+        [
+            'title' => 'نقشه مسیرها',
+            'desc' => 'مرجع مسیرهای نرم‌افزار و نمای عملیاتی',
+            'href' => 'erp-route-map.php',
+        ],
+        [
+            'title' => 'گزارش Production Signoff',
+            'desc' => 'وضعیت اجرا و امضای تولید V1',
+            'href' => 'erp-v1-production-signoff.php',
+        ],
+        [
+            'title' => 'Fix Register',
+            'desc' => 'ثبت و پیگیری اصلاحات پس از اجرا',
+            'href' => 'erp-v1-fix-register.php',
+        ],
+        [
+            'title' => 'ورود پرسنل',
+            'desc' => 'صفحه ورود کارکنان مجموعه',
+            'href' => 'staff-login.php',
+        ],
+    ];
+
+    $links = [];
+    foreach ($candidates as $item) {
+        if (m360_admin_index_page_exists($item['href'])) {
+            $links[] = $item;
+        }
+    }
+
+    return $links;
+}
+
+if (!$isAdmin) {
+    ?>
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <title>ورود بخش مدیریت نرم‌افزار — مقاره ۳۶۰</title>
+  <style>
+    :root { --bg:#0f1714; --card:#1a2e24; --text:#ecfdf5; --muted:#94a3b8; --accent:#c9a962; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family:Tahoma,"Segoe UI",Arial,sans-serif; background:var(--bg); color:var(--text); min-height:100vh; display:flex; align-items:center; justify-content:center; padding:1.5rem; }
+    .lock-wrap { max-width:440px; width:100%; background:var(--card); border:1px solid rgba(201,169,98,.25); border-radius:16px; padding:2rem 1.75rem; text-align:center; box-shadow:0 20px 50px rgba(0,0,0,.35); }
+    h1 { margin:0 0 1rem; font-size:1.25rem; line-height:1.6; }
+    p { margin:0 0 1.5rem; color:var(--muted); font-size:.95rem; line-height:1.75; }
+    .btn { display:inline-block; padding:.65rem 1.5rem; background:linear-gradient(135deg,var(--accent),#a88b42); color:#0f1714; text-decoration:none; border-radius:10px; font-weight:700; font-size:.95rem; }
+    .btn:hover { opacity:.92; }
+    .back { display:block; margin-top:1.25rem; color:var(--muted); font-size:.88rem; text-decoration:none; }
+    .back:hover { color:var(--accent); }
+  </style>
+</head>
+<body>
+  <div class="lock-wrap">
+    <h1>ورود بخش مدیریت نرم‌افزار</h1>
+    <p>این بخش مخصوص مدیران مجاز نرم‌افزار است. برای ادامه، ابتدا وارد حساب مدیریتی شوید.</p>
+    <a class="btn" href="owner-login.php">ورود مدیر سیستم</a>
+    <a class="back" href="./">بازگشت به صفحه اصلی</a>
+  </div>
+  <script>
+  (function(){if('serviceWorker'in navigator){navigator.serviceWorker.getRegistrations().then(function(r){r.forEach(function(x){x.unregister();});});}if(window.caches&&caches.keys){caches.keys().then(function(k){k.forEach(function(n){caches.delete(n);});});}})();
+  </script>
+</body>
+</html>
+    <?php
+    exit;
+}
+
+$hubLinks = m360_admin_index_hub_links();
 ?>
 <!DOCTYPE html>
 <html lang="fa" dir="rtl">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>مقاره ۳۶۰ — MOGHARE360</title>
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <title>کنسول مدیریت مقاره ۳۶۰</title>
   <style>
-    :root {
-      --m360-green-dark: #0f1714;
-      --m360-green-mid: #1a2e24;
-      --m360-green-accent: #14532d;
-      --m360-text: #1e293b;
-      --m360-muted: #475569;
-      --m360-bg: #f8faf9;
-      --m360-card: #ffffff;
-      --m360-border: #d8e2dc;
-    }
+    :root { --bg:#0f1714; --card:#fff; --green:#1a2e24; --text:#1e293b; --muted:#64748b; --accent:#14532d; --gold:#c9a962; }
     * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      font-family: Tahoma, "Segoe UI", Arial, sans-serif;
-      background: var(--m360-bg);
-      color: var(--m360-text);
-      line-height: 1.85;
-    }
-    .m360-public-wrap {
-      max-width: 820px;
-      margin: 0 auto;
-      padding: 1.5rem 1.25rem 2.5rem;
-    }
-    .m360-public-hero {
-      background: linear-gradient(135deg, var(--m360-green-dark), var(--m360-green-mid));
-      color: #ecfdf5;
-      border-radius: 14px;
-      padding: 2rem 1.75rem;
-      margin-bottom: 1.5rem;
-      text-align: center;
-    }
-    .m360-public-hero h1 {
-      margin: 0 0 .65rem;
-      font-size: 2rem;
-      font-weight: 700;
-      letter-spacing: -.02em;
-    }
-    .m360-public-hero .m360-en-mark {
-      display: block;
-      margin-top: .35rem;
-      font-size: .95rem;
-      opacity: .85;
-      font-weight: 400;
-      letter-spacing: .06em;
-    }
-    .m360-public-subtitle {
-      margin: 0;
-      font-size: 1.05rem;
-      line-height: 1.75;
-      opacity: .95;
-    }
-    .m360-public-body {
-      background: var(--m360-card);
-      border: 1px solid var(--m360-border);
-      border-radius: 12px;
-      padding: 1.75rem 1.5rem;
-    }
-    .m360-public-body p {
-      margin: 0 0 1.15rem;
-      font-size: 1rem;
-      color: var(--m360-text);
-      text-align: justify;
-    }
-    .m360-public-body p:last-of-type {
-      margin-bottom: 0;
-    }
-    .m360-public-contact {
-      margin-top: 1.5rem;
-      padding: 1.25rem 1.25rem;
-      background: #f0fdf4;
-      border: 1px solid #bbf7d0;
-      border-radius: 10px;
-      text-align: center;
-    }
-    .m360-public-contact p {
-      margin: 0 0 .85rem;
-      text-align: center;
-    }
-    .m360-public-contact a {
-      display: inline-block;
-      padding: .55rem 1.25rem;
-      background: var(--m360-green-accent);
-      color: #fff;
-      text-decoration: none;
-      border-radius: 8px;
-      font-weight: 600;
-      font-size: .95rem;
-    }
-    .m360-public-contact a:hover {
-      background: #166534;
-    }
-    .m360-public-footer {
-      margin-top: 1.75rem;
-      padding-top: 1.25rem;
-      border-top: 1px solid var(--m360-border);
-      font-size: .88rem;
-      color: var(--m360-muted);
-      text-align: center;
-      line-height: 1.7;
-    }
-    .m360-public-footer p {
-      margin: .35rem 0;
-    }
-    @media (max-width: 600px) {
-      .m360-public-hero { padding: 1.5rem 1.1rem; }
-      .m360-public-hero h1 { font-size: 1.65rem; }
-      .m360-public-body { padding: 1.25rem 1rem; }
-    }
+    body { margin:0; font-family:Tahoma,"Segoe UI",Arial,sans-serif; background:#f4f7f5; color:var(--text); line-height:1.7; }
+    .hub-wrap { max-width:960px; margin:0 auto; padding:1.5rem 1.25rem 2.5rem; }
+    .hub-top { display:flex; flex-wrap:wrap; gap:.75rem; justify-content:space-between; align-items:center; margin-bottom:1.25rem; }
+    .hub-top a { font-size:.88rem; color:var(--muted); text-decoration:none; }
+    .hub-top a:hover { color:var(--accent); }
+    .hub-hero { background:linear-gradient(135deg,var(--green),#0f1714); color:#ecfdf5; border-radius:14px; padding:1.75rem 1.5rem; margin-bottom:1.25rem; border:1px solid rgba(201,169,98,.2); }
+    .hub-hero h1 { margin:0 0 .45rem; font-size:1.35rem; }
+    .hub-hero p { margin:0; font-size:.92rem; opacity:.9; }
+    .hub-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:.85rem; }
+    .hub-card { background:var(--card); border:1px solid #d8e2dc; border-radius:12px; padding:1.15rem; text-decoration:none; color:inherit; display:block; transition:border-color .2s,box-shadow .2s; }
+    .hub-card:hover { border-color:var(--gold); box-shadow:0 8px 24px rgba(0,0,0,.08); }
+    .hub-card h2 { margin:0 0 .35rem; font-size:1rem; color:var(--green); }
+    .hub-card p { margin:0; font-size:.85rem; color:var(--muted); }
+    .hub-note { margin-top:1.25rem; font-size:.82rem; color:var(--muted); text-align:center; }
   </style>
 </head>
 <body>
-  <div class="m360-public-wrap">
-    <header class="m360-public-hero">
-      <h1>مقاره ۳۶۰<span class="m360-en-mark">MOGHARE360</span></h1>
-      <p class="m360-public-subtitle">سامانه جامع مدیریت عملیات تعمیرگاهی و یکپارچه‌سازی فرآیندهای کسب‌وکار</p>
+  <div class="hub-wrap">
+    <div class="hub-top">
+      <a href="./">بازگشت به صفحه اصلی</a>
+      <a href="owner-login.php">خروج / بازگشت به ورود مدیریت</a>
+    </div>
+    <header class="hub-hero">
+      <h1>کنسول مدیریت مقاره ۳۶۰</h1>
+      <p>دسترسی مدیریتی محافظت‌شده برای کنترل وضعیت نرم‌افزار، کاربران، مسیرها و گزارش‌های اجرایی</p>
     </header>
-
-    <main class="m360-public-body">
-      <p>مقاره ۳۶۰ یک سامانه جامع مدیریت عملیات تعمیرگاهی و یکپارچه‌سازی فرآیندهای کسب‌وکار است که توسط شرکت فنی مهندسی ماهین صنعت ماهران طراحی، تولید و توسعه یافته است.</p>
-
-      <p>این نرم‌افزار به درخواست مجموعه محترم مقاره موتورز و با هدف ایجاد نظم عملیاتی، ارتقای کیفیت خدمات، بهبود تجربه مشتری، افزایش شفافیت، وفادارسازی مشتریان و فراهم‌سازی زیرساختی قابل اتکا برای توسعه آینده مجموعه طراحی و شخصی‌سازی شده است.</p>
-
-      <p>MOGHARE360 با پوشش فرآیندهای اصلی تعمیرگاه، از پذیرش و ثبت اطلاعات خودرو تا کارت کار، عملیات فنی، قطعات، مالی، کنترل کیفیت، ترخیص و گزارش‌های مدیریتی، امکان مدیریت منسجم، قابل کنترل و قابل پیگیری فعالیت‌ها را فراهم می‌کند.</p>
-
-      <p>یکی از اهداف کلیدی این سامانه، ایجاد ارتباط مستمر و شفاف با مشتری در خصوص خدمات درخواستی، وضعیت انجام کار، مراحل بررسی، هزینه‌ها و زمان‌بندی تحویل خودرو است تا مشتری در طول فرآیند خدمت، تجربه‌ای حرفه‌ای‌تر و قابل اعتمادتر دریافت کند.</p>
-
-      <p>شرکت فنی مهندسی ماهین صنعت ماهران با تمرکز بر مشاوره و مدیریت کسب‌وکار، توسعه فروش، سیستم‌سازی، یکپارچه‌سازی فرآیندها و بهینه‌سازی هزینه‌های عملیاتی، راهکارهایی کاربردی و قابل توسعه برای کسب‌وکارهای ایرانی ارائه می‌کند.</p>
-
-      <p>حقوق طراحی، توسعه، مالکیت فکری و پشتیبانی نرم‌افزار متعلق به شرکت فنی مهندسی ماهین صنعت ماهران است و استفاده از این سامانه صرفاً در چارچوب مجوز بهره‌برداری صادرشده برای مجموعه سفارش‌دهنده مجاز می‌باشد.</p>
-
-      <div class="m360-public-contact">
-        <p>جهت دریافت اطلاعات بیشتر، مشاوره توسعه کسب‌وکار، سیستم‌سازی، سفارش نرم‌افزار اختصاصی و بومی یا پشتیبانی، از طریق واتساپ با دکتر ماهرالنقش به شماره ۰۹۱۳۱۱۷۳۳۴۰ در ارتباط باشید.</p>
-        <a href="https://wa.me/989131173340" rel="noopener noreferrer" target="_blank">ارتباط از طریق واتساپ</a>
-      </div>
-    </main>
-
-    <footer class="m360-public-footer">
-      <p>طراحی، تولید و پشتیبانی: شرکت فنی مهندسی ماهین صنعت ماهران</p>
-      <p>توسعه‌یافته برای: مجموعه محترم مقاره موتورز</p>
-      <p>ارتباط با دکتر ماهرالنقش: واتساپ ۰۹۱۳۱۱۷۳۳۴۰</p>
-    </footer>
+    <div class="hub-grid">
+      <?php foreach ($hubLinks as $link): ?>
+        <a class="hub-card" href="<?= m360_admin_index_h($link['href']) ?>">
+          <h2><?= m360_admin_index_h($link['title']) ?></h2>
+          <p><?= m360_admin_index_h($link['desc']) ?></p>
+        </a>
+      <?php endforeach; ?>
+    </div>
+    <p class="hub-note">این بخش فقط برای مدیران مجاز است. صفحه عمومی در <a href="./">صفحه اصلی</a> در دسترس است.</p>
   </div>
 </body>
 </html>

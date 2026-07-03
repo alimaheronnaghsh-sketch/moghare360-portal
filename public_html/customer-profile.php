@@ -176,7 +176,7 @@ try {
           <div class="action-row">
             <a class="btn secondary" href="customer-request-status.php">مشاهده درخواست‌های قبلی</a>
             <a class="btn ghost" href="customer-profile.php?mode=edit">ویرایش اطلاعات</a>
-            <a class="btn ghost" href="index.php">بازگشت</a>
+            <a class="btn ghost" href="./">بازگشت</a>
             <a class="btn danger" href="customer-logout.php">خروج از حساب کاربری</a>
           </div>
         </section>
@@ -270,7 +270,7 @@ try {
               <?php if ($isProfileComplete): ?>
                 <a class="btn ghost" href="customer-profile.php?mode=dashboard">بازگشت به داشبورد</a>
               <?php else: ?>
-                <a class="btn ghost" href="index.php">بازگشت</a>
+                <a class="btn ghost" href="./">بازگشت</a>
               <?php endif; ?>
               <a class="btn danger" href="customer-logout.php">خروج از حساب کاربری</a>
             </div>
