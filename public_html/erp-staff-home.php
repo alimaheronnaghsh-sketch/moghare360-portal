@@ -55,6 +55,13 @@ $roleStartQuestion = trim((string)($ctx['role_start_question'] ?? ''));
     <?php if ($isUnknown): ?>
         <div class="m360-staff-alert-warn"><?= m360_staff_home_h(M360_STAFF_HOME_UNKNOWN_WARNING_FA) ?></div>
     <?php else: ?>
+        <?php if (($ctx['role_code'] ?? '') === 'RECEPTION'): ?>
+        <section class="m360-staff-card m360-staff-reception-hub">
+            <h2>میز کار پذیرش</h2>
+            <p>ورود اصلی پذیرش — درخواست آنلاین، تکمیل پرونده، JobCard و قرارداد در یک میز کار.</p>
+            <a class="m360-staff-reception-cta" href="erp-reception-workbench.php">ورود به میز کار پذیرش</a>
+        </section>
+        <?php endif; ?>
         <section class="m360-staff-card m360-staff-workbench">
             <h2>میز کار روزانه</h2>
             <?php m360_staff_home_render_workbench($workbenchGroups, $userId); ?>

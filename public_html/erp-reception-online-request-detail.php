@@ -2,13 +2,13 @@
 declare(strict_types=1);
 
 /**
- * MOGHARE360 P1 — Online request detail (GET read-only; POST actions go to accept handler).
+ * MOGHARE360 P1 — Online request detail (GET read-only; actions via intake shell).
  */
 
 header('Content-Type: text/html; charset=UTF-8');
 header('X-Robots-Tag: noindex, nofollow');
 
-require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-reception-helper.php';
+require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-reception-workbench-helper.php';
 
 m360_reception_require_staff();
 
@@ -19,19 +19,25 @@ $flashOk = isset($_GET['ok']) && (string)$_GET['ok'] === '1';
 $conn = customer_core_db();
 $row = null;
 $history = [];
+$gate = null;
+$gateLabel = '';
 
 if ($conn !== false && $requestId > 0) {
     $row = m360_online_req_fetch_by_id($conn, $requestId);
     $history = m360_reception_fetch_history($conn, $requestId);
+    if ($row !== null) {
+        $file = m360_rw_build_intake_file($conn, $requestId);
+        $gate = $file['gate'] ?? null;
+        $gateLabel = (string)($gate['label_fa'] ?? '');
+    }
 }
 
 $payload = $row !== null ? m360_online_req_parse_payload($row['request_payload_json'] ?? null) : [];
 $convertedJobcardId = $row !== null ? m360_online_req_converted_jobcard_id($row) : 0;
 $canAct = $row !== null && !m360_online_req_is_converted($row) && strtoupper((string)($row['request_status'] ?? '')) !== M360_ONLINE_REQ_STATUS_REJECTED;
-
 $gatePanel = isset($_GET['gate']) ? trim((string)$_GET['gate']) : '';
 $gateContent = $gatePanel === 'convert' ? m360_reception_action_error_content('convert_prereq', $requestId) : null;
-$csrfInputHtml = $canAct ? m360_reception_csrf_input_html() : '';
+$customerRequestType = trim((string)($row['request_type'] ?? ($payload['request_type'] ?? '')));
 
 ?>
 <!DOCTYPE html>
@@ -40,118 +46,92 @@ $csrfInputHtml = $canAct ? m360_reception_csrf_input_html() : '';
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="robots" content="noindex, nofollow">
-    <title>جزئیات درخواست آنلاین #<?= $requestId ?></title>
-    <link rel="stylesheet" href="assets/moghare360-ui/moghare360-soft-run-release.css">
-    <style>
-        .p1-det-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 0.75rem; }
-        .p1-det-item { background: #fafafa; border: 1px solid #e5e7eb; border-radius: 0.75rem; padding: 0.85rem; }
-        .p1-det-item strong { display: block; font-size: 0.78rem; color: #71717a; margin-bottom: 0.25rem; }
-        .p1-det-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 1rem; }
-        .p1-det-actions form { margin: 0; }
-        .p1-det-btn { border: 0; border-radius: 0.5rem; padding: 0.55rem 1rem; cursor: pointer; font-size: 0.9rem; }
-        .p1-det-btn.review { background: #fef3c7; color: #92400e; }
-        .p1-det-btn.accept { background: #dcfce7; color: #166534; }
-        .p1-det-btn.convert { background: #166534; color: #fff; }
-        .p1-det-btn.reject { background: #fee2e2; color: #991b1b; }
-        .p1-det-note { white-space: pre-wrap; line-height: 1.6; }
-        .p1-det-history { font-size: 0.88rem; }
-        .p1-det-history li { margin-bottom: 0.35rem; }
-        .p1-flash { padding: 0.75rem 1rem; border-radius: 0.5rem; margin-bottom: 1rem; }
-        .p1-flash.ok { background: #dcfce7; color: #166534; }
-        .p1-flash.err { background: #fee2e2; color: #991b1b; }
-        .p1-gate-panel { padding: 1rem 1.1rem; border-radius: 0.75rem; margin-bottom: 1rem; background: #fff7ed; border: 1px solid #fed7aa; color: #9a3412; }
-        .p1-gate-panel h2 { margin: 0 0 0.5rem; font-size: 1rem; color: #c2410c; }
-        .p1-gate-panel p { margin: 0; line-height: 1.7; font-size: 0.92rem; }
-    </style>
+    <title>جزئیات درخواست آنلاین #<?= $requestId ?> — MOGHARE360</title>
+    <link rel="stylesheet" href="assets/css/moghare360-v1-luxury-ui.css">
 </head>
-<body style="background:#f8fafc;margin:0;padding:1.25rem;color:#18181b;">
-<div class="w1c-wrap">
-    <header class="w1c-banner">
-        <h1>جزئیات درخواست آنلاین</h1>
-        <p>شناسه <?= m360_reception_h((string)$requestId) ?></p>
+<body class="m360-public-shell m360-rw-page">
+<div class="m360-wrap m360-rw-wrap">
+    <header class="m360-rw-header">
+        <div class="m360-rw-header__top">
+            <a class="m360-rw-back" href="erp-reception-online-requests.php">← درخواست‌های آنلاین</a>
+            <a class="m360-rw-back" href="erp-reception-workbench.php">میز کار پذیرش</a>
+        </div>
+        <h1 class="m360-rw-title">جزئیات درخواست آنلاین</h1>
+        <p class="m360-rw-subtitle">شناسه <?= m360_reception_h((string)$requestId) ?></p>
     </header>
 
     <?php if ($gateContent !== null): ?>
-        <section class="p1-gate-panel" role="alert">
-            <h2><?= m360_reception_h($gateContent['title']) ?></h2>
+        <section class="m360-rw-warn" role="alert">
+            <strong><?= m360_reception_h($gateContent['title']) ?></strong>
             <p><?= m360_reception_h($gateContent['text']) ?></p>
         </section>
     <?php endif; ?>
 
     <?php if ($flash !== ''): ?>
-        <div class="p1-flash <?= $flashOk ? 'ok' : 'err' ?>"><?= m360_reception_h($flash) ?></div>
+        <section class="m360-rw-panel <?= $flashOk ? 'm360-rw-flash-ok' : 'm360-rw-alert' ?>"><?= m360_reception_h($flash) ?></section>
     <?php endif; ?>
 
     <?php if ($row === null): ?>
-        <section class="w1c-card w1c-error-box">
-            <p>درخواست یافت نشد.</p>
-            <p><a href="erp-reception-online-requests.php">بازگشت به فهرست</a></p>
-        </section>
+        <section class="m360-rw-alert">درخواست یافت نشد.</section>
+        <div class="m360-rw-actions">
+            <a class="m360-rw-btn" href="erp-reception-online-requests.php">بازگشت به فهرست</a>
+        </div>
     <?php else: ?>
-        <section class="w1c-card">
-            <div class="p1-det-grid">
-                <div class="p1-det-item"><strong>وضعیت</strong><?= m360_reception_h(m360_online_req_status_label_fa((string)($row['request_status'] ?? ''))) ?></div>
-                <div class="p1-det-item"><strong>تاریخ ثبت</strong><?= m360_reception_h((string)($row['created_at'] ?? '')) ?></div>
-                <div class="p1-det-item"><strong>موبایل (تأیید‌شده)</strong><?= m360_reception_h((string)($row['mobile'] ?? '')) ?></div>
-                <div class="p1-det-item"><strong>نام مشتری</strong><?= m360_reception_h((string)($row['customer_name'] ?? '')) ?></div>
-                <div class="p1-det-item"><strong>پلاک</strong><?= m360_reception_h((string)($row['vehicle_plate'] ?? '')) ?></div>
-                <div class="p1-det-item"><strong>تاریخ مراجعه</strong><?= m360_reception_h((string)($row['visit_date'] ?? ($payload['visit_date'] ?? '—'))) ?></div>
-                <div class="p1-det-item"><strong>نوع درخواست</strong><?= m360_reception_h((string)($row['request_type'] ?? ($payload['request_type'] ?? '—'))) ?></div>
-                <div class="p1-det-item"><strong>منبع</strong><?= m360_reception_h((string)($row['source_channel'] ?? '')) ?></div>
-                <div class="p1-det-item"><strong>شناسه مشتری ERP</strong><?= m360_reception_h((string)($row['customer_id'] ?? '—')) ?></div>
-                <div class="p1-det-item"><strong>شناسه خودرو ERP</strong><?= m360_reception_h((string)($row['vehicle_id'] ?? '—')) ?></div>
+        <section class="m360-rw-panel">
+            <div class="m360-rw-field-grid">
+                <div class="m360-rw-field"><span class="m360-rw-field-lbl">وضعیت</span><span class="m360-rw-field-val"><?= m360_reception_h(m360_online_req_status_label_fa((string)($row['request_status'] ?? ''))) ?></span></div>
+                <div class="m360-rw-field"><span class="m360-rw-field-lbl">تاریخ ثبت</span><span class="m360-rw-field-val"><?= m360_reception_h((string)($row['created_at'] ?? '')) ?></span></div>
+                <div class="m360-rw-field"><span class="m360-rw-field-lbl">موبایل</span><span class="m360-rw-field-val"><?= m360_reception_h((string)($row['mobile'] ?? '')) ?></span></div>
+                <div class="m360-rw-field"><span class="m360-rw-field-lbl">نام مشتری</span><span class="m360-rw-field-val"><?= m360_reception_h((string)($row['customer_name'] ?? '')) ?></span></div>
+                <div class="m360-rw-field"><span class="m360-rw-field-lbl">پلاک</span><span class="m360-rw-field-val"><?= m360_reception_h((string)($row['vehicle_plate'] ?? '')) ?></span></div>
+                <div class="m360-rw-field"><span class="m360-rw-field-lbl">تاریخ مراجعه</span><span class="m360-rw-field-val"><?= m360_reception_h((string)($row['visit_date'] ?? ($payload['visit_date'] ?? '—'))) ?></span></div>
+                <div class="m360-rw-field"><span class="m360-rw-field-lbl">نوع درخواست مشتری</span><span class="m360-rw-field-val"><?= m360_reception_h($customerRequestType !== '' ? $customerRequestType : '—') ?></span></div>
+                <div class="m360-rw-field"><span class="m360-rw-field-lbl">منبع</span><span class="m360-rw-field-val"><?= m360_reception_h((string)($row['source_channel'] ?? '')) ?></span></div>
             </div>
+            <?php if ($customerRequestType !== ''): ?>
+                <p class="m360-rw-muted" style="margin-top:0.75rem;"><?= m360_rw_h(M360_RW_CUSTOMER_REQUEST_TYPE_NOTE_FA) ?></p>
+            <?php endif; ?>
         </section>
 
-        <section class="w1c-card">
-            <h2 style="margin:0 0 0.75rem;font-size:1rem;">شرح درخواست</h2>
-            <div class="p1-det-note"><?= m360_reception_h((string)($row['service_note'] ?? '')) ?></div>
+        <section class="m360-rw-panel">
+            <h2>شرح درخواست</h2>
+            <p class="m360-rw-note"><?= m360_reception_h((string)($row['service_note'] ?? '')) ?: '—' ?></p>
         </section>
 
         <?php if ($convertedJobcardId > 0): ?>
-            <section class="w1c-card">
-                <h2 style="margin:0 0 0.5rem;font-size:1rem;">کارت کار</h2>
+            <section class="m360-rw-panel">
+                <h2>کارت کار</h2>
                 <p>شناسه کارت کار: <strong><?= m360_reception_h((string)$convertedJobcardId) ?></strong></p>
-                <p><a href="erp-jobcard-detail.php?jobcard_id=<?= $convertedJobcardId ?>">مشاهده کارت کار</a></p>
+                <a class="m360-rw-btn m360-rw-btn-secondary" href="erp-jobcard-detail.php?jobcard_id=<?= $convertedJobcardId ?>">مشاهده کارت کار</a>
             </section>
         <?php endif; ?>
 
         <?php if ($canAct): ?>
-            <section class="w1c-card">
-                <h2 style="margin:0 0 0.75rem;font-size:1rem;">اقدامات پذیرش</h2>
-                <div class="p1-det-actions">
-                    <form method="post" action="erp-reception-online-request-accept.php">
-                        <?= $csrfInputHtml ?>
-                        <input type="hidden" name="request_id" value="<?= $requestId ?>">
-                        <input type="hidden" name="action" value="under_review">
-                        <button type="submit" class="p1-det-btn review">علامت‌گذاری در حال بررسی</button>
-                    </form>
-                    <form method="post" action="erp-reception-online-request-accept.php">
-                        <?= $csrfInputHtml ?>
-                        <input type="hidden" name="request_id" value="<?= $requestId ?>">
-                        <input type="hidden" name="action" value="accept">
-                        <button type="submit" class="p1-det-btn accept">پذیرش درخواست</button>
-                    </form>
-                    <form method="post" action="erp-reception-online-request-accept.php" onsubmit="return confirm('درخواست به کارت کار تبدیل شود؟');">
-                        <?= $csrfInputHtml ?>
-                        <input type="hidden" name="request_id" value="<?= $requestId ?>">
-                        <input type="hidden" name="action" value="convert_to_jobcard">
-                        <button type="submit" class="p1-det-btn convert">تبدیل به کارت کار</button>
-                    </form>
-                    <form method="post" action="erp-reception-online-request-accept.php" onsubmit="return confirm('درخواست رد شود؟');">
-                        <?= $csrfInputHtml ?>
-                        <input type="hidden" name="request_id" value="<?= $requestId ?>">
-                        <input type="hidden" name="action" value="reject">
-                        <button type="submit" class="p1-det-btn reject">رد درخواست</button>
-                    </form>
-                </div>
+            <section class="m360-rw-panel m360-rw-primary-cta">
+                <h2>اقدام پذیرش</h2>
+                <p class="m360-rw-muted">ابتدا پرونده پذیرش را تکمیل و وضعیت Gate را بررسی کنید.</p>
+                <a class="m360-rw-btn" href="erp-reception-intake-file.php?online_request_id=<?= $requestId ?>">تکمیل پرونده پذیرش</a>
+            </section>
+
+            <section class="m360-rw-panel m360-rw-controlled-actions">
+                <h2>اقدامات پس از بررسی پرونده</h2>
+                <p class="m360-rw-muted">اقدامات حساس (رد، پذیرش، تبدیل) فقط پس از تکمیل پرونده و بررسی Gate در صفحه پرونده پذیرش انجام می‌شوند.</p>
+                <ul class="m360-rw-controlled-list">
+                    <li>در <strong>پذیرش موقت</strong>، پس از بررسی پرونده، <strong>رد درخواست</strong> و <strong>درخواست تکمیل اطلاعات</strong> مجاز است.</li>
+                    <li><strong>تبدیل به کارت کار</strong> فقط وقتی مجاز است که مسیر عیب/خدمت مشخص و Gate آماده تبدیل باشد.</li>
+                    <li>ارجاع کارشناسی / عیب‌یابی اولیه در فاز تکمیل عملیات پذیرش ثبت می‌شود.</li>
+                </ul>
+                <?php if ($gateLabel !== ''): ?>
+                    <p class="m360-rw-gate-status">وضعیت Gate (خلاصه): <?= m360_rw_h($gateLabel) ?></p>
+                <?php endif; ?>
+                <p class="m360-rw-warn" style="margin-top:0.75rem;">برای انجام اقدام، به <a href="erp-reception-intake-file.php?online_request_id=<?= $requestId ?>">پرونده پذیرش</a> بروید — تبدیل به کارت کار در این صفحه به‌صورت دکمه آماده نمایش داده نمی‌شود.</p>
             </section>
         <?php endif; ?>
 
         <?php if ($history !== []): ?>
-            <section class="w1c-card">
-                <h2 style="margin:0 0 0.75rem;font-size:1rem;">سابقه تغییرات</h2>
-                <ul class="p1-det-history">
+            <section class="m360-rw-panel">
+                <h2>سابقه تغییرات</h2>
+                <ul class="m360-rw-list">
                     <?php foreach ($history as $h): ?>
                         <li>
                             <?= m360_reception_h((string)($h['created_at'] ?? '')) ?>
@@ -166,9 +146,10 @@ $csrfInputHtml = $canAct ? m360_reception_csrf_input_html() : '';
         <?php endif; ?>
     <?php endif; ?>
 
-    <nav class="w1c-card w1c-links">
+    <nav class="m360-rw-footer">
+        <a href="erp-reception-workbench.php">میز کار پذیرش</a>
+        <a href="erp-reception-intake-file.php?online_request_id=<?= $requestId ?>">تکمیل پرونده پذیرش</a>
         <a href="erp-reception-online-requests.php">بازگشت به فهرست</a>
-        <a href="erp-jobcard-command-center.php">مرکز کارت کار</a>
     </nav>
 </div>
 </body>
