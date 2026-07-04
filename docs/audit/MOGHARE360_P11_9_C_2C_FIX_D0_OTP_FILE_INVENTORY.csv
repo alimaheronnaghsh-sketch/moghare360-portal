@@ -1,0 +1,59 @@
+path,type,purpose,used_by,status,risk_level,recommendation,notes
+public_html/includes/m360-otp-config-loader.php,loader,Merge mirror-config + private/m360-otp-config.php + env; normalize IPPanel keys,m360-otp-helper.php; tools/otp-config-diagnostics.php,active,low,KEEP,Repo root via dirname(__DIR__ 2) from includes/
+public_html/includes/m360-otp-helper.php,helper,Session-backed OTP send/verify; IPPanel Edge pattern API; dev localhost fallback,api/customer/*; customer-request.php; reception send; contract/estimate/delivery helpers,active,low,KEEP,Canonical MOGHARE360 V1 OTP provider
+private/m360-otp-config.example.php,config_example,Placeholder IPPanel credentials safe to commit,Documentation; static tests,active,low,KEEP,Copy target for real host config
+private/m360-otp-config.php,config_private,Production IPPanel secrets (gitignored),m360-otp-config-loader.php,absent_repo,medium,KEEP_BUT_FIX,Not present in repo or XAMPP private path at audit time
+private/erp-config.php,config_private,SQL Server ERP DB credentials only,includes/erp-config-loader.php,present_repo,low,KEEP,No OTP/SMS keys (verified grep)
+public_html/mirror-config.example.php,config_example,Mirror site example with empty SMS keys,Deploy documentation,active,low,KEEP,Documents M360_OTP_TEST_MODE localhost-only rule
+public_html/mirror-config.php,config_public_runtime,Optional public-adjacent SMS keys (gitignored),m360-otp-config-loader.php (first merge layer),absent_repo_present_xampp,medium,KEEP_BUT_FIX,XAMPP has file but keys empty; gitignored from repo
+includes/erp-config-loader.php,loader,ERP DB private config only (no OTP),ERP PHP entrypoints,active,low,KEEP,Separate from OTP stack
+public_html/api/customer/send-otp.php,route_api,POST JSON send OTP via m360_otp_send(),customer-form.js; public intake,active,low,KEEP,Modern customer API route
+public_html/api/customer/verify-otp.php,route_api,POST JSON verify via m360_otp_verify(),customer-form.js,active,low,KEEP,Returns verified token in session
+public_html/api/customer/request.php,route_api,Create online request after session OTP verified; sets payload otp_verified=1,customer-form.js after verify,active,low,KEEP,Correct public intake OTP truth model
+public_html/api/customer/contract-send-otp.php,route_api,Contract signature OTP send,m360-contract-signature-helper.php,active,low,KEEP,Domain-specific session namespace
+public_html/api/customer/contract-sign.php,route_api,Contract sign with OTP verify,m360-contract-signature-helper.php,active,low,KEEP,Separate from reception OTP
+public_html/api/customer/estimate-send-otp.php,route_api,Estimate approval OTP send,m360-estimate-approval-helper.php,active,low,KEEP,Shares m360_otp_send_sms only
+public_html/api/customer/estimate-approve.php,route_api,Estimate approve with OTP,m360-estimate-approval-helper.php,active,low,KEEP,
+public_html/api/customer/delivery-send-otp.php,route_api,Delivery signature OTP send,m360-customer-delivery-helper.php,active,low,KEEP,
+public_html/api/customer/delivery-confirm.php,route_api,Delivery confirm with OTP,m360-customer-delivery-helper.php,active,low,KEEP,
+public_html/send-otp.php,route_public_legacy,Legacy MySQL otp_verifications + config.php stack,customer-login.php (broken),orphaned,high,DEPRECATE,Requires missing config.php; stores raw OTP in DB
+public_html/verify-otp.php,route_public_legacy,Legacy OTP verify for customer-login,Legacy mirror login,orphaned,high,DEPRECATE,Requires config.php
+public_html/check-otp.php,route_public_legacy,Legacy post-OTP profile routing,Legacy mirror login,orphaned,high,DEPRECATE,Requires config.php
+public_html/send-contract-otp.php,route_public_legacy,Legacy contract OTP (MySQL portal),customer-contract.php links,orphaned,high,DEPRECATE,Requires config.php + MySQL tables
+public_html/verify-contract-otp.php,route_public_legacy,Legacy contract OTP verify,Legacy contract flow,orphaned,high,DEPRECATE,Requires config.php
+public_html/config.php,config_public_legacy,Legacy mirror site secrets bootstrap,Legacy send/verify/check OTP routes,absent,high,REMOVE_LATER,Not in repo; legacy routes fatal without it
+public_html/sql/otp_verifications.sql,sql_legacy,MySQL schema for legacy OTP table,Legacy send-otp.php stack,legacy,medium,DEPRECATE,Stores otp_code plaintext; not used by V1 helper
+public_html/customer-request.php,ui_page,Public online intake with send/verify OTP UI,customer-form.js,active,low,KEEP,Full session OTP flow wired correctly
+public_html/assets/js/customer-form.js,js_ui,Calls api/customer/send-otp.php and verify-otp.php,customer-request.php,active,low,KEEP,
+public_html/erp-reception-intake-file.php,ui_page,Reception intake mobile/OTP section; Send OTP button only,Reception staff,active,medium,KEEP_BUT_FIX,No verify UI; reads payload otp_verified for gate display
+public_html/erp-reception-intake-save.php,route_staff,Processes intake actions including send_customer_otp,m360-reception-workbench-helper.php,active,medium,KEEP_BUT_FIX,No verify_customer_otp action
+public_html/includes/m360-reception-workbench-helper.php,helper,Reception intake; send OTP; gate checks payload otp_verified,erp-reception-intake-*; gate checklist,active,medium,KEEP_BUT_FIX,send uses session; gate uses payload — disconnected
+public_html/includes/m360-online-request-helper.php,helper,payload otp_verified read/write for online requests,gate; api/customer/request.php; bridge,active,low,KEEP,m360_online_req_payload_otp_verified() is reception gate truth
+public_html/includes/m360-online-intake-bridge-helper.php,helper,Bridge intake defaults otp_verified=0,Online bridge templates,active,low,KEEP,Does not perform OTP
+public_html/includes/m360-contract-signature-helper.php,helper,Per-contract session OTP m360_contract_otp_{id},contract-send-otp API,active,low,KEEP,Independent namespace; shares SMS sender
+public_html/includes/m360-estimate-approval-helper.php,helper,Estimate approval OTP session namespace,estimate-send-otp API,active,low,KEEP,
+public_html/includes/m360-customer-delivery-helper.php,helper,Delivery signature OTP session namespace,delivery-send-otp API,active,low,KEEP,
+public_html/includes/mirror-layout.php,helper,mirror_sms_otp_enabled() flag from mirror-config,staff-login.php display only,active,low,KEEP,UI note only; not OTP engine
+public_html/staff-login.php,ui_page,Shows OTP-enabled note from mirror flags,Staff entry,active,low,KEEP,Out of scope for changes per phase
+tools/otp-config-diagnostics.php,tool,CLI masked OTP config diagnostics,Operators; CI,active,low,KEEP,Safe — no secret print; ran FAIL missing API key
+tools/test-p11-otp-provider-config.php,test,Static OTP provider/security tests (25 assertions),P11 QA,active,low,KEEP,25/25 PASS at audit
+tools/test-p11-4-5-ippanel-config-loader-compatibility.php,test,Config loader alias/normalize tests,P11.4.5 QA,active,low,KEEP,15/15 PASS at audit
+tools/test-p11-4-5-ippanel-pattern-payload.php,test,IPPanel Edge payload shape tests,P11.4.5 QA,active,low,KEEP,
+tools/test-p11-4-5-otp-security-scope.php,test,OTP security scope regression,P11.4.5 QA,active,low,KEEP,
+tools/test-ippanel-request-response-diagnostic.php,tool,CLI live IPPanel HTTP trace (masked),Operator wiring validation,active,medium,KEEP,CLI-only; requires configured host for live send
+tools/test-p11-9-c-2c-fix-b-otp-mobile.php,test,Reception OTP/mobile correction tests,FIX-B QA,active,low,KEEP,Tests send path not verify-to-payload
+tools/test-v1-customer-otp-gate.php,test,Customer OTP gate regression,V1 QA,active,low,KEEP,
+tools/test-v1-customer-otp-entry-flow.php,test,Customer OTP entry flow,V1 QA,active,low,KEEP,
+tools/test-p1-5-contract-otp-signature.php,test,Contract OTP uses central helper,P1.5 QA,active,low,KEEP,
+tools/test-p4-customer-approval-otp.php,test,Estimate OTP central helper,P4 QA,active,low,KEEP,
+tools/test-p7-customer-delivery-signature-otp.php,test,Delivery OTP central helper,P7 QA,active,low,KEEP,
+docs/audit/MOGHARE360_GITHUB_COMPLETION_AUDIT_REPORT.md,doc,P11 OTP architecture summary; points to private/m360-otp-config.php,Operators,active,low,KEEP,Accurate canonical path
+docs/dry-run/P11_9_A_OTP_DEFERRAL_PROTOCOL.md,doc,OTP deferral when config absent,Dry-run planning,active,low,KEEP,
+docs/release/MOGHARE360_V1_FINAL_SECURITY_EXCLUSIONS.md,doc,Secrets exclusion policy for OTP config,Release,active,low,KEEP,
+docs/audit/MOGHARE360_P11_9_0_ONE_DAY_RUN_DRY_RUN_READINESS_DISCOVERY_REPORT.md,doc,Notes private OTP config absent on host,Discovery,active,low,KEEP,
+docs/audit/MOGHARE360_P11_8_C_0_ROUTE_MAP_OPERATIONAL_SAFETY_DISCOVERY_REPORT.md,doc,Lists customer OTP API routes unauthenticated,Route map,active,low,KEEP,API routes intentionally public POST
+docs/audit/MOGHARE360_P11_9_B_FIX_C_PUBLIC_ENTRY_ROUTER_SCOPE_REPORT.md,doc,Notes legacy customer-login uses config.php,Router scope,possibly_outdated,medium,KEEP_BUT_FIX,Legacy path called out correctly
+dist/moghare360-v1-local-demo-rc/**,archive_duplicate,Packaged demo copy of OTP files,Local demo only,archive,low,DEPRECATE,Not runtime canonical; mirror of public_html
+release/_cpanel_public_*/*,archive_duplicate,Historical cPanel staging copies of OTP routes,Deploy archives,archive,low,REMOVE_LATER,Duplicates; do not wire
+release/moghare360-v1-production-installer/**,archive_duplicate,Installer bundle OTP copies,Installer,archive,low,DEPRECATE,
+.gitignore,policy,Ignores private/m360-otp-config.php and mirror-config.php,Git,active,low,KEEP,Prevents secret commit
