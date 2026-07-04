@@ -18,6 +18,143 @@ function m360_reception_h(string $value): string
     return htmlspecialchars($value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 }
 
+/** Single CSRF hidden input for all reception action forms on one page. */
+function m360_reception_csrf_input_html(): string
+{
+    ob_start();
+    echo erp_csrf_input(M360_RECEPTION_CSRF_PURPOSE);
+    return (string)ob_get_clean();
+}
+
+function m360_reception_csrf_is_valid(?string $token): bool
+{
+    if (!function_exists('erp_csrf_validate_token')) {
+        return false;
+    }
+
+    return erp_csrf_validate_token(M360_RECEPTION_CSRF_PURPOSE, trim((string)($token ?? '')));
+}
+
+/** @return array{title:string,text:string,button:string,detail_href:string} */
+function m360_reception_action_error_content(string $type, int $requestId): array
+{
+    $detailHref = $requestId > 0
+        ? 'erp-reception-online-request-detail.php?request_id=' . $requestId
+        : 'erp-reception-online-requests.php';
+
+    if ($type === 'convert_prereq') {
+        return [
+            'title' => 'تبدیل به کارت کار نیازمند تکمیل پیش‌نیاز است',
+            'text' => 'برای تبدیل این درخواست به کارت کار، ابتدا باید وضعیت تأیید مشتری و اطلاعات پذیرش تکمیل شود.',
+            'button' => 'بازگشت به جزئیات درخواست',
+            'detail_href' => $detailHref,
+        ];
+    }
+
+    return [
+        'title' => 'اعتبار امنیتی درخواست نامعتبر یا منقضی شده است',
+        'text' => 'برای ادامه، لطفاً به صفحه جزئیات درخواست بازگردید و عملیات را دوباره انجام دهید.',
+        'button' => $requestId > 0 ? 'بازگشت به جزئیات درخواست' : 'بازگشت به فهرست درخواست‌ها',
+        'detail_href' => $detailHref,
+    ];
+}
+
+function m360_reception_render_action_error_page(string $type, int $requestId = 0): void
+{
+    $content = m360_reception_action_error_content($type, $requestId);
+    http_response_code($type === 'csrf' ? 403 : 200);
+    header('Content-Type: text/html; charset=UTF-8');
+    header('X-Robots-Tag: noindex, nofollow');
+    echo '<!DOCTYPE html><html lang="fa" dir="rtl"><head>';
+    echo '<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">';
+    echo '<title>' . m360_reception_h($content['title']) . '</title>';
+    echo '<link rel="stylesheet" href="assets/moghare360-ui/moghare360-soft-run-release.css">';
+    echo '<style>.p1-gate-wrap{max-width:480px;margin:2rem auto;padding:0 1rem;}';
+    echo '.p1-gate-card{background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:1.5rem;text-align:center;}';
+    echo '.p1-gate-card h1{margin:0 0 .75rem;font-size:1.1rem;color:#991b1b;}';
+    echo '.p1-gate-card p{margin:0 0 1.25rem;color:#52525b;line-height:1.75;font-size:.95rem;}';
+    echo '.p1-gate-btn{display:inline-block;padding:.65rem 1.25rem;background:#166534;color:#fff;text-decoration:none;border-radius:8px;font-weight:600;}</style>';
+    echo '</head><body style="background:#f8fafc;margin:0;color:#18181b;">';
+    echo '<div class="p1-gate-wrap"><div class="p1-gate-card">';
+    echo '<h1>' . m360_reception_h($content['title']) . '</h1>';
+    echo '<p>' . m360_reception_h($content['text']) . '</p>';
+    echo '<a class="p1-gate-btn" href="' . m360_reception_h($content['detail_href']) . '">' . m360_reception_h($content['button']) . '</a>';
+    echo '</div></div></body></html>';
+}
+
+function m360_reception_is_convert_prerequisite_message(string $message): bool
+{
+    $message = trim($message);
+    $needles = [
+        'بدون تأیید OTP',
+        'OTP',
+        'پلاک خودرو مشخص نیست',
+        'مشتری یافت نشد',
+        'خودرو یافت نشد',
+        'ایجاد مشتری ناموفق',
+        'ایجاد خودرو ناموفق',
+        'رابطه مشتری-خودرو',
+    ];
+    foreach ($needles as $needle) {
+        if ($needle !== '' && str_contains($message, $needle)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/** @return array<string, string> filter code => Persian label */
+function m360_reception_list_filter_labels(): array
+{
+    return [
+        'ALL' => 'همه',
+        M360_ONLINE_REQ_STATUS_NEW => 'جدید',
+        M360_ONLINE_REQ_STATUS_PENDING => 'در انتظار بررسی',
+        M360_ONLINE_REQ_STATUS_UNDER_REVIEW => 'در حال بررسی',
+        M360_ONLINE_REQ_STATUS_ACCEPTED => 'پذیرفته‌شده',
+        M360_ONLINE_REQ_STATUS_CONVERTED => 'تبدیل به کارت کار',
+        M360_ONLINE_REQ_STATUS_REJECTED => 'رد شده',
+    ];
+}
+
+/** @return array<string, int> */
+function m360_reception_status_counts($conn): array
+{
+    if (!is_resource($conn)) {
+        return [];
+    }
+
+    $sql = 'SELECT request_status, COUNT(*) AS cnt FROM dbo.' . m360_online_req_table() . ' GROUP BY request_status';
+    $stmt = @odbc_exec($conn, $sql);
+    if ($stmt === false) {
+        return [];
+    }
+
+    $byDb = [];
+    $total = 0;
+    while (($row = odbc_fetch_array($stmt)) !== false) {
+        $status = strtoupper(trim((string)($row['request_status'] ?? '')));
+        $cnt = (int)($row['cnt'] ?? 0);
+        $byDb[$status] = ($byDb[$status] ?? 0) + $cnt;
+        $total += $cnt;
+    }
+
+    $counts = ['ALL' => $total];
+    foreach (array_keys(m360_reception_list_filter_labels()) as $code) {
+        if ($code === 'ALL') {
+            continue;
+        }
+        if ($code === M360_ONLINE_REQ_STATUS_NEW) {
+            $counts[$code] = (int)(($byDb[M360_ONLINE_REQ_STATUS_NEW] ?? 0) + ($byDb[M360_ONLINE_REQ_STATUS_PENDING] ?? 0));
+        } else {
+            $counts[$code] = (int)($byDb[$code] ?? 0);
+        }
+    }
+
+    return $counts;
+}
+
 function m360_reception_require_staff(): void
 {
     erp_auth_context_start();

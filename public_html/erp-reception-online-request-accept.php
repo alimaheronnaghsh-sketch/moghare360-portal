@@ -16,9 +16,15 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
 }
 
 m360_reception_require_staff();
-erp_csrf_require_valid(M360_RECEPTION_CSRF_PURPOSE, $_POST['erp_csrf_token'] ?? null);
 
 $requestId = isset($_POST['request_id']) ? (int)$_POST['request_id'] : 0;
+$csrfToken = isset($_POST['erp_csrf_token']) ? (string)$_POST['erp_csrf_token'] : null;
+
+if (!m360_reception_csrf_is_valid($csrfToken)) {
+    m360_reception_render_action_error_page('csrf', $requestId);
+    exit;
+}
+
 $action = strtolower(trim((string)($_POST['action'] ?? '')));
 
 if ($requestId < 1) {
@@ -75,6 +81,10 @@ switch ($action) {
                 $msg .= ' شماره: ' . $result['jobcard_number'];
             }
             header('Location: ' . $detailUrl . '&msg=' . rawurlencode($msg) . '&ok=1');
+            exit;
+        }
+        if (!($result['ok'] ?? false) && m360_reception_is_convert_prerequisite_message((string)($result['message'] ?? ''))) {
+            header('Location: ' . $detailUrl . '&gate=convert&ok=0');
             exit;
         }
         break;

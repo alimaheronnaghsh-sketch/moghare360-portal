@@ -29,6 +29,10 @@ $payload = $row !== null ? m360_online_req_parse_payload($row['request_payload_j
 $convertedJobcardId = $row !== null ? m360_online_req_converted_jobcard_id($row) : 0;
 $canAct = $row !== null && !m360_online_req_is_converted($row) && strtoupper((string)($row['request_status'] ?? '')) !== M360_ONLINE_REQ_STATUS_REJECTED;
 
+$gatePanel = isset($_GET['gate']) ? trim((string)$_GET['gate']) : '';
+$gateContent = $gatePanel === 'convert' ? m360_reception_action_error_content('convert_prereq', $requestId) : null;
+$csrfInputHtml = $canAct ? m360_reception_csrf_input_html() : '';
+
 ?>
 <!DOCTYPE html>
 <html lang="fa" dir="rtl">
@@ -55,6 +59,9 @@ $canAct = $row !== null && !m360_online_req_is_converted($row) && strtoupper((st
         .p1-flash { padding: 0.75rem 1rem; border-radius: 0.5rem; margin-bottom: 1rem; }
         .p1-flash.ok { background: #dcfce7; color: #166534; }
         .p1-flash.err { background: #fee2e2; color: #991b1b; }
+        .p1-gate-panel { padding: 1rem 1.1rem; border-radius: 0.75rem; margin-bottom: 1rem; background: #fff7ed; border: 1px solid #fed7aa; color: #9a3412; }
+        .p1-gate-panel h2 { margin: 0 0 0.5rem; font-size: 1rem; color: #c2410c; }
+        .p1-gate-panel p { margin: 0; line-height: 1.7; font-size: 0.92rem; }
     </style>
 </head>
 <body style="background:#f8fafc;margin:0;padding:1.25rem;color:#18181b;">
@@ -63,6 +70,13 @@ $canAct = $row !== null && !m360_online_req_is_converted($row) && strtoupper((st
         <h1>جزئیات درخواست آنلاین</h1>
         <p>شناسه <?= m360_reception_h((string)$requestId) ?></p>
     </header>
+
+    <?php if ($gateContent !== null): ?>
+        <section class="p1-gate-panel" role="alert">
+            <h2><?= m360_reception_h($gateContent['title']) ?></h2>
+            <p><?= m360_reception_h($gateContent['text']) ?></p>
+        </section>
+    <?php endif; ?>
 
     <?php if ($flash !== ''): ?>
         <div class="p1-flash <?= $flashOk ? 'ok' : 'err' ?>"><?= m360_reception_h($flash) ?></div>
@@ -107,25 +121,25 @@ $canAct = $row !== null && !m360_online_req_is_converted($row) && strtoupper((st
                 <h2 style="margin:0 0 0.75rem;font-size:1rem;">اقدامات پذیرش</h2>
                 <div class="p1-det-actions">
                     <form method="post" action="erp-reception-online-request-accept.php">
-                        <?= erp_csrf_input(M360_RECEPTION_CSRF_PURPOSE) ?>
+                        <?= $csrfInputHtml ?>
                         <input type="hidden" name="request_id" value="<?= $requestId ?>">
                         <input type="hidden" name="action" value="under_review">
                         <button type="submit" class="p1-det-btn review">علامت‌گذاری در حال بررسی</button>
                     </form>
                     <form method="post" action="erp-reception-online-request-accept.php">
-                        <?= erp_csrf_input(M360_RECEPTION_CSRF_PURPOSE) ?>
+                        <?= $csrfInputHtml ?>
                         <input type="hidden" name="request_id" value="<?= $requestId ?>">
                         <input type="hidden" name="action" value="accept">
                         <button type="submit" class="p1-det-btn accept">پذیرش درخواست</button>
                     </form>
                     <form method="post" action="erp-reception-online-request-accept.php" onsubmit="return confirm('درخواست به کارت کار تبدیل شود؟');">
-                        <?= erp_csrf_input(M360_RECEPTION_CSRF_PURPOSE) ?>
+                        <?= $csrfInputHtml ?>
                         <input type="hidden" name="request_id" value="<?= $requestId ?>">
                         <input type="hidden" name="action" value="convert_to_jobcard">
                         <button type="submit" class="p1-det-btn convert">تبدیل به کارت کار</button>
                     </form>
                     <form method="post" action="erp-reception-online-request-accept.php" onsubmit="return confirm('درخواست رد شود؟');">
-                        <?= erp_csrf_input(M360_RECEPTION_CSRF_PURPOSE) ?>
+                        <?= $csrfInputHtml ?>
                         <input type="hidden" name="request_id" value="<?= $requestId ?>">
                         <input type="hidden" name="action" value="reject">
                         <button type="submit" class="p1-det-btn reject">رد درخواست</button>

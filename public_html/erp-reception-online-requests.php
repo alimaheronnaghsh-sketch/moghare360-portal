@@ -13,12 +13,20 @@ require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 
 m360_reception_require_staff();
 
 $statusFilter = isset($_GET['status']) ? strtoupper(trim((string)$_GET['status'])) : 'ALL';
+$filterLabels = m360_reception_list_filter_labels();
+if ($statusFilter !== 'ALL' && !isset($filterLabels[$statusFilter])) {
+    $statusFilter = 'ALL';
+}
+$activeFilterLabel = $filterLabels[$statusFilter] ?? 'همه';
+
 $conn = customer_core_db();
 $requests = [];
+$statusCounts = [];
 $dbOk = $conn !== false;
 
 if ($dbOk) {
     $requests = m360_reception_list_requests($conn, $statusFilter === 'ALL' ? null : $statusFilter, 150);
+    $statusCounts = m360_reception_status_counts($conn);
 }
 
 ?>
@@ -34,7 +42,11 @@ if ($dbOk) {
         .p1-req-wrap { max-width: 1200px; margin: 0 auto; }
         .p1-req-filters { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1rem; }
         .p1-req-filters a { padding: 0.45rem 0.85rem; border-radius: 999px; border: 1px solid #d4d4d8; text-decoration: none; color: #27272a; font-size: 0.9rem; background: #fff; }
-        .p1-req-filters a.active { background: #166534; color: #fff; border-color: #166534; }
+        .p1-req-filters a.active { background: #166534; color: #fff; border-color: #166534; font-weight: 700; box-shadow: 0 0 0 2px rgba(22, 101, 52, 0.25); }
+        .p1-req-filter-meta { margin: 0 0 0.85rem; font-size: 0.92rem; color: #52525b; }
+        .p1-req-filter-meta strong { color: #166534; }
+        .p1-req-count { display: inline-block; min-width: 1.25rem; margin-right: 0.35rem; padding: 0.05rem 0.4rem; border-radius: 999px; font-size: 0.75rem; background: rgba(0,0,0,.06); }
+        .p1-req-filters a.active .p1-req-count { background: rgba(255,255,255,.22); }
         .p1-req-table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
         .p1-req-table th, .p1-req-table td { padding: 0.65rem 0.5rem; border-bottom: 1px solid #e5e7eb; text-align: right; vertical-align: top; }
         .p1-req-table th { background: #fafafa; font-weight: 600; color: #52525b; }
@@ -61,21 +73,23 @@ if ($dbOk) {
         </section>
     <?php else: ?>
         <section class="w1c-card">
+            <p class="p1-req-filter-meta">فیلتر فعال: <strong><?= m360_reception_h($activeFilterLabel) ?></strong>
+                — <?= count($requests) ?> مورد در این نما<?php if ($statusFilter !== 'ALL' && ($statusCounts['ALL'] ?? 0) > 0): ?>
+                    (از <?= (int)($statusCounts['ALL'] ?? 0) ?> درخواست ثبت‌شده)<?php endif; ?></p>
             <nav class="p1-req-filters" aria-label="فیلتر وضعیت">
-                <?php
-                $filters = ['ALL' => 'همه'] + array_combine(
-                    m360_online_req_filter_statuses(),
-                    array_map('m360_online_req_status_label_fa', m360_online_req_filter_statuses())
-                );
-                foreach ($filters as $code => $label):
-                    $active = ($statusFilter === $code) || ($code === 'ALL' && $statusFilter === 'ALL');
+                <?php foreach ($filterLabels as $code => $label):
+                    $active = ($statusFilter === $code);
+                    $count = (int)($statusCounts[$code] ?? 0);
                 ?>
-                    <a href="?status=<?= m360_reception_h($code) ?>" class="<?= $active ? 'active' : '' ?>"><?= m360_reception_h($label) ?></a>
+                    <a href="?status=<?= m360_reception_h($code) ?>" class="<?= $active ? 'active' : '' ?>"<?= $active ? ' aria-current="page"' : '' ?>>
+                        <?php if ($dbOk): ?><span class="p1-req-count"><?= $count ?></span><?php endif; ?>
+                        <?= m360_reception_h($label) ?>
+                    </a>
                 <?php endforeach; ?>
             </nav>
 
             <?php if ($requests === []): ?>
-                <div class="p1-req-empty">درخواستی برای نمایش وجود ندارد.</div>
+                <div class="p1-req-empty">درخواستی برای فیلتر «<?= m360_reception_h($activeFilterLabel) ?>» وجود ندارد.</div>
             <?php else: ?>
                 <div style="overflow-x:auto;">
                     <table class="p1-req-table">
