@@ -2,8 +2,8 @@
 
 **Mission ID:** PR-02-PREFLIGHT  
 **Type:** Discovery only — **no implementation**  
-**Date:** 2026-07-05  
-**Commit Eligibility:** `NOT_ELIGIBLE_PREFLIGHT_ONLY`  
+**Date:** 2026-07-05 (updated 2026-07-06 — owner brand decision; **PR-02-GOVERNANCE-LOCK**)  
+**Commit Eligibility:** `NOT_ELIGIBLE_GOVERNANCE_LOCK_ONLY` (was `NOT_ELIGIBLE_PREFLIGHT_ONLY`)  
 **Prerequisites accepted:** PR-00 Program Reset, PR-01D OTP nested hygiene, canonical OTP path locked
 
 ---
@@ -19,14 +19,14 @@ This preflight inventories all customer online intake and staff reception intake
 | **Primary page** | `customer-request.php` | `erp-reception-intake-file.php` | Different roles ✓ |
 | **Iranian plate** | Digit/letter **select** widget | Text **input** widget (`plate_iran_2_digits`) | **NO** |
 | **Brand/model/year** | JS dropdown (`vehicle-brand-classes.js`) + PHP year list | Free-text `brand` / `model`; no year field in vehicle step | **NO** |
-| **Approved brands** | Blueprint lists Toyota/Lexus/Kia/Hyundai/BYD/Lucano/Chery | Not enforced; JS still has luxury brands (Benz/BMW/…) | **NO** |
-| **Calendar** | Server-rendered 30-day visit calendar | No equivalent picker; reads `visit_date` from online payload | **NO** |
+| **Approved brands** | JS ≈ owner luxury list; **سایر** + calendar + model rules **not enforced** in runtime | Free text; not enforced | **Partial** — policy locked in blueprint §3 (2026-07-06) |
+| **Calendar** | Server grid ~30 **calendar** days (not yet 30 **working** days / holiday-aware) | No equivalent picker | **NO** — Jalali working-day rule locked in blueprint §3.5 |
 | **Technical routing** | Symptom/request only; no technician/dept fields | Staff service classification + referral **team** (not technician) | Partial |
 | **Hall manager gate** | N/A (customer) | Referral step + intake lock + `ready_convert` gate; **no explicit “send to hall manager”** action | Partial |
 | **18-clause contract** | Not on `customer-request.php`; separate cartable flow | Intake contract assignment step exists | Exists elsewhere |
 | **Repo ↔ XAMPP** | **MATCH** on sampled active files | **MATCH** | Root runtime canonical |
 
-**STOP:** Owner approval required before PR-02 implementation. Canonical customer-site standards are the proposed alignment source for plate UI/JS/CSS and visit calendar — **not** a redesign of plate segment order.
+**STOP:** PR-02A implementation **blocked** until **PR-02-GOVERNANCE-LOCK** is owner-reviewed. Master Blueprint §3 aligned 2026-07-06. Canonical customer-site standards remain the alignment source for plate UI/JS/CSS and visit calendar — **not** a redesign of plate segment order.
 
 ---
 
@@ -252,12 +252,80 @@ Rendered by `m360_rw_intake_render_plate_widget()` — uses `iran-plate-widget` 
 
 ## 6. Vehicle Brand / Model / Class / Year Discovery
 
+### 6.0 Owner vehicle & calendar governance (2026-07-06 — APPROVED + LOCKED in Blueprint §3)
+
+**Authority:** Owner policy below is recorded in `docs/00_CANONICAL/MOGHARE360_MASTER_PRODUCT_BLUEPRINT.md` §3 (PR-02-GOVERNANCE-LOCK). Supersedes stale Toyota/Lexus/… list (now §3.7 future Asian-brands project only).
+
+#### A) Current approved vehicle brands
+
+| # | Brand (EN) | Brand (FA) | JS key (`vehicle-brand-classes.js`) | Normal workflow? |
+|---|------------|------------|-------------------------------------|------------------|
+| 1 | Benz / Mercedes-Benz | بنز | `بنز` | **Yes** |
+| 2 | BMW | ب‌ام‌و | `ب ام و` | **Yes** |
+| 3 | Porsche | پورشه | `پورشه` | **Yes** |
+| 4 | Volvo | ولوو | `ولوو` | **Yes** |
+| 5 | Volkswagen | فولکس‌واگن | `فولکس واگن` | **Yes** |
+| 6 | Other | سایر | `سایر` (top-level) | **No** — §6.0B |
+
+#### B) Top-level Other / سایر (brand-level)
+
+| Rule | Requirement |
+|------|-------------|
+| Supported brand? | **No** |
+| Meaning | خارج از محدوده استاندارد / نیازمند بررسی / نیازمند تأیید مدیر |
+| Model/subclass lists | **Must not** activate |
+| Explanation | **Required** |
+| Manager exception | **Required** to proceed |
+| Management reports | **Separate** reporting for Other-brand cases |
+| Receptionist approval | **Cannot** approve |
+| Customer approval | **Cannot** approve |
+| System mark | **نیازمند تأیید مدیر** |
+| PR-02A manager UI | Only if already safely supported; else **SQL_OR_WORKFLOW_PROPOSAL_NEEDED_LATER** |
+
+#### C) Per-brand model / subclass (supported brands only)
+
+| Rule | Requirement |
+|------|-------------|
+| Dependency | Models/subclasses depend on selected brand |
+| Porsche | Porsche models only (e.g. Macan) after Porsche selected |
+| Benz / BMW / Volvo / Volkswagen | Same pattern — brand-scoped lists only |
+| List source | **Existing customer-site** `vehicle-brand-classes.js` — do not invent |
+| Incomplete lists | Report **OWNER_MODEL_LIST_DECISION_REQUIRED** |
+
+#### D) Per-brand model Other / سایر (model-level — NOT top-level brand Other)
+
+| Aspect | Per-brand model سایر | Top-level brand سایر (§6.0B) |
+|--------|----------------------|------------------------------|
+| Context | Supported brand; model missing from list | Brand outside MOGHARE360 scope |
+| Meaning | MODEL_LIST_GAP / نیازمند تکمیل لیست مدل | نیازمند تأیید مدیر |
+| Explanation | **Required** | **Required** |
+| Brand scope | Must **not** bypass brand scope control | No model lists |
+
+#### E) Calendar / visit date governance
+
+| Rule | Requirement |
+|------|-------------|
+| Calendar | Persian / Solar Hijri / Jalali |
+| Horizon | **30 working days** (not 30 calendar days) |
+| Fridays | Disabled |
+| Iran official holidays | Disabled |
+| Free-text date | Not normal workflow |
+| Holiday source missing | Report **IRAN_OFFICIAL_HOLIDAY_SOURCE_MISSING** — do not invent data |
+
+**Runtime gap:** `customer-request.php` builds today + 30 consecutive days (`$visitCalendarDays`) — does not yet skip Fridays/holidays or count working days only.
+
+#### F) Future Asian brands (NOT current scope)
+
+Toyota, Lexus, Kia, Hyundai, BYD, Lucano, Chery → **separate/future Asian-brands project only** (Blueprint §3.7). Removed from current MOGHARE360 allowlist.
+
+**Current runtime gap (summary):** Top-level `سایر` still enables model select; per-brand/model Other explanation fields absent; calendar not working-day/holiday-aware; reception free-text brands; manager exception workflow not built (**SQL_OR_WORKFLOW_PROPOSAL_NEEDED_LATER**).
+
 ### 6.1 Customer online
 
 | Component | Source |
 |-----------|--------|
 | Brand/class UI | `<select id="vehicle_brand">`, `<select id="vehicle_class">` populated by `vehicle-brand-classes.js` |
-| Brand list | **Hardcoded JS** `window.M360_VEHICLE_BRANDS` — currently **بنز، ب ام و، پورشه، ولوو، فولکس واگن، سایر** (NOT owner-approved list) |
+| Brand list | **Hardcoded JS** `window.M360_VEHICLE_BRANDS` — keys match owner-approved universe (بنز، ب ام و، پورشه، ولوو، فولکس واگن، سایر) but **سایر exception semantics missing** |
 | Year | PHP-generated `$vehicleYearOptions` — Jalali/Gregorian pairs, today −20 years (`customer-request.php` L87–97) |
 | VIN / odometer | Text/number inputs on vehicle section |
 
@@ -272,23 +340,25 @@ Rendered by `m360_rw_intake_render_plate_widget()` — uses `iran-plate-widget` 
 
 ### 6.3 Approved brands source
 
-| Source | Contains Toyota/Lexus/Kia/Hyundai/BYD/Lucano/Chery? |
-|--------|------------------------------------------------------|
-| `MOGHARE360_MASTER_PRODUCT_BLUEPRINT.md` §3.1 | **YES** — authoritative |
-| `vehicle-brand-classes.js` | **NO** — wrong legacy luxury set |
-| `erp-brand-system.php` | **NO** — MOGHARE360 product branding page only |
+| Source | Status |
+|--------|--------|
+| **`MOGHARE360_MASTER_PRODUCT_BLUEPRINT.md` §3** | ✅ **ALIGNED** — PR-02-GOVERNANCE-LOCK 2026-07-06 |
+| **Owner decision (2026-07-06)** | ✅ APPROVED — §6.0A–F |
+| `vehicle-brand-classes.js` | Partial match — five brands + lists; governance gaps remain |
 | DB `erp_vehicle_brands` / `erp_vehicle_models` | **MISSING** per gap matrix |
-| `moghare360-localization-helper.php` | Notes forbidden brands — not a runtime allowlist |
+| `erp-brand-system.php` | MOGHARE360 product branding page only — not vehicle allowlist |
+| `moghare360-localization-helper.php` | Notes luxury set — not runtime enforcement |
 
 ### 6.4 Model list
 
 | Question | Answer |
 |----------|--------|
-| Model list exists? | **Yes, hardcoded per brand in JS** — wrong brand universe |
+| Model list exists? | **Yes** — hardcoded per brand in `vehicle-brand-classes.js` (discovery source per Blueprint §3.1) |
 | DB-backed models? | **No** |
 | Reception free typing? | **YES** |
-| Unsupported vehicle without manager exception? | **YES** — reception can type any brand/model; customer can pick «سایر» in wrong JS list |
-| Manager exception for vehicle? | **NO** dedicated vehicle exception flow found (contract has `manager_override` only) |
+| Invent new models in PR-02A? | **FORBIDDEN** — gaps → **OWNER_MODEL_LIST_DECISION_REQUIRED** |
+| Unsupported vehicle without manager exception? | **YES today** |
+| Manager exception for vehicle? | **NO** in intake UI → **SQL_OR_WORKFLOW_PROPOSAL_NEEDED_LATER** for full approval workflow |
 
 ### 6.5 Vehicle discovery report fields
 
@@ -297,11 +367,11 @@ Rendered by `m360_rw_intake_render_plate_widget()` — uses `iran-plate-widget` 
 | **VEHICLE_SELECTOR_VARIANT_COUNT** | **8** (customer JS, customer PHP year, reception text, legacy service-request MySQL, vehicle-create-v2, customer-vehicle UX, pilot builder, blueprint doc) |
 | **CUSTOMER_SOURCE** | `customer-request.php` + `vehicle-brand-classes.js` |
 | **RECEPTION_SOURCE** | `erp-reception-intake-file.php` + `m360-reception-workbench-helper.php` form fields |
-| **APPROVED_BRANDS_SOURCE** | **`docs/00_CANONICAL/MOGHARE360_MASTER_PRODUCT_BLUEPRINT.md`** (no runtime enforcement file) |
-| **MODEL_LIST_SOURCE** | `assets/js/vehicle-brand-classes.js` (stale; must be replaced post-approval) |
+| **APPROVED_BRANDS_SOURCE** | **`MOGHARE360_MASTER_PRODUCT_BLUEPRINT.md` §3.1** + §6.0A |
+| **MODEL_LIST_SOURCE** | `assets/js/vehicle-brand-classes.js` (canonical discovery source; do not invent) |
 | **RECEPTION_FREE_TEXT_RISK** | **yes** |
-| **MANAGER_EXCEPTION_MODEL_EXISTS** | **no** (for vehicle brand/model) |
-| **OWNER_DECISION_REQUIRED** | **yes** — approve new `M360_VEHICLE_BRANDS` content + whether «سایر» requires manager gate |
+| **MANAGER_EXCEPTION_MODEL_EXISTS** | **no** → **SQL_OR_WORKFLOW_PROPOSAL_NEEDED_LATER** |
+| **OWNER_DECISION_REQUIRED** | **partial** — brand/calendar/Other policy **locked**; plate + referral + holiday source still open |
 
 ---
 
@@ -334,9 +404,12 @@ Rendered by `m360_rw_intake_render_plate_widget()` — uses `iran-plate-widget` 
 | **CALENDAR_VARIANT_COUNT** | **3** (customer visit calendar, customer birth selects, reception read-only display) |
 | **CUSTOMER_CALENDAR_SOURCE** | `customer-request.php` + `customer-form.js` + `mirror.css` |
 | **RECEPTION_DATE_SOURCE** | Payload echo only via `m360-reception-workbench-helper.php` field recovery |
-| **RECEPTION_FREE_TEXT_RISK** | **no** for visit date entry (reception does not re-enter); **yes** if staff needed to amend date later (no UI) |
-| **CAN_REUSE_CUSTOMER_STANDARD** | **yes** — for visit date amendment UX if owner wants parity |
-| **OWNER_DECISION_REQUIRED** | **yes** — should reception edit visit date or remain read-only from customer submission? |
+| **GOVERNANCE_TARGET** | Blueprint §3.5 — Jalali, **30 working days**, Fridays off, Iran holidays off |
+| **CURRENT_RUNTIME_VS_GOVERNANCE** | **MISMATCH** — ~30 consecutive calendar days; no Friday/holiday filter |
+| **IRAN_OFFICIAL_HOLIDAY_SOURCE_MISSING** | **yes** — no holiday table/file found in discovery |
+| **RECEPTION_FREE_TEXT_RISK** | **no** for visit date entry today; **yes** if amend UI added without calendar |
+| **CAN_REUSE_CUSTOMER_STANDARD** | **yes** — after calendar brought to §3.5 compliance |
+| **OWNER_DECISION_REQUIRED** | **partial** — calendar rules **locked**; holiday data source + reception amend policy still open |
 
 ---
 
@@ -496,7 +569,7 @@ Rendered by `m360_rw_intake_render_plate_widget()` — uses `iran-plate-widget` 
 | Customer plate CSS | `public_html/assets/css/mirror.css` |
 | Customer calendar | Same trio (PHP grid + `customer-form.js` + `mirror.css`) |
 | Plate HTML/JS behavior | **Copy from customer-request + customer-form.js** — do not invent new order |
-| Vehicle allowlist | **New data file** to replace `vehicle-brand-classes.js` content per Blueprint §3.1 (owner-approved brands/models) |
+| Vehicle allowlist | `vehicle-brand-classes.js` + server validation — owner list §6.0; implement سایر exception (no model list, explanation, manager gate) |
 | Reception intake UI | `public_html/erp-reception-intake-file.php` |
 | Reception logic | `public_html/includes/m360-reception-workbench-helper.php` |
 | Reception save | `public_html/erp-reception-intake-save.php` |
@@ -510,7 +583,9 @@ Rendered by `m360_rw_intake_render_plate_widget()` — uses `iran-plate-widget` 
 
 | Priority | File | Reason |
 |----------|------|--------|
-| P0 | `assets/js/vehicle-brand-classes.js` | Replace with owner-approved brands/models |
+| P0 | `assets/js/vehicle-brand-classes.js` | Enforce §6.0 brands; block normal model list for top-level سایر; wire explanation UI |
+| P0 | `customer-request.php` + `customer-form.js` | سایر explanation field; disable class select when brand=سایر |
+| P0 | `m360-reception-workbench-helper.php` + intake save | Manager exception flag/check for سایر vehicles; no free-text bypass for standard brands |
 | P0 | `includes/m360-reception-workbench-helper.php` | Align plate widget + brand/model/year controls |
 | P0 | `erp-reception-intake-file.php` | Wire shared plate/vehicle/calendar partials |
 | P1 | `assets/js/m360-reception-intake.js` | Align plate preview with customer field names |
@@ -540,33 +615,49 @@ Rendered by `m360_rw_intake_render_plate_widget()` — uses `iran-plate-widget` 
 
 ## 16. Owner Decisions Required
 
-| # | Decision |
-|---|----------|
-| 1 | **Confirm canonical candidate** table in §13 |
-| 2 | **Plate alignment:** Reuse customer select-widget on reception vs text inputs with shared validation only |
-| 3 | **Payload field names:** Standardize on `plate_region_2_digits` (customer) vs `plate_iran_2_digits` (reception) |
-| 4 | **Approved brand/model list:** Provide per-brand model list for Toyota/Lexus/Kia/Hyundai/BYD/Lucano/Chery to replace JS |
-| 5 | **«سایر» / unsupported vehicle:** Block, allow with manager exception, or reception-only override? |
-| 6 | **Reception year field:** Add controlled year select matching customer or remain payload read-only? |
-| 7 | **Visit date on reception:** Read-only from customer vs editable with same calendar? |
-| 8 | **Referral team step:** Keep, rename to hall handoff, or remove from receptionist workflow? |
-| 9 | **request_type on customer form:** Keep high-level categories or reduce to symptom-only? |
-| 10 | **PR-02 scope boundary:** Standards alignment only vs include hall-manager assignment UI |
-| 11 | **SQL phase:** Defer brand tables per gap matrix or include in PR-02 follow-up? |
+| # | Decision | Status |
+|---|----------|--------|
+| 1 | **Confirm canonical candidate** table in §13 | ⏳ Pending |
+| 2 | **Plate alignment:** Reuse customer select-widget on reception vs text inputs with shared validation only | ⏳ Pending |
+| 3 | **Payload field names:** Standardize on `plate_region_2_digits` (customer) vs `plate_iran_2_digits` (reception) | ⏳ Pending |
+| 4 | **Approved brand list (luxury)** | ✅ **LOCKED** — Blueprint §3.1 / §6.0A |
+| 5 | **Top-level Other / سایر** | ✅ **LOCKED** — Blueprint §3.2 / §6.0B |
+| 6 | **Per-brand model سایر** | ✅ **LOCKED** — Blueprint §3.4 / §6.0D (MODEL_LIST_GAP + explanation) |
+| 7 | **Per-brand model lists** | ✅ **LOCKED** — brand-dependent; source = `vehicle-brand-classes.js`; no inventing |
+| 8 | **Calendar (Jalali 30 working days)** | ✅ **LOCKED** — Blueprint §3.5 / §6.0E; **IRAN_OFFICIAL_HOLIDAY_SOURCE_MISSING** |
+| 9 | **Manager exception (Other brand)** | ✅ **LOCKED** — Blueprint §3.2; **SQL_OR_WORKFLOW_PROPOSAL_NEEDED_LATER** for approval UI |
+| 10 | **Asian brands (Toyota/Lexus/…)** | ✅ **LOCKED** — future project only; Blueprint §3.7 |
+| 11 | **Reception year field** | ⏳ Pending |
+| 12 | **Visit date on reception (amend?)** | ⏳ Pending |
+| 13 | **Referral team step** | ⏳ Pending |
+| 14 | **request_type on customer form** | ⏳ Pending |
+| 15 | **PR-02 scope boundary** | ⏳ Pending |
+| 16 | **Blueprint §3 revision** | ✅ **DONE** — PR-02-GOVERNANCE-LOCK |
+| 17 | **SQL phase** | ⏳ Pending |
+
+### 16.1 Owner governance record (PR-02-GOVERNANCE-LOCK — verbatim summary)
+
+See Blueprint §3 and §6.0A–F. Key flags for implementers:
+
+- `OWNER_MODEL_LIST_DECISION_REQUIRED` — if model data incomplete; do not invent
+- `IRAN_OFFICIAL_HOLIDAY_SOURCE_MISSING` — no holiday source in repo today
+- `SQL_OR_WORKFLOW_PROPOSAL_NEEDED_LATER` — manager approval UI/DB for top-level سایر
 
 ---
 
-## 17. Recommended PR-02 Implementation Scope (after approval)
+## 17. Recommended PR-02 Implementation Scope (after governance lock review)
 
-**Suggested PR-02A — Unified base data alignment (no JobCard, no Auth, no OTP, no SQL):**
+**PR-02A must not start until owner reviews PR-02-GOVERNANCE-LOCK (Blueprint §3 + this report §6.0, §18).**
 
-1. Replace `vehicle-brand-classes.js` with owner-approved allowlist (data-only + population functions).
-2. Extract/reuse customer plate widget on reception vehicle step (same segment order, same CSS).
-3. Add reception brand/model/year **controlled selects** (no free text in normal workflow).
-4. Payload normalizer: single plate + vehicle schema in `request_payload_json` bridge.
-5. Optional: reception visit-date display/amend using customer calendar component.
-6. Tests: plate parity, brand allowlist rejection, payload round-trip, no regression on OTP/canonical intake path.
-7. XAMPP copy + browser UAT on customer-request + reception intake-file.
+**Suggested PR-02A — Unified base data alignment (no JobCard, no Auth, no OTP; SQL only if separately approved):**
+
+1. Harden `vehicle-brand-classes.js` per Blueprint §3.1–3.4 (five brands + gated top-level سایر + per-brand model سایر explanation).
+2. Align visit calendar to §3.5 (30 **working** days, Fridays off, holidays off when source exists; else flag **IRAN_OFFICIAL_HOLIDAY_SOURCE_MISSING**).
+3. Extract/reuse customer plate widget on reception vehicle step (same segment order, same CSS).
+4. Add reception brand/model/year **controlled selects** (no free text in normal workflow).
+5. Payload normalizer: plate + vehicle + Other/MODEL_LIST_GAP flags in `request_payload_json`.
+6. Mark Other-brand cases **نیازمند تأیید مدیر** in payload/reporting; defer approval UI unless safe (**SQL_OR_WORKFLOW_PROPOSAL_NEEDED_LATER**).
+7. Tests + XAMPP copy + browser UAT.
 
 **Out of scope for PR-02A:**
 
@@ -586,16 +677,20 @@ Rendered by `m360_rw_intake_render_plate_widget()` — uses `iran-plate-widget` 
 | Variant counts documented | ✅ |
 | Active runtime identified | ✅ |
 | Canonical candidates proposed | ✅ |
-| Implementation performed | ❌ **STOP** |
-| Owner approval | ⏳ **REQUIRED** |
+| **PR-02-GOVERNANCE-LOCK (Blueprint §3)** | ✅ **Documented 2026-07-06** |
+| PR-02A implementation | ❌ **STOP** — blocked until governance lock owner review |
+| Runtime files changed | ❌ **None** (governance phase) |
 
-### GO criteria (owner must explicitly approve):
+### GO criteria for PR-02A (owner must explicitly approve after reviewing governance lock):
 
-1. Canonical candidate table (§13)  
-2. PR-02A scope (§17) or revised scope  
-3. Decisions in §16 (especially plate reuse, brand list content, referral step)  
+1. Blueprint §3 vehicle/calendar/Other policy (this governance lock)  
+2. Canonical candidate table (§13)  
+3. PR-02A scope (§17) or revised scope  
+4. Remaining open decisions in §16 (plate, referral, holiday source, SQL)  
 
-**Until approval: no PHP/JS/CSS/SQL/config/runtime changes.**
+**Until GO: no PHP/JS/CSS/SQL/config/runtime changes.**
+
+**Commit eligibility:** `NOT_ELIGIBLE_GOVERNANCE_LOCK_ONLY`
 
 ---
 

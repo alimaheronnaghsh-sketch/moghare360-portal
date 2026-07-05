@@ -1,7 +1,7 @@
 # MOGHARE360 — Master Product Blueprint
 
 **Document ID:** CANONICAL-001  
-**Status:** EXECUTION AUTHORITY — Program Reset PR-00  
+**Status:** EXECUTION AUTHORITY — Program Reset PR-00; **vehicle scope aligned PR-02-GOVERNANCE-LOCK (2026-07-06)**  
 **Supersedes:** Scattered mission/audit docs for scope decisions (implementation detail remains in phase reports until archived)  
 **Encoding:** UTF-8
 
@@ -55,12 +55,87 @@
 
 ## 3. Vehicle Scope
 
-### 3.1 Owner-defined brand allowlist
+**Governance lock:** PR-02-GOVERNANCE-LOCK (2026-07-06). PR-02A runtime implementation must not start until owner reviews this section and the preflight report.
 
-Only the following brands are permitted in production data entry unless owner explicitly approves additions:
+### 3.1 Current approved brand allowlist (production MOGHARE360)
 
-| Brand | Notes |
-|-------|-------|
+Only the following brands are permitted in **current** production data entry unless owner explicitly approves additions:
+
+| Brand (EN) | Brand (FA) | Normal supported brand? |
+|------------|------------|-------------------------|
+| Benz / Mercedes-Benz | بنز | **Yes** |
+| BMW | ب‌ام‌و | **Yes** |
+| Porsche | پورشه | **Yes** |
+| Volvo | ولوو | **Yes** |
+| Volkswagen | فولکس‌واگن | **Yes** |
+| Other | سایر | **No** — exception path only (§3.2) |
+
+**Discovery source for model/subclass lists:** `public_html/assets/js/vehicle-brand-classes.js` on the customer online site (`customer-request.php`). Implementers must not invent model/subclass lists. If lists are incomplete, report **OWNER_MODEL_LIST_DECISION_REQUIRED** — do not guess.
+
+### 3.2 Top-level Other / سایر (brand-level exception)
+
+Top-level **Other / سایر** is **not** a normal supported vehicle brand.
+
+| Rule | Requirement |
+|------|-------------|
+| Meaning | **خارج از محدوده استاندارد** / **نیازمند بررسی** / **نیازمند تأیید مدیر** |
+| Model/subclass UI | Must **not** activate normal model/subclass dropdowns |
+| Explanation | **Required** |
+| Manager exception | **Required** to proceed |
+| Management reporting | Cases must be reported separately in management reports |
+| Who may approve | Receptionist **cannot** approve; customer **cannot** approve; system marks **نیازمند تأیید مدیر** |
+| PR-02A scope | Full manager-approval UI/workflow only if already safely supported; otherwise report **SQL_OR_WORKFLOW_PROPOSAL_NEEDED_LATER** |
+
+### 3.3 Per-brand model / subclass rules
+
+1. Model and subclass options must **depend on the selected brand** (cascading select).
+2. **Porsche** → only Porsche models/subclasses (e.g. Macan) after Porsche is selected.
+3. **Benz** → only Benz classes/models after Benz is selected.
+4. **BMW** → only BMW series/models after BMW is selected.
+5. **Volvo** → only Volvo models after Volvo is selected.
+6. **Volkswagen** → only Volkswagen models after Volkswagen is selected.
+7. **No free-text** brand/model in final production UI for the five supported brands.
+8. Cursor must **not** invent lists — use existing customer-site mapping; gaps → **OWNER_MODEL_LIST_DECISION_REQUIRED**.
+
+### 3.4 Per-brand model Other / سایر (model-level gap — not brand-level Other)
+
+Per-brand model **Other / سایر** inside a supported brand list is **not** the same as top-level brand Other (§3.2).
+
+| Aspect | Per-brand model سایر | Top-level brand سایر |
+|--------|----------------------|----------------------|
+| Brand scope | Supported brand selected | Outside standard brand universe |
+| Meaning | Model/subclass missing from curated list | Vehicle outside MOGHARE360 brand scope |
+| Model lists | Other brands’ lists remain disabled | No model lists at all |
+| Explanation | **Required** | **Required** |
+| Classification | **MODEL_LIST_GAP** / **نیازمند تکمیل لیست مدل** | **نیازمند تأیید مدیر** / exception |
+| Bypass | Must **not** bypass brand scope control | Exception path only |
+
+### 3.5 Calendar / visit date rules (customer online + aligned reception)
+
+| Rule | Requirement |
+|------|-------------|
+| Calendar system | **Persian / Solar Hijri / Jalali** |
+| Horizon | **30 working days** (not 30 consecutive calendar days) |
+| Fridays | **Disabled** |
+| Iran official holidays | **Disabled** |
+| Free-text date | **Not** normal workflow |
+| Holiday data source | If no official holiday source exists in repo/runtime, report **IRAN_OFFICIAL_HOLIDAY_SOURCE_MISSING** — **do not invent** holiday data |
+
+**Current runtime note (discovery):** `customer-request.php` today renders ~30 consecutive calendar days; alignment to 30 **working** days + holiday disable is a PR-02A engineering task after governance lock review.
+
+### 3.6 General vehicle data rules
+
+1. **No new brand or model** may be added to master data, dropdowns, or validation allowlists without **written owner approval**.
+2. Model lists are **owner-curated per brand** — not free-text in final production UI (except governed exception paths in §3.2–3.4).
+3. VIN/plate validation must reject vehicles outside approved brand scope when enforcement phase is active.
+4. Legacy/test brands in database (e.g. mirror test data) must be cleaned or flagged — not treated as production truth.
+
+### 3.7 Future scope — Asian brands project (NOT current MOGHARE360)
+
+The following brands were previously listed in error as **current** scope. They belong to a **separate / future Asian-brands project only** and are **not** part of current MOGHARE360 production allowlist until a future owner-approved program unlocks them:
+
+| Future project only | |
+|---------------------|---|
 | Toyota | |
 | Lexus | |
 | Kia | |
@@ -69,12 +144,7 @@ Only the following brands are permitted in production data entry unless owner ex
 | Lucano | |
 | Chery | |
 
-### 3.2 Rules
-
-1. **No new brand or model** may be added to master data, dropdowns, or validation allowlists without **written owner approval**.
-2. Model lists are **owner-curated per brand** — not free-text in final production UI.
-3. VIN/plate validation must reject vehicles outside approved brand scope when enforcement phase is active.
-4. Legacy/test brands in database (e.g. mirror test data) must be cleaned or flagged — not treated as production truth.
+Do not implement, validate, or market these brands in current MOGHARE360 intake/reception without a new governance lock.
 
 ---
 
