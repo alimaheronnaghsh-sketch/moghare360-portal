@@ -131,19 +131,80 @@ function m360_reception_jobcard_list($conn, ?string $statusFilter = null, ?strin
         return [];
     }
 
-    $rows = [];
+    $rawRows = [];
     while (($row = odbc_fetch_array($stmt)) !== false) {
-        $rows[] = m360_reception_jobcard_enrich_row($conn, $row);
+        $rawRows[] = $row;
+    }
+
+    $jobcardIds = [];
+    foreach ($rawRows as $row) {
+        $jobcardId = (int)($row['jobcard_id'] ?? $row['JOBCARD_ID'] ?? 0);
+        if ($jobcardId > 0) {
+            $jobcardIds[] = $jobcardId;
+        }
+    }
+    $contractCache = m360_reception_jobcard_load_contract_cache($conn, $jobcardIds);
+
+    $rows = [];
+    foreach ($rawRows as $row) {
+        $rows[] = m360_reception_jobcard_enrich_row($conn, $row, $contractCache);
     }
     return $rows;
 }
 
+/**
+ * @param list<int> $jobcardIds
+ * @return array<int, array{contract_id:int,contract_status:string,signed_at:string,manager_override:int}>
+ */
+function m360_reception_jobcard_load_contract_cache($conn, array $jobcardIds): array
+{
+    $cache = [];
+    if (!is_resource($conn) || $jobcardIds === [] || !customer_core_table_exists($conn, M360_CONTRACT_TABLE)) {
+        return $cache;
+    }
+
+    $ids = array_values(array_unique(array_filter(
+        array_map('intval', $jobcardIds),
+        static fn(int $id): bool => $id > 0
+    )));
+    if ($ids === []) {
+        return $cache;
+    }
+
+    foreach (array_chunk($ids, 100) as $chunk) {
+        $placeholders = implode(', ', array_fill(0, count($chunk), '?'));
+        $sql = 'SELECT jobcard_id, contract_id, contract_status, signed_at, manager_override
+                FROM dbo.' . M360_CONTRACT_TABLE . '
+                WHERE jobcard_id IN (' . $placeholders . ')
+                ORDER BY jobcard_id, contract_id DESC';
+        $stmt = @odbc_prepare($conn, $sql);
+        if ($stmt === false || !@odbc_execute($stmt, $chunk)) {
+            continue;
+        }
+        while (($row = odbc_fetch_array($stmt)) !== false) {
+            $jcId = (int)($row['jobcard_id'] ?? $row['JOBCARD_ID'] ?? 0);
+            if ($jcId < 1 || isset($cache[$jcId])) {
+                continue;
+            }
+            $cache[$jcId] = [
+                'contract_id' => (int)($row['contract_id'] ?? $row['CONTRACT_ID'] ?? 0),
+                'contract_status' => strtoupper(trim((string)($row['contract_status'] ?? $row['CONTRACT_STATUS'] ?? ''))),
+                'signed_at' => trim((string)($row['signed_at'] ?? $row['SIGNED_AT'] ?? '')),
+                'manager_override' => (int)($row['manager_override'] ?? $row['MANAGER_OVERRIDE'] ?? 0),
+            ];
+        }
+    }
+
+    return $cache;
+}
+
 /** @param array<string, mixed> $row */
-function m360_reception_jobcard_enrich_row($conn, array $row): array
+/** @param array<int, array{contract_id:int,contract_status:string,signed_at:string,manager_override:int}>|null $contractCache */
+function m360_reception_jobcard_enrich_row($conn, array $row, ?array $contractCache = null): array
 {
     $jobcardId = (int)($row['jobcard_id'] ?? 0);
     $row['status_label'] = m360_jobcard_workflow_status_label((string)($row['jobcard_status'] ?? ''));
-    $row['contract_summary'] = m360_reception_jobcard_contract_summary($conn, $jobcardId, $row);
+    $row['contract_summary'] = m360_reception_jobcard_contract_summary($conn, $jobcardId, $row, $contractCache);
     $row['source_label'] = ((int)($row['online_request_id'] ?? 0) > 0) ? 'آنلاین' : 'دستی';
     $vehicle = trim(trim((string)($row['brand'] ?? '')) . ' ' . trim((string)($row['model'] ?? '')));
     $row['vehicle_label'] = $vehicle !== '' ? $vehicle : '-';
@@ -152,9 +213,10 @@ function m360_reception_jobcard_enrich_row($conn, array $row): array
 
 /**
  * @param array<string, mixed>|null $jobcardRow
+ * @param array<int, array{contract_id:int,contract_status:string,signed_at:string,manager_override:int}>|null $contractCache
  * @return array{code:string,label:string,signed_at:?string,contract_id:?int,can_continue:bool}
  */
-function m360_reception_jobcard_contract_summary($conn, int $jobcardId, ?array $jobcardRow = null): array
+function m360_reception_jobcard_contract_summary($conn, int $jobcardId, ?array $jobcardRow = null, ?array $contractCache = null): array
 {
     $default = [
         'code' => 'UNSIGNED',
@@ -172,23 +234,36 @@ function m360_reception_jobcard_contract_summary($conn, int $jobcardId, ?array $
     $signedAt = trim((string)($jobcardRow['contract_signed_at'] ?? ''));
     $contractId = (int)($jobcardRow['intake_contract_id'] ?? 0);
 
-    if (is_resource($conn) && customer_core_table_exists($conn, M360_CONTRACT_TABLE)) {
+    $cRow = null;
+    if ($contractCache !== null && isset($contractCache[$jobcardId])) {
+        $cached = $contractCache[$jobcardId];
+        $cRow = [
+            'contract_id' => $cached['contract_id'],
+            'contract_status' => $cached['contract_status'],
+            'signed_at' => $cached['signed_at'],
+            'manager_override' => $cached['manager_override'],
+        ];
+    } elseif (is_resource($conn) && customer_core_table_exists($conn, M360_CONTRACT_TABLE)) {
         $sql = 'SELECT TOP 1 contract_id, contract_status, signed_at, manager_override
                 FROM dbo.' . M360_CONTRACT_TABLE . ' WHERE jobcard_id = ? ORDER BY contract_id DESC';
         $stmt = @odbc_prepare($conn, $sql);
         if ($stmt !== false && @odbc_execute($stmt, [$jobcardId])) {
-            $cRow = odbc_fetch_array($stmt);
-            if ($cRow !== false) {
-                $contractId = (int)($cRow['contract_id'] ?? $contractId);
-                $jcStatus = strtoupper((string)($cRow['contract_status'] ?? $jcStatus));
-                if ($signedAt === '') {
-                    $signedAt = trim((string)($cRow['signed_at'] ?? ''));
-                }
-                if ($jcStatus === M360_CONTRACT_STATUS_OVERRIDDEN && (int)($cRow['manager_override'] ?? 0) === 1) {
-                    $default['code'] = 'OVERRIDDEN';
-                    $default['label'] = 'تأیید مدیریتی';
-                }
+            $fetched = odbc_fetch_array($stmt);
+            if ($fetched !== false) {
+                $cRow = $fetched;
             }
+        }
+    }
+
+    if ($cRow !== null) {
+        $contractId = (int)($cRow['contract_id'] ?? $cRow['CONTRACT_ID'] ?? $contractId);
+        $jcStatus = strtoupper((string)($cRow['contract_status'] ?? $cRow['CONTRACT_STATUS'] ?? $jcStatus));
+        if ($signedAt === '') {
+            $signedAt = trim((string)($cRow['signed_at'] ?? $cRow['SIGNED_AT'] ?? ''));
+        }
+        if ($jcStatus === M360_CONTRACT_STATUS_OVERRIDDEN && (int)($cRow['manager_override'] ?? $cRow['MANAGER_OVERRIDE'] ?? 0) === 1) {
+            $default['code'] = 'OVERRIDDEN';
+            $default['label'] = 'تأیید مدیریتی';
         }
     }
 
@@ -203,8 +278,8 @@ function m360_reception_jobcard_contract_summary($conn, int $jobcardId, ?array $
     $default['signed_at'] = $signedAt !== '' ? $signedAt : null;
     $default['contract_id'] = $contractId > 0 ? $contractId : null;
 
-    if (m360_reception_jobcard_p15_gate_available()) {
-        $default['can_continue'] = m360_contract_can_continue_to_p2($jobcardId);
+    if (m360_reception_jobcard_p15_gate_available() && $jobcardId > 0) {
+        $default['can_continue'] = in_array($default['code'], ['SIGNED', 'OVERRIDDEN'], true);
     }
 
     return $default;

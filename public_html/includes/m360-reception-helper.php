@@ -18,12 +18,26 @@ function m360_reception_h(string $value): string
     return htmlspecialchars($value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 }
 
+/** Stable session-scope CSRF token for reception intake (reused across page renders/tabs). */
+function m360_reception_csrf_token_value(): string
+{
+    if (!function_exists('erp_csrf_get_or_create_token')) {
+        return '';
+    }
+
+    return erp_csrf_get_or_create_token(M360_RECEPTION_CSRF_PURPOSE);
+}
+
 /** Single CSRF hidden input for all reception action forms on one page. */
 function m360_reception_csrf_input_html(): string
 {
-    ob_start();
-    echo erp_csrf_input(M360_RECEPTION_CSRF_PURPOSE);
-    return (string)ob_get_clean();
+    $token = m360_reception_csrf_token_value();
+    if ($token === '') {
+        return '';
+    }
+
+    return '<input type="hidden" name="erp_csrf_token" value="' .
+        m360_reception_h($token) . '">';
 }
 
 function m360_reception_csrf_is_valid(?string $token): bool
@@ -35,9 +49,54 @@ function m360_reception_csrf_is_valid(?string $token): bool
     return erp_csrf_validate_token(M360_RECEPTION_CSRF_PURPOSE, trim((string)($token ?? '')));
 }
 
-/** @return array{title:string,text:string,button:string,detail_href:string} */
-function m360_reception_action_error_content(string $type, int $requestId): array
+function m360_reception_intake_recover_step_key(string $activeStep): string
 {
+    $activeStep = trim($activeStep);
+    $allowed = ['otp', 'vehicle', 'condition', 'service', 'referral', 'photos', 'documents', 'signature', 'locked_summary'];
+
+    return in_array($activeStep, $allowed, true) ? $activeStep : 'documents';
+}
+
+function m360_reception_intake_step_hash(string $stepKey): string
+{
+    return match (m360_reception_intake_recover_step_key($stepKey)) {
+        'otp' => 'step-otp',
+        'vehicle' => 'step-vehicle',
+        'condition' => 'step-condition',
+        'service' => 'step-service',
+        'referral' => 'step-referral',
+        'photos' => 'step-photos',
+        'documents' => 'step-documents',
+        'signature' => 'step-signature',
+        'locked_summary' => 'step-locked',
+        default => 'step-documents',
+    };
+}
+
+/** @return array{title:string,text:string,button:string,detail_href:string} */
+function m360_reception_action_error_content(string $type, int $requestId, string $context = 'default', string $activeStep = 'documents'): array
+{
+    if ($type === 'csrf' && $context === 'intake') {
+        if ($requestId > 0) {
+            $step = m360_reception_intake_recover_step_key($activeStep);
+            $hash = m360_reception_intake_step_hash($step);
+            $detailHref = 'erp-reception-intake-file.php?online_request_id=' . $requestId
+                . '&active_step=' . rawurlencode($step)
+                . '#' . rawurlencode($hash);
+            $button = $step === 'documents' ? 'بازگشت به مرحله مستندات' : 'بازگشت به پرونده پذیرش';
+        } else {
+            $detailHref = 'erp-reception-workbench.php';
+            $button = 'بازگشت به میز کار پذیرش';
+        }
+
+        return [
+            'title' => 'اعتبار امنیتی فرم منقضی شده است',
+            'text' => 'اعتبار امنیتی فرم منقضی شده است؛ لطفاً صفحه را تازه‌سازی و دوباره تلاش کنید.',
+            'button' => $button,
+            'detail_href' => $detailHref,
+        ];
+    }
+
     $detailHref = $requestId > 0
         ? 'erp-reception-online-request-detail.php?request_id=' . $requestId
         : 'erp-reception-online-requests.php';
@@ -59,16 +118,16 @@ function m360_reception_action_error_content(string $type, int $requestId): arra
     ];
 }
 
-function m360_reception_render_action_error_page(string $type, int $requestId = 0): void
+function m360_reception_render_action_error_page(string $type, int $requestId = 0, string $context = 'default', string $activeStep = 'documents'): void
 {
-    $content = m360_reception_action_error_content($type, $requestId);
+    $content = m360_reception_action_error_content($type, $requestId, $context, $activeStep);
     http_response_code($type === 'csrf' ? 403 : 200);
     header('Content-Type: text/html; charset=UTF-8');
     header('X-Robots-Tag: noindex, nofollow');
     echo '<!DOCTYPE html><html lang="fa" dir="rtl"><head>';
     echo '<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">';
     echo '<title>' . m360_reception_h($content['title']) . '</title>';
-    echo '<link rel="stylesheet" href="assets/moghare360-ui/moghare360-soft-run-release.css">';
+    echo '<link rel="stylesheet" href="assets/css/moghare360-v1-luxury-ui.css">';
     echo '<style>.p1-gate-wrap{max-width:480px;margin:2rem auto;padding:0 1rem;}';
     echo '.p1-gate-card{background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:1.5rem;text-align:center;}';
     echo '.p1-gate-card h1{margin:0 0 .75rem;font-size:1.1rem;color:#991b1b;}';
@@ -125,17 +184,29 @@ function m360_reception_status_counts($conn): array
         return [];
     }
 
-    $sql = 'SELECT request_status, COUNT(*) AS cnt FROM dbo.' . m360_online_req_table() . ' GROUP BY request_status';
-    $stmt = @odbc_exec($conn, $sql);
-    if ($stmt === false) {
+    $where = '1=1';
+    if (m360_online_req_has_column($conn, 'otp_verified')) {
+        $where .= ' AND ISNULL(r.otp_verified, 0) = 1';
+    }
+
+    $sql = 'SELECT r.request_status, COUNT(*) AS cnt
+            FROM dbo.' . m360_online_req_table() . ' r
+            WHERE ' . $where . '
+            GROUP BY r.request_status';
+
+    $stmt = @odbc_prepare($conn, $sql);
+    if ($stmt === false || !@odbc_execute($stmt, [])) {
         return [];
     }
 
     $byDb = [];
     $total = 0;
     while (($row = odbc_fetch_array($stmt)) !== false) {
-        $status = strtoupper(trim((string)($row['request_status'] ?? '')));
-        $cnt = (int)($row['cnt'] ?? 0);
+        $status = strtoupper(trim((string)($row['request_status'] ?? $row['REQUEST_STATUS'] ?? '')));
+        if ($status === '') {
+            continue;
+        }
+        $cnt = (int)($row['cnt'] ?? $row['CNT'] ?? 0);
         $byDb[$status] = ($byDb[$status] ?? 0) + $cnt;
         $total += $cnt;
     }
@@ -191,6 +262,10 @@ function m360_reception_list_requests($conn, ?string $statusFilter = null, int $
     $params = [];
     $where = '1=1';
 
+    if (m360_online_req_has_column($conn, 'otp_verified')) {
+        $where .= ' AND ISNULL(r.otp_verified, 0) = 1';
+    }
+
     if ($statusFilter !== null && $statusFilter !== '' && $statusFilter !== 'ALL') {
         $canonical = strtoupper(trim($statusFilter));
         if ($canonical === M360_ONLINE_REQ_STATUS_NEW) {
@@ -201,7 +276,8 @@ function m360_reception_list_requests($conn, ?string $statusFilter = null, int $
         }
     }
 
-    $sql = 'SELECT TOP ' . $limit . '
+    $fetchLimit = min(500, max($limit, $limit * 3));
+    $sql = 'SELECT TOP ' . $fetchLimit . '
             r.online_request_id,
             r.company_id,
             r.customer_name,
@@ -216,6 +292,8 @@ function m360_reception_list_requests($conn, ?string $statusFilter = null, int $
             r.vehicle_id,
             r.converted_jobcard_id,
             r.created_at,
+            r.request_payload_json,
+            r.otp_verified,
             c.full_name AS erp_customer_name,
             v.brand AS vehicle_brand,
             v.model AS vehicle_model
@@ -230,13 +308,27 @@ function m360_reception_list_requests($conn, ?string $statusFilter = null, int $
         return [];
     }
 
+    $hasOtpColumn = m360_online_req_list_has_otp_verified_column($conn);
     $rows = [];
     while (($row = odbc_fetch_array($stmt)) !== false) {
         $normalized = [];
         foreach ($row as $key => $value) {
             $normalized[strtolower((string)$key)] = $value === null ? '' : (string)$value;
         }
+        if ($hasOtpColumn) {
+            if (!m360_online_req_payload_otp_verified_for_list($conn, $normalized)) {
+                continue;
+            }
+        } else {
+            $normalized = m360_online_req_hydrate_row_payload_json($conn, $normalized);
+            if (!m360_online_req_payload_otp_verified($normalized)) {
+                continue;
+            }
+        }
         $rows[] = $normalized;
+        if (count($rows) >= $limit) {
+            break;
+        }
     }
 
     return $rows;

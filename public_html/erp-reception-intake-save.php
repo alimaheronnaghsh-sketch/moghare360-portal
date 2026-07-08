@@ -3,7 +3,11 @@ declare(strict_types=1);
 
 /**
  * MOGHARE360 P11.9-C-2C — Reception intake completion save (POST only).
+ * PR-02B-UAT-REPAIR-3: complete_reception_intake — reception completion without contract/signature/hall gates.
  */
+
+/** Reception completion action (validated via m360_rw_intake_allowed_actions). */
+const M360_RW_INTAKE_SAVE_ACTION_COMPLETE_RECEPTION = 'complete_reception_intake';
 
 header('Content-Type: text/html; charset=UTF-8');
 header('X-Robots-Tag: noindex, nofollow');
@@ -16,6 +20,9 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
 }
 
 m360_reception_require_staff();
+if (function_exists('session_write_close')) {
+    session_write_close();
+}
 
 $requestId = isset($_POST['online_request_id']) ? (int)$_POST['online_request_id'] : 0;
 if ($requestId < 1 && isset($_POST['request_id'])) {
@@ -23,12 +30,23 @@ if ($requestId < 1 && isset($_POST['request_id'])) {
 }
 
 $csrfToken = isset($_POST['erp_csrf_token']) ? (string)$_POST['erp_csrf_token'] : null;
+$recoverStep = trim((string)($_POST['return_active_step'] ?? $_POST['return_step'] ?? $_POST['active_step'] ?? 'documents'));
 if (!m360_reception_csrf_is_valid($csrfToken)) {
-    m360_reception_render_action_error_page('csrf', $requestId);
+    m360_reception_render_action_error_page('csrf', $requestId, 'intake', $recoverStep);
     exit;
 }
 
 $actionType = trim((string)($_POST['action_type'] ?? ''));
+
+if ($actionType !== '' && !in_array($actionType, m360_rw_intake_allowed_actions(), true)) {
+    header('Location: ' . m360_rw_intake_save_redirect_url(
+        $requestId > 0 ? $requestId : 0,
+        'نوع عملیات نامعتبر است.',
+        false,
+        $_POST
+    ));
+    exit;
+}
 
 if ($requestId < 1) {
     header('Location: erp-reception-online-requests.php?msg=' . rawurlencode('شناسه درخواست نامعتبر است.') . '&ok=0');
@@ -43,7 +61,7 @@ if ($conn === false) {
 
 try {
     $result = m360_rw_intake_process_save($conn, $requestId, $actionType, $_POST, $_FILES);
-    header('Location: ' . m360_rw_intake_save_redirect_url($requestId, (string)$result['message'], (bool)$result['ok'], $_POST));
+    header('Location: ' . m360_rw_intake_save_redirect_url($requestId, (string)$result['message'], (bool)$result['ok'], $_POST, $conn));
 } catch (Throwable) {
     header('Location: ' . m360_rw_intake_save_redirect_url($requestId, M360_RW_INTAKE_SAVE_GENERIC_ERROR_FA, false, $_POST));
 }

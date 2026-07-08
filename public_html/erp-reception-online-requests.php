@@ -11,6 +11,9 @@ header('X-Robots-Tag: noindex, nofollow');
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-reception-helper.php';
 
 m360_reception_require_staff();
+if (session_status() === PHP_SESSION_ACTIVE) {
+    session_write_close();
+}
 
 $statusFilter = isset($_GET['status']) ? strtoupper(trim((string)$_GET['status'])) : 'ALL';
 $filterLabels = m360_reception_list_filter_labels();
@@ -47,7 +50,7 @@ if ($dbOk) {
             <span class="m360-rw-badge">پذیرش آنلاین</span>
         </div>
         <h1 class="m360-rw-title">درخواست‌های آنلاین مشتری</h1>
-        <p class="m360-rw-subtitle">فهرست درخواست‌ها — تکمیل پرونده پذیرش از ستون اقدامات</p>
+        <p class="m360-rw-subtitle">فهرست درخواست‌های تأیید OTP شده — تکمیل پرونده پذیرش از ستون اقدامات</p>
     </header>
 
     <?php if (!$dbOk): ?>

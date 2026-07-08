@@ -8,6 +8,9 @@ require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-operational-shell-helper.php';
 
 m360_intake_contract_require_staff();
+if (session_status() === PHP_SESSION_ACTIVE) {
+    session_write_close();
+}
 
 $statusFilter = isset($_GET['status']) ? strtoupper(trim((string)$_GET['status'])) : 'ALL';
 $conn = customer_core_db();

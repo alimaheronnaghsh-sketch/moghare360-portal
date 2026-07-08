@@ -62,6 +62,11 @@ function mirror_sms_otp_enabled(): bool
 
 function mirror_public_asset_version(): string
 {
+    $css = __DIR__ . DIRECTORY_SEPARATOR . '..' . DIRECTORY_SEPARATOR . 'assets' . DIRECTORY_SEPARATOR . 'css' . DIRECTORY_SEPARATOR . 'mirror.css';
+    if (is_file($css)) {
+        return (string)filemtime($css);
+    }
+
     return 'fix-f-v2';
 }
 

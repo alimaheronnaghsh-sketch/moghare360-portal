@@ -43,16 +43,31 @@ function m360_online_req_history_table(): string
 
 function m360_online_req_has_column($conn, string $column): bool
 {
+    static $cached = [];
     if (!is_resource($conn)) {
         return false;
+    }
+    $cacheKey = m360_online_req_table() . ':' . $column;
+    if (array_key_exists($cacheKey, $cached)) {
+        return $cached[$cacheKey];
     }
     $sql = "SELECT COUNT(*) AS c FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='dbo' AND TABLE_NAME=? AND COLUMN_NAME=?";
     $stmt = @odbc_prepare($conn, $sql);
     if ($stmt === false || !@odbc_execute($stmt, [m360_online_req_table(), $column])) {
+        if (is_resource($stmt)) {
+            @odbc_free_result($stmt);
+        }
+        $cached[$cacheKey] = false;
+
         return false;
     }
     $row = odbc_fetch_array($stmt);
-    return $row !== false && (int)($row['c'] ?? 0) > 0;
+    if (is_resource($stmt)) {
+        @odbc_free_result($stmt);
+    }
+    $cached[$cacheKey] = $row !== false && (int)($row['c'] ?? 0) > 0;
+
+    return $cached[$cacheKey];
 }
 
 function m360_online_req_initial_status(): string
@@ -268,13 +283,33 @@ function m360_online_req_insert($conn, int $companyId, array $fields): array
 
     $stmt = @odbc_prepare($conn, $sql);
     if ($stmt === false || !@odbc_execute($stmt, $values)) {
-        return ['ok' => false, 'online_request_id' => 0, 'status' => '', 'profile_required' => $profileRequired, 'customer_id' => $customerId, 'vehicle_id' => $vehicleId];
+        return [
+            'ok' => false,
+            'online_request_id' => 0,
+            'status' => '',
+            'profile_required' => $profileRequired,
+            'customer_id' => $customerId,
+            'vehicle_id' => $vehicleId,
+            'error_code' => 'online_request_insert_failed',
+            'insert_detail' => 'odbc_execute_failed',
+        ];
     }
 
     $newId = 0;
     $idRes = @odbc_exec($conn, 'SELECT CAST(SCOPE_IDENTITY() AS BIGINT) AS new_id');
     if ($idRes !== false && ($row = odbc_fetch_array($idRes))) {
         $newId = (int)($row['new_id'] ?? 0);
+    }
+    if ($newId < 1) {
+        $fallbackSql = 'SELECT TOP 1 online_request_id FROM dbo.' . m360_online_req_table()
+            . ' WHERE company_id = ? AND mobile = ? ORDER BY online_request_id DESC';
+        $fStmt = @odbc_prepare($conn, $fallbackSql);
+        if ($fStmt !== false && @odbc_execute($fStmt, [$companyId, $mobile])) {
+            $fRow = odbc_fetch_array($fStmt);
+            if ($fRow !== false) {
+                $newId = (int)($fRow['online_request_id'] ?? 0);
+            }
+        }
     }
 
     m360_online_req_write_history($conn, $newId, M360_ONLINE_REQ_HISTORY_CREATED, null, $status, 'Public site intake', null);
@@ -286,6 +321,8 @@ function m360_online_req_insert($conn, int $companyId, array $fields): array
         'profile_required' => $profileRequired,
         'customer_id' => $customerId,
         'vehicle_id' => $vehicleId,
+        'error_code' => $newId > 0 ? '' : 'online_request_identity_missing',
+        'insert_detail' => $newId > 0 ? '' : 'scope_identity_empty',
     ];
 }
 
@@ -334,6 +371,172 @@ function m360_online_req_write_history(
     ]);
 }
 
+/**
+ * SQL NVARCHAR character length of stored request_payload_json (not PHP bytes).
+ */
+function m360_online_req_payload_sql_char_length($conn, int $requestId): int
+{
+    if (!is_resource($conn) || $requestId < 1) {
+        return 0;
+    }
+    if (!m360_online_req_has_column($conn, 'request_payload_json')) {
+        return 0;
+    }
+    $sql = 'SELECT LEN(request_payload_json) AS payload_len FROM dbo.'
+        . m360_online_req_table() . ' WHERE online_request_id = ?';
+    $stmt = @odbc_prepare($conn, $sql);
+    if ($stmt === false) {
+        return 0;
+    }
+    if (!@odbc_execute($stmt, [$requestId])) {
+        if (is_resource($stmt)) {
+            @odbc_free_result($stmt);
+        }
+
+        return 0;
+    }
+    $row = odbc_fetch_array($stmt);
+    if (is_resource($stmt)) {
+        @odbc_free_result($stmt);
+    }
+    if ($row === false) {
+        return 0;
+    }
+
+    return (int)($row['payload_len'] ?? $row['PAYLOAD_LEN'] ?? 0);
+}
+
+/**
+ * ODBC-safe NVARCHAR(MAX) read — 200 SQL NVARCHAR characters per chunk (driver-safe literals).
+ *
+ * @return array{json:string,sql_len:int,read_len:int,ok:bool,error:string}
+ */
+function m360_online_req_read_payload_json_chunked($conn, int $requestId): array
+{
+    $fail = static function (array $chunks, int $sqlLen, int $readLen): array {
+        return [
+            'json' => implode('', $chunks),
+            'sql_len' => $sqlLen,
+            'read_len' => $readLen,
+            'ok' => false,
+            'error' => 'RUNTIME_PAYLOAD_READ_FAILED',
+        ];
+    };
+
+    $empty = ['json' => '', 'sql_len' => 0, 'read_len' => 0, 'ok' => true, 'error' => ''];
+    if (!is_resource($conn) || $requestId < 1) {
+        return $empty;
+    }
+    if (!m360_online_req_has_column($conn, 'request_payload_json')) {
+        return $empty;
+    }
+
+    $sqlLen = m360_online_req_payload_sql_char_length($conn, $requestId);
+    if ($sqlLen < 1) {
+        return $empty;
+    }
+
+    $chunkSize = 200;
+    $maxChunks = 100;
+    $expectedChunks = (int)ceil($sqlLen / $chunkSize) + 2;
+    $loopLimit = min($maxChunks, max(1, $expectedChunks));
+    $chunks = [];
+    $prevChunk = null;
+    $accumulatedSqlChars = 0;
+    $table = m360_online_req_table();
+
+    for ($i = 0; $i < $loopLimit; $i++) {
+        $offset = $accumulatedSqlChars + 1;
+        if ($offset > $sqlLen) {
+            break;
+        }
+        if ($offset < 1 || $chunkSize < 1) {
+            return $fail($chunks, $sqlLen, $accumulatedSqlChars);
+        }
+
+        $sql = 'SELECT SUBSTRING(request_payload_json, ' . $offset . ', ' . $chunkSize . ') AS chunk, '
+            . 'LEN(SUBSTRING(request_payload_json, ' . $offset . ', ' . $chunkSize . ')) AS chunk_chars '
+            . 'FROM dbo.' . $table . ' WHERE online_request_id = ?';
+        $stmt = @odbc_prepare($conn, $sql);
+        if ($stmt === false || !@odbc_execute($stmt, [$requestId])) {
+            if (is_resource($stmt)) {
+                @odbc_free_result($stmt);
+            }
+
+            return $fail($chunks, $sqlLen, $accumulatedSqlChars);
+        }
+        $row = odbc_fetch_array($stmt);
+        if (is_resource($stmt)) {
+            @odbc_free_result($stmt);
+        }
+        if ($row === false) {
+            return $fail($chunks, $sqlLen, $accumulatedSqlChars);
+        }
+
+        $rawChunk = $row['chunk'] ?? $row['CHUNK'] ?? null;
+        if ($rawChunk === null) {
+            break;
+        }
+        $chunk = (string)$rawChunk;
+        if ($chunk === '') {
+            break;
+        }
+        if ($prevChunk !== null && $chunk === $prevChunk) {
+            return $fail($chunks, $sqlLen, $accumulatedSqlChars);
+        }
+
+        $chunkChars = (int)($row['chunk_chars'] ?? $row['CHUNK_CHARS'] ?? 0);
+        if ($chunkChars < 1) {
+            break;
+        }
+
+        $chunks[] = $chunk;
+        $prevChunk = $chunk;
+        $accumulatedSqlChars += $chunkChars;
+
+        if ($accumulatedSqlChars >= $sqlLen) {
+            break;
+        }
+        if ($chunkChars < $chunkSize && $accumulatedSqlChars >= $sqlLen) {
+            break;
+        }
+    }
+
+    $json = implode('', $chunks);
+    $readLen = $accumulatedSqlChars;
+    $ok = $readLen >= $sqlLen;
+
+    return [
+        'json' => $json,
+        'sql_len' => $sqlLen,
+        'read_len' => $readLen,
+        'ok' => $ok,
+        'error' => $ok ? '' : 'RUNTIME_PAYLOAD_READ_FAILED',
+    ];
+}
+
+/** @param array<string, mixed> $row */
+function m360_online_req_hydrate_row_payload_json($conn, array $row): array
+{
+    if (!is_resource($conn)) {
+        return $row;
+    }
+    $requestId = (int)($row['online_request_id'] ?? 0);
+    if ($requestId < 1) {
+        return $row;
+    }
+    $result = m360_online_req_read_payload_json_chunked($conn, $requestId);
+    $row['_payload_read_ok'] = !empty($result['ok']);
+    $row['_payload_sql_len'] = (int)($result['sql_len'] ?? 0);
+    $row['_payload_read_len'] = (int)($result['read_len'] ?? 0);
+    $row['_payload_read_error'] = (string)($result['error'] ?? '');
+    if ((string)($result['json'] ?? '') !== '') {
+        $row['request_payload_json'] = (string)$result['json'];
+    }
+
+    return $row;
+}
+
 /** @return array<string, mixed>|null */
 function m360_online_req_fetch_by_id($conn, int $requestId): ?array
 {
@@ -343,11 +546,20 @@ function m360_online_req_fetch_by_id($conn, int $requestId): ?array
 
     $sql = 'SELECT TOP 1 * FROM dbo.' . m360_online_req_table() . ' WHERE online_request_id = ?';
     $stmt = @odbc_prepare($conn, $sql);
-    if ($stmt === false || !@odbc_execute($stmt, [$requestId])) {
+    if ($stmt === false) {
+        return null;
+    }
+    if (!@odbc_execute($stmt, [$requestId])) {
+        if (is_resource($stmt)) {
+            @odbc_free_result($stmt);
+        }
         return null;
     }
 
     $row = odbc_fetch_array($stmt);
+    if (is_resource($stmt)) {
+        @odbc_free_result($stmt);
+    }
     if ($row === false) {
         return null;
     }
@@ -357,14 +569,74 @@ function m360_online_req_fetch_by_id($conn, int $requestId): ?array
         $normalized[strtolower((string)$key)] = $value === null ? '' : (string)$value;
     }
 
-    return $normalized;
+    return m360_online_req_hydrate_row_payload_json($conn, $normalized);
+}
+
+function m360_online_req_list_has_otp_verified_column($conn): bool
+{
+    static $cached = [];
+    $key = is_resource($conn) ? 'default' : 'none';
+    if (!isset($cached[$key])) {
+        $cached[$key] = is_resource($conn) && m360_online_req_has_column($conn, 'otp_verified');
+    }
+
+    return $cached[$key];
+}
+
+function m360_online_req_row_otp_verified_column_value(array $requestRow): ?bool
+{
+    if (!array_key_exists('otp_verified', $requestRow)) {
+        return null;
+    }
+    $raw = $requestRow['otp_verified'];
+    if ($raw === '' || $raw === null) {
+        return null;
+    }
+    if ($raw === true || $raw === 1 || $raw === '1') {
+        return true;
+    }
+    if ($raw === false || $raw === 0 || $raw === '0') {
+        return false;
+    }
+    $text = strtolower(trim((string)$raw));
+    if ($text === '1' || $text === 'true') {
+        return true;
+    }
+    if ($text === '0' || $text === 'false') {
+        return false;
+    }
+
+    return null;
+}
+
+function m360_online_req_payload_otp_verified_for_list($conn, array $requestRow): bool
+{
+    if (m360_online_req_list_has_otp_verified_column($conn)) {
+        $columnValue = m360_online_req_row_otp_verified_column_value($requestRow);
+        if ($columnValue === true) {
+            return true;
+        }
+        if ($columnValue === false) {
+            return false;
+        }
+    }
+
+    return m360_online_req_payload_otp_verified($requestRow);
 }
 
 function m360_online_req_payload_otp_verified(array $requestRow): bool
 {
+    $columnValue = m360_online_req_row_otp_verified_column_value($requestRow);
+    if ($columnValue === true) {
+        return true;
+    }
+
     $payload = m360_online_req_parse_payload($requestRow['request_payload_json'] ?? null);
     if (isset($payload['otp_verified']) && (int)$payload['otp_verified'] === 1) {
         return true;
+    }
+    if ($columnValue === false) {
+        return false;
     }
     if (isset($requestRow['otp_verified']) && (string)$requestRow['otp_verified'] === '1') {
         return true;
