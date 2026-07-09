@@ -92,6 +92,22 @@
     try { return new URL(path, window.location.href).href; } catch (e) { return path; }
   }
 
+  function isExplicitNewRequestMode() {
+    return /(?:^|[?&])mode=new(?:&|$)/.test(window.location.search);
+  }
+
+  function profileRedirectUrl() {
+    var boot = window.m360CustomerPageBoot || {};
+    if (boot.profileRedirectUrl) {
+      return boot.profileRedirectUrl;
+    }
+    try {
+      return new URL('customer-profile.php', window.location.href).href;
+    } catch (e) {
+      return 'customer-profile.php';
+    }
+  }
+
   function bindPersianValidity(select, message) {
     if (!select) return;
     select.addEventListener('invalid', function (e) {
@@ -505,6 +521,11 @@
       .then(function (result) {
         if (result.data && result.data.ok) {
           verified = true;
+          if (!isExplicitNewRequestMode()) {
+            var target = (result.data.data && result.data.data.redirect_url) ? result.data.data.redirect_url : profileRedirectUrl();
+            window.location.href = target;
+            return;
+          }
           loadProfileAndShowForm();
         } else {
           verified = false;
@@ -808,7 +829,19 @@
     initServerVisitCalendar();
     initOtpFirstFlow();
     initWizardNav();
-    if (!restoreFormSectionsAfterPost()) beginFreshOtpWizard();
+    var boot = window.m360CustomerPageBoot || {};
+    if (boot.skipOtpToWizard && boot.verifiedSessionMobile) {
+      verified = true;
+      var mobileEl = $('mobile');
+      if (mobileEl) {
+        mobileEl.value = boot.verifiedSessionMobile;
+        mobileEl.readOnly = true;
+      }
+      setSubmitEnabled(true);
+      loadProfileAndShowForm();
+    } else if (!restoreFormSectionsAfterPost()) {
+      beginFreshOtpWizard();
+    }
 
     var requestType = $('request_type');
     if (requestType) {

@@ -5,8 +5,13 @@ require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-otp-helper.php';
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-calendar-1405-helper.php';
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-customer-online-submit-helper.php';
+require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-reception-workbench-helper.php';
 
 m360_otp_session_start();
+
+$mode = trim((string)($_GET['mode'] ?? ''));
+$isExplicitNewRequest = ($mode === 'new');
+$verifiedSession = m360_rw_customer_profile_resolve_verified_session_mobile();
 
 /**
  * @return array{jy:int,jm:int,jd:int}
@@ -290,8 +295,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
 
     $result = m360_customer_online_submit_from_post($payload);
     if (!empty($result['ok'])) {
-        $submitSuccess = true;
-        $createdRequestId = (int)($result['online_request_id'] ?? 0);
+        header('Location: ' . m360_rw_customer_portal_app_root_url('/customer-profile.php?request_created=1'), true, 303);
+        exit;
     } else {
         $result = [
             'ok' => false,
@@ -337,6 +342,11 @@ if ($input['visit_date'] !== '') {
     }
 }
 
+if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST' && !empty($verifiedSession['ok']) && !$isExplicitNewRequest) {
+    header('Location: ' . m360_rw_customer_portal_app_root_url('/customer-profile.php'), true, 302);
+    exit;
+}
+
 mirror_render_head('ثبت درخواست مشتری', 'customer');
 ?>
 <section class="m360-hero m360-hero--luxury">
@@ -368,7 +378,7 @@ mirror_render_head('ثبت درخواست مشتری', 'customer');
 
 <!-- PR-02B-ACTIVE: step-wizard-direct-submit -->
 <section class="m360-card m360-form">
-    <form method="post" action="customer-request.php" class="m360-customer-form" novalidate>
+    <form method="post" action="customer-request.php<?= $isExplicitNewRequest ? '?mode=new' : '' ?>" class="m360-customer-form" novalidate>
         <input type="hidden" id="customer_flow" name="customer_flow" value="<?= mirror_h((string)($input['customer_flow'] ?? 'new')) ?>">
         <input type="hidden" id="verified_customer_name" name="verified_customer_name" value="<?= mirror_h((string)($input['verified_customer_name'] ?? '')) ?>">
         <input type="hidden" id="mobile_verified" name="mobile_verified" value="<?= $mobileVerifiedSession ? '1' : '0' ?>">
@@ -730,6 +740,10 @@ $m360CustomerPageBoot = [
     'verifiedCustomerName' => (string)($input['verified_customer_name'] ?? ''),
     'restoreForm' => !$showSubmitSuccess && ($mobileVerifiedSession || $showSubmitError),
     'pr02bActive' => true,
+    'explicitNewRequest' => $isExplicitNewRequest,
+    'verifiedSessionMobile' => !empty($verifiedSession['ok']) ? (string)$verifiedSession['mobile'] : '',
+    'skipOtpToWizard' => !empty($verifiedSession['ok']) && $isExplicitNewRequest,
+    'profileRedirectUrl' => m360_rw_customer_portal_app_root_url('/customer-profile.php'),
 ];
 ?>
 <script>window.m360CustomerPageBoot=<?= json_encode($m360CustomerPageBoot, JSON_UNESCAPED_UNICODE) ?>;</script>

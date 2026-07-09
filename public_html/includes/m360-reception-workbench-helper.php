@@ -4095,6 +4095,379 @@ const M360_RW_CUSTOMER_PROFILE_CONTRACT_LEGACY_MESSAGE_FA = 'این تأیید �
 const M360_RW_CUSTOMER_PROFILE_CONTRACT_SIGNED_STATUS_FA = 'امضاشده و قفل‌شده';
 const M360_RW_CUSTOMER_PROFILE_CONTRACT_SIGNED_MESSAGE_FA = 'قرارداد با امضای دیجیتال و تأیید OTP ثبت و قفل شده است.';
 
+/** @var array<string, int> */
+$GLOBALS['m360_rw_customer_dashboard_perf'] = [];
+
+function m360_rw_customer_dashboard_perf_reset(): void
+{
+    $GLOBALS['m360_rw_customer_dashboard_perf'] = [
+        'sql_statements' => 0,
+        'payload_hydrations' => 0,
+        'task_queries' => 0,
+        'request_fetches' => 0,
+        'vehicle_queries' => 0,
+    ];
+}
+
+function m360_rw_customer_dashboard_perf_inc(string $key, int $amount = 1): void
+{
+    if (!isset($GLOBALS['m360_rw_customer_dashboard_perf'][$key])) {
+        $GLOBALS['m360_rw_customer_dashboard_perf'][$key] = 0;
+    }
+    $GLOBALS['m360_rw_customer_dashboard_perf'][$key] += $amount;
+}
+
+/** @return array<string, int|float> */
+function m360_rw_customer_dashboard_perf_snapshot(float $startedAt): array
+{
+    $perf = is_array($GLOBALS['m360_rw_customer_dashboard_perf'] ?? null)
+        ? $GLOBALS['m360_rw_customer_dashboard_perf']
+        : [];
+
+    return array_merge($perf, [
+        'duration_ms' => round((microtime(true) - $startedAt) * 1000, 2),
+    ]);
+}
+
+function m360_rw_customer_portal_app_root_web_path(): string
+{
+    $script = str_replace('\\', '/', (string)($_SERVER['SCRIPT_NAME'] ?? ''));
+    if (str_contains($script, '/api/customer/')) {
+        $root = dirname($script, 3);
+    } else {
+        $root = dirname($script);
+    }
+    if ($root === '/' || $root === '.' || $root === '') {
+        return '';
+    }
+
+    return rtrim($root, '/');
+}
+
+function m360_rw_customer_portal_app_root_url(string $pathAndQuery): string
+{
+    $path = str_starts_with($pathAndQuery, '/') ? $pathAndQuery : '/' . ltrim($pathAndQuery, '/');
+    $root = m360_rw_customer_portal_app_root_web_path();
+
+    return $root . $path;
+}
+
+/** @return list<string> */
+function m360_rw_customer_dashboard_terminal_statuses(): array
+{
+    return ['DELIVERED', 'CLOSED', 'DONE', 'CANCELLED', 'REJECTED'];
+}
+
+function m360_rw_customer_dashboard_safe_text(string $value, string $fallback = '—'): string
+{
+    $value = trim($value);
+    if ($value === '') {
+        return $fallback;
+    }
+    if (str_contains($value, 'Ã') || str_contains($value, 'Ø') || str_contains($value, 'Ù') || str_contains($value, 'â')) {
+        return $fallback;
+    }
+
+    return $value;
+}
+
+/**
+ * @param array<string, mixed> $requestRow
+ * @param array<string, mixed> $payload
+ * @return array{display_name:string,plate:string,service_type:string}
+ */
+function m360_rw_customer_dashboard_extract_vehicle_summary(array $requestRow, array $payload): array
+{
+    $payload = m360_rw_intake_payload_for_recovery($payload);
+    $vehicle = is_array($payload['reception_intake']['vehicle'] ?? null) ? $payload['reception_intake']['vehicle'] : [];
+    $brand = m360_rw_customer_dashboard_safe_text((string)($vehicle['brand'] ?? $payload['vehicle_brand'] ?? $payload['brand'] ?? ''), '');
+    $model = m360_rw_customer_dashboard_safe_text((string)($vehicle['model'] ?? $vehicle['class'] ?? $payload['vehicle_class'] ?? $payload['model'] ?? ''), '');
+    $plate = m360_rw_customer_dashboard_safe_text((string)($vehicle['plate'] ?? $payload['vehicle_plate'] ?? $payload['plate_display'] ?? $requestRow['vehicle_plate'] ?? ''), '');
+    $display = trim($brand . ' ' . $model);
+    if ($display === '') {
+        $display = 'خودرو';
+    }
+    $requestType = trim((string)($payload['request_type'] ?? ''));
+    $serviceMap = [
+        'diagnostic_inspection' => 'کارشناسی و عیب‌یابی',
+        'buy_sell_inspection' => 'کارشناسی خرید/فروش',
+        'periodic_service' => 'سرویس دوره‌ای',
+        'option_add' => 'افزودن آپشن',
+        'other' => 'سایر',
+    ];
+
+    return [
+        'display_name' => $display,
+        'plate' => $plate !== '—' ? $plate : '',
+        'service_type' => $serviceMap[$requestType] ?? m360_rw_customer_dashboard_safe_text((string)($payload['service_description'] ?? ''), 'درخواست خدمت'),
+    ];
+}
+
+/**
+ * @param array<string, mixed> $requestRow
+ * @param array<string, mixed> $payload
+ * @return array{stage:string,stage_label:string,status_label:string,next_actor:string,next_action:string}
+ */
+function m360_rw_customer_dashboard_resolve_stage($conn, array $requestRow, array $payload, string $customerMobile): array
+{
+    $requestId = (int)($requestRow['online_request_id'] ?? 0);
+    $status = strtoupper(trim((string)($requestRow['request_status'] ?? 'NEW')));
+    $normalized = m360_rw_customer_profile_normalize_mobile($customerMobile);
+    $dbContract = is_resource($conn) && $requestId > 0
+        ? m360_intake_contract_find_active_for_online_request($conn, $requestId)
+        : null;
+
+    if (is_resource($conn) && m360_rw_customer_profile_contract_is_pending_signature($conn, $requestRow, $payload, $dbContract, $normalized)) {
+        return [
+            'stage' => 'CONTRACT_PENDING',
+            'stage_label' => 'در انتظار بررسی و امضای قرارداد',
+            'status_label' => 'نیازمند امضای قرارداد',
+            'next_actor' => 'شما',
+            'next_action' => 'بررسی و امضای قرارداد',
+        ];
+    }
+
+    if (is_resource($conn) && m360_rw_customer_profile_contract_is_canonically_signed($conn, $requestRow, $dbContract, $normalized)) {
+        return [
+            'stage' => 'IN_SERVICE',
+            'stage_label' => 'در حال انجام خدمات',
+            'status_label' => 'قرارداد امضاشده — ادامه فرایند',
+            'next_actor' => 'واحد پذیرش',
+            'next_action' => 'پیگیری پرونده',
+        ];
+    }
+
+    $map = [
+        'NEW' => ['stage' => 'NEW', 'stage_label' => 'در انتظار بررسی پذیرش', 'status_label' => 'در انتظار بررسی پذیرش', 'next_actor' => 'واحد پذیرش', 'next_action' => 'بررسی درخواست'],
+        'PENDING' => ['stage' => 'NEW', 'stage_label' => 'در انتظار بررسی پذیرش', 'status_label' => 'در انتظار بررسی پذیرش', 'next_actor' => 'واحد پذیرش', 'next_action' => 'بررسی درخواست'],
+        'UNDER_REVIEW' => ['stage' => 'UNDER_REVIEW', 'stage_label' => 'در حال بررسی پذیرش', 'status_label' => 'در حال بررسی پذیرش', 'next_actor' => 'واحد پذیرش', 'next_action' => 'تکمیل بررسی'],
+        'ACCEPTED' => ['stage' => 'RECEPTION_IN_PROGRESS', 'stage_label' => 'در حال تکمیل پذیرش', 'status_label' => 'پذیرفته‌شده', 'next_actor' => 'واحد پذیرش', 'next_action' => 'تکمیل پذیرش'],
+        'CONVERTED_TO_JOBCARD' => ['stage' => 'IN_SERVICE', 'stage_label' => 'در حال انجام خدمات', 'status_label' => 'تبدیل به کارت کار', 'next_actor' => 'واحد فنی', 'next_action' => 'پیگیری خدمات'],
+    ];
+    if (isset($map[$status])) {
+        return $map[$status];
+    }
+
+    return [
+        'stage' => 'UNKNOWN',
+        'stage_label' => 'در حال بررسی',
+        'status_label' => m360_online_req_status_label_fa($status !== '' ? $status : 'NEW'),
+        'next_actor' => 'واحد پذیرش',
+        'next_action' => 'پیگیری پرونده',
+    ];
+}
+
+/**
+ * @param array<string, mixed> $requestRow
+ * @return array<string, mixed>
+ */
+function m360_rw_customer_dashboard_format_request_card($conn, array $requestRow, string $customerMobile): array
+{
+    m360_rw_customer_dashboard_perf_inc('payload_hydrations');
+    $requestId = (int)($requestRow['online_request_id'] ?? 0);
+    $requestMobile = m360_rw_customer_profile_normalize_mobile((string)($requestRow['mobile'] ?? ''));
+    $normalized = m360_rw_customer_profile_normalize_mobile($customerMobile);
+    if ($requestId < 1 || $normalized === '' || $requestMobile !== $normalized) {
+        return [];
+    }
+
+    $payload = m360_online_req_parse_payload($requestRow['request_payload_json'] ?? null);
+    $payload = m360_rw_intake_payload_for_recovery($payload);
+    $vehicle = m360_rw_customer_dashboard_extract_vehicle_summary($requestRow, $payload);
+    $stage = m360_rw_customer_dashboard_resolve_stage($conn, $requestRow, $payload, $customerMobile);
+    $status = strtoupper(trim((string)($requestRow['request_status'] ?? 'NEW')));
+    $terminal = m360_rw_customer_dashboard_terminal_statuses();
+    $contractClass = m360_rw_customer_profile_classify_contract_request($conn, $requestRow, $customerMobile);
+    $updatedAt = trim((string)($requestRow['updated_at'] ?? $requestRow['created_at'] ?? ''));
+
+    $actionUrl = '';
+    $actionLabel = '';
+    if ($contractClass['classification'] === M360_RW_CUSTOMER_PROFILE_CONTRACT_CLASS_PENDING_SIGNATURE) {
+        $readonlyUrl = m360_rw_customer_profile_contract_review_url_readonly($payload);
+        if ($readonlyUrl !== '') {
+            $actionUrl = $readonlyUrl;
+            $actionLabel = M360_RW_INTAKE_CARTABLE_TASK_ACTION_LABEL_FA;
+        }
+    }
+
+    $legacyLabel = '';
+    if ($contractClass['classification'] === M360_RW_CUSTOMER_PROFILE_CONTRACT_CLASS_LEGACY_ACCEPTED_UNVERIFIED) {
+        $legacyLabel = M360_RW_CUSTOMER_PROFILE_CONTRACT_LEGACY_STATUS_FA;
+    } elseif ($contractClass['classification'] === M360_RW_CUSTOMER_PROFILE_CONTRACT_CLASS_SIGNED_CANONICAL) {
+        $legacyLabel = M360_RW_CUSTOMER_PROFILE_CONTRACT_SIGNED_STATUS_FA;
+    }
+
+    return [
+        'online_request_id' => $requestId,
+        'reference' => m360_rw_customer_profile_contract_jobcard_code($requestId),
+        'vehicle_display' => $vehicle['display_name'],
+        'vehicle_plate' => $vehicle['plate'],
+        'service_type' => $vehicle['service_type'],
+        'stage' => $stage['stage'],
+        'stage_label' => $stage['stage_label'],
+        'status_label' => $stage['status_label'],
+        'next_actor' => $stage['next_actor'],
+        'next_action' => $stage['next_action'],
+        'last_update' => $updatedAt !== '' ? $updatedAt : '—',
+        'is_terminal' => in_array($status, $terminal, true) || $status === M360_ONLINE_REQ_STATUS_REJECTED,
+        'terminal_status' => in_array($status, $terminal, true) ? $status : '',
+        'contract_legacy_label' => $legacyLabel,
+        'contract_classification' => $contractClass['classification'],
+        'action_url' => $actionUrl,
+        'action_label' => $actionLabel,
+    ];
+}
+
+/**
+ * @param list<array<string, mixed>> $activeCases
+ * @return list<array<string, mixed>>
+ */
+function m360_rw_customer_dashboard_list_vehicles_enriched($conn, int $customerId, string $customerMobile, array $activeCases): array
+{
+    m360_rw_customer_dashboard_perf_inc('vehicle_queries');
+    $vehicles = $customerId > 0 ? m360_rw_customer_profile_list_vehicles($conn, $customerId) : [];
+    $counts = [];
+    foreach ($activeCases as $case) {
+        $plate = trim((string)($case['vehicle_plate'] ?? ''));
+        $key = $plate !== '' ? $plate : (string)($case['vehicle_display'] ?? 'unknown');
+        $counts[$key] = ($counts[$key] ?? 0) + 1;
+    }
+    $out = [];
+    foreach ($vehicles as $vehicle) {
+        $label = m360_rw_customer_dashboard_safe_text((string)($vehicle['label'] ?? ''), 'خودرو');
+        $plate = m360_rw_customer_dashboard_safe_text((string)($vehicle['plate'] ?? ''), '');
+        $key = $plate !== '' && $plate !== '—' ? $plate : $label;
+        $out[] = [
+            'label' => $label,
+            'plate' => $plate !== '—' ? $plate : '',
+            'active_case_count' => (int)($counts[$key] ?? 0),
+            'last_service' => '—',
+            'status_label' => ((int)($counts[$key] ?? 0)) > 0 ? 'دارای پرونده فعال' : 'بدون پرونده فعال',
+        ];
+    }
+    if ($out === [] && $activeCases !== []) {
+        foreach ($activeCases as $case) {
+            $out[] = [
+                'label' => (string)($case['vehicle_display'] ?? 'خودرو'),
+                'plate' => (string)($case['vehicle_plate'] ?? ''),
+                'active_case_count' => 1,
+                'last_service' => (string)($case['service_type'] ?? '—'),
+                'status_label' => (string)($case['stage_label'] ?? 'در حال بررسی'),
+            ];
+        }
+    }
+
+    return $out;
+}
+
+/**
+ * @param array<string, string> $query
+ * @return array<string, mixed>
+ */
+function m360_rw_customer_dashboard_build($conn, string $verifiedMobile, array $query = []): array
+{
+    $started = microtime(true);
+    m360_rw_customer_dashboard_perf_reset();
+    m360_rw_customer_dashboard_perf_inc('sql_statements');
+
+    $identity = m360_rw_customer_profile_resolve_display_identity($conn, $verifiedMobile);
+    $customerId = (int)($identity['customer_id'] ?? 0);
+    $customerRow = m360_rw_customer_profile_fetch_customer_row($conn, $verifiedMobile);
+    $customer = m360_rw_customer_profile_normalize_customer_row($customerRow);
+
+    m360_rw_customer_dashboard_perf_inc('request_fetches');
+    $requests = m360_rw_customer_profile_fetch_online_requests_by_mobile($conn, $verifiedMobile);
+    $activeCases = [];
+    $historyCases = [];
+    foreach ($requests as $row) {
+        $card = m360_rw_customer_dashboard_format_request_card($conn, $row, $verifiedMobile);
+        if ($card === []) {
+            continue;
+        }
+        if (!empty($card['is_terminal'])) {
+            $historyCases[] = $card;
+        } else {
+            $activeCases[] = $card;
+        }
+    }
+
+    m360_rw_customer_dashboard_perf_inc('task_queries');
+    $inbox = [];
+    if (function_exists('m360_cartable_list_dashboard_inbox')) {
+        $inbox = m360_cartable_list_dashboard_inbox($conn, $customerId, $verifiedMobile);
+    } else {
+        $tasks = m360_rw_customer_profile_canonical_active_contract_tasks($conn, $customerId, $verifiedMobile);
+        foreach ($tasks as $taskRow) {
+            $formatted = m360_rw_customer_profile_format_canonical_active_contract_task($conn, $customerId, $verifiedMobile, $taskRow);
+            if ($formatted === null) {
+                continue;
+            }
+            $inbox[] = [
+                'task_id' => (int)($taskRow['task_id'] ?? 0),
+                'title' => (string)($formatted['title'] ?? ''),
+                'message' => (string)($formatted['message'] ?? ''),
+                'priority' => (int)($taskRow['priority'] ?? 50),
+                'status_label' => (string)($formatted['status_label'] ?? ''),
+                'context' => (string)($formatted['jobcard_code'] ?? ''),
+                'action_label' => (string)($formatted['action_label'] ?? ''),
+                'action_url' => (string)($formatted['review_url'] ?? ''),
+            ];
+        }
+    }
+
+    $historyPage = max(1, (int)($query['history_page'] ?? 1));
+    $perPage = 20;
+    $historyTotal = count($historyCases);
+    $historyPages = max(1, (int)ceil($historyTotal / $perPage));
+    if ($historyPage > $historyPages) {
+        $historyPage = $historyPages;
+    }
+    $historySlice = array_slice($historyCases, ($historyPage - 1) * $perPage, $perPage);
+
+    $vehicles = m360_rw_customer_dashboard_list_vehicles_enriched($conn, $customerId, $verifiedMobile, $activeCases);
+
+    $banners = [];
+    if ((string)($query['contract_signed'] ?? '') === '1') {
+        $banners[] = [
+            'id' => 'contract_signed',
+            'title' => 'قرارداد با موفقیت امضا و تأیید شد.',
+            'message' => 'پرونده شما برای ادامه فرایند پذیرش ارسال شده است.',
+        ];
+    }
+    if ((string)($query['request_created'] ?? '') === '1') {
+        $banners[] = [
+            'id' => 'request_created',
+            'title' => 'درخواست خدمت با موفقیت ثبت شد.',
+            'message' => 'پرونده جدید شما در بخش پرونده‌های در جریان قابل پیگیری است.',
+        ];
+    }
+
+    return [
+        'identity' => $identity,
+        'customer' => $customer,
+        'banners' => $banners,
+        'inbox' => $inbox,
+        'active_task_count' => count($inbox),
+        'active_cases' => $activeCases,
+        'history_cases' => $historySlice,
+        'history_page' => $historyPage,
+        'history_total' => $historyTotal,
+        'history_pages' => $historyPages,
+        'vehicles' => $vehicles,
+        'financial' => [
+            'available' => false,
+            'open_invoice_count' => 0,
+            'outstanding_balance' => null,
+            'message' => 'صورتحساب باز یا پرداخت معوقی برای شما ثبت نشده است.',
+        ],
+        'notifications' => [
+            'available' => false,
+            'message' => 'پیام یا اعلان جدیدی ثبت نشده است.',
+        ],
+        'metrics' => m360_rw_customer_dashboard_perf_snapshot($started),
+    ];
+}
+
 function m360_rw_customer_profile_contract_jobcard_code(int $requestId): string
 {
     return 'REQ-' . (string)$requestId;

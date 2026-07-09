@@ -824,3 +824,43 @@ function m360_cartable_nullable_int(mixed $value): ?int
 
     return $int > 0 ? $int : null;
 }
+
+/**
+ * @return list<array<string, mixed>>
+ */
+function m360_cartable_list_dashboard_inbox($conn, int $customerId, string $mobile): array
+{
+    if (!is_resource($conn)) {
+        return [];
+    }
+    $tasks = m360_cartable_list_active_for_customer($conn, $customerId > 0 ? $customerId : null, $mobile);
+    $items = [];
+    foreach ($tasks as $taskRow) {
+        if (!m360_cartable_task_belongs_to_customer($taskRow, $customerId > 0 ? $customerId : null, $mobile)) {
+            continue;
+        }
+        $requestId = (int)($taskRow['online_request_id'] ?? 0);
+        $requestRow = $requestId > 0 ? m360_online_req_fetch_by_id($conn, $requestId) : null;
+        $payload = $requestRow !== null
+            ? m360_rw_intake_payload_for_recovery(m360_online_req_parse_payload($requestRow['request_payload_json'] ?? null))
+            : [];
+        $action = m360_cartable_resolve_task_action($conn, $taskRow, $requestRow, $payload);
+        $status = (string)($taskRow['status'] ?? M360_CARTABLE_STATUS_PENDING);
+        $statusLabels = [
+            M360_CARTABLE_STATUS_PENDING => 'نیازمند اقدام',
+            M360_CARTABLE_STATUS_OPENED => 'در حال انجام',
+        ];
+        $items[] = [
+            'task_id' => (int)($taskRow['task_id'] ?? 0),
+            'title' => (string)($taskRow['title'] ?? M360_CARTABLE_CONTRACT_TITLE_FA),
+            'message' => (string)($taskRow['message'] ?? M360_CARTABLE_CONTRACT_MESSAGE_FA),
+            'priority' => (int)($taskRow['priority'] ?? 50),
+            'status_label' => $statusLabels[$status] ?? 'نیازمند اقدام',
+            'context' => $requestId > 0 ? 'REQ-' . (string)$requestId : '',
+            'action_label' => $action['ok'] ? 'بررسی و امضای قرارداد' : '',
+            'action_url' => $action['ok'] ? (string)$action['review_url'] : '',
+        ];
+    }
+
+    return $items;
+}
