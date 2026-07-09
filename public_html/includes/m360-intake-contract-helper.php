@@ -397,6 +397,32 @@ function m360_intake_contract_generate_for_online_request(
     m360_intake_contract_record_event($conn, $contractId, 'CONTRACT_ISSUED', 'online_request #' . $onlineRequestId, $userId);
     m360_intake_contract_record_event($conn, $contractId, 'CUSTOMER_SIGNATURE_TASK_CREATED', null, $userId);
 
+    if ($contractId > 0 && function_exists('m360_rw_intake_ensure_canonical_contract_cartable_task')) {
+        $requestRow = function_exists('m360_online_req_fetch_by_id')
+            ? m360_online_req_fetch_by_id($conn, $onlineRequestId)
+            : null;
+        $payload = [];
+        if (is_array($requestRow)) {
+            $payload = function_exists('m360_online_req_parse_payload')
+                ? m360_online_req_parse_payload($requestRow['request_payload_json'] ?? null)
+                : [];
+            if (function_exists('m360_rw_intake_payload_for_recovery')) {
+                $payload = m360_rw_intake_payload_for_recovery($payload);
+            }
+        }
+        m360_rw_intake_ensure_canonical_contract_cartable_task(
+            $conn,
+            $onlineRequestId,
+            is_array($requestRow) ? $requestRow : ['customer_id' => $customerId, 'mobile' => $mobile],
+            $payload,
+            $contractId,
+            $tokenHash,
+            $expires,
+            'STAFF',
+            (string)$userId
+        );
+    }
+
     return ['ok' => true, 'message' => 'قرارداد پذیرش تولید شد.', 'contract_id' => $contractId, 'reused' => false];
 }
 
@@ -452,6 +478,133 @@ function m360_intake_contract_patch_workflow_meta($conn, int $contractId, array 
     );
 
     return ['ok' => $ok !== false, 'message' => $ok !== false ? '' : 'ذخیره وضعیت قرارداد ناموفق بود.'];
+}
+
+/**
+ * @return array<string, string>
+ */
+function m360_intake_contract_pre_signature_workflow_reset_patch(): array
+{
+    return [
+        'review_completed_at' => '',
+        'consent_at' => '',
+        'consent_text' => '',
+        'signature_draft_hash' => '',
+        'signature_draft_at' => '',
+        'signature_confirmed_at' => '',
+        'signature_confirmed_hash' => '',
+        'signature_contract_body_hash' => '',
+        'signature_contract_version' => '',
+    ];
+}
+
+function m360_intake_contract_count_signature_rows($conn, int $contractId): int
+{
+    if (!is_resource($conn) || $contractId < 1 || !m360_intake_contract_table_exists($conn, M360_CONTRACT_SIG_TABLE)) {
+        return 0;
+    }
+    $sql = 'SELECT COUNT(1) AS cnt FROM dbo.' . M360_CONTRACT_SIG_TABLE . ' WHERE contract_id = ?';
+    $stmt = @odbc_prepare($conn, $sql);
+    if ($stmt === false || !@odbc_execute($stmt, [$contractId])) {
+        return 0;
+    }
+    $row = odbc_fetch_array($stmt);
+    if (!is_array($row)) {
+        return 0;
+    }
+
+    return (int)($row['cnt'] ?? 0);
+}
+
+/**
+ * Controlled reset of reversible pre-signature workflow state for UAT recovery.
+ *
+ * @return array{ok:bool,message:string,before?:array<string,mixed>,after?:array<string,mixed>,event_recorded?:bool}
+ */
+function m360_intake_contract_reset_pre_signature_uat_state(
+    $conn,
+    int $contractId,
+    string $reason = 'owner_clean_end_to_end_signature_uat',
+    string $phase = 'WAVE_1C_B2_12'
+): array {
+    if (!is_resource($conn) || $contractId < 1) {
+        return ['ok' => false, 'message' => 'شناسه قرارداد معتبر نیست.'];
+    }
+
+    $row = m360_intake_contract_fetch_by_id($conn, $contractId);
+    if ($row === null) {
+        return ['ok' => false, 'message' => 'قرارداد یافت نشد.'];
+    }
+    if (m360_intake_contract_is_signed($row)) {
+        return ['ok' => false, 'message' => 'قرارداد قبلاً امضا شده و قابل بازنشانی UAT نیست.'];
+    }
+    if (trim((string)($row['signed_at'] ?? '')) !== '') {
+        return ['ok' => false, 'message' => 'signed_at برای این قرارداد مقدار دارد.'];
+    }
+    if (m360_intake_contract_count_signature_rows($conn, $contractId) > 0) {
+        return ['ok' => false, 'message' => 'رد امضای نهایی برای این قرارداد وجود دارد.'];
+    }
+
+    $status = strtoupper((string)($row['contract_status'] ?? ''));
+    $allowedStatuses = [
+        M360_CONTRACT_STATUS_SENT,
+        M360_CONTRACT_STATUS_VIEWED,
+        M360_CONTRACT_STATUS_GENERATED,
+        M360_CONTRACT_STATUS_OTP_SENT,
+    ];
+    if (!in_array($status, $allowedStatuses, true)) {
+        return ['ok' => false, 'message' => 'وضعیت قرارداد برای بازنشانی UAT مجاز نیست: ' . $status];
+    }
+
+    $beforeWorkflow = m360_intake_contract_get_workflow_meta($row);
+    $before = [
+        'contract_status' => $status,
+        'review_completed_at' => (string)($beforeWorkflow['review_completed_at'] ?? ''),
+        'consent_at' => (string)($beforeWorkflow['consent_at'] ?? ''),
+        'signature_confirmed_at' => (string)($beforeWorkflow['signature_confirmed_at'] ?? ''),
+        'signature_confirmed_hash' => (string)($beforeWorkflow['signature_confirmed_hash'] ?? ''),
+    ];
+
+    $patchResult = m360_intake_contract_patch_workflow_meta($conn, $contractId, m360_intake_contract_pre_signature_workflow_reset_patch());
+    if (!$patchResult['ok']) {
+        return $patchResult;
+    }
+
+    if ($status !== M360_CONTRACT_STATUS_SENT) {
+        customer_core_execute(
+            $conn,
+            'UPDATE dbo.' . M360_CONTRACT_TABLE . ' SET contract_status = ?, updated_at = SYSUTCDATETIME() WHERE contract_id = ? AND contract_status <> ?',
+            [M360_CONTRACT_STATUS_SENT, $contractId, M360_CONTRACT_STATUS_SIGNED]
+        );
+    }
+
+    $metadata = json_encode([
+        'reason' => $reason,
+        'scope' => 'pre_signature_reversible_state',
+        'phase' => $phase,
+    ], JSON_UNESCAPED_UNICODE);
+    if ($metadata === false) {
+        $metadata = '{"reason":"owner_clean_end_to_end_signature_uat","scope":"pre_signature_reversible_state","phase":"WAVE_1C_B2_12"}';
+    }
+    m360_intake_contract_record_event($conn, $contractId, 'UAT_STATE_RESET', $metadata, null);
+
+    $afterRow = m360_intake_contract_fetch_by_id($conn, $contractId) ?? $row;
+    $afterWorkflow = m360_intake_contract_get_workflow_meta($afterRow);
+    $after = [
+        'contract_status' => strtoupper((string)($afterRow['contract_status'] ?? '')),
+        'review_completed_at' => (string)($afterWorkflow['review_completed_at'] ?? ''),
+        'consent_at' => (string)($afterWorkflow['consent_at'] ?? ''),
+        'signature_confirmed_at' => (string)($afterWorkflow['signature_confirmed_at'] ?? ''),
+        'signature_confirmed_hash' => (string)($afterWorkflow['signature_confirmed_hash'] ?? ''),
+    ];
+
+    return [
+        'ok' => true,
+        'message' => 'وضعیت UAT پیش از امضا بازنشانی شد.',
+        'before' => $before,
+        'after' => $after,
+        'event_recorded' => true,
+    ];
 }
 
 function m360_intake_contract_record_event(

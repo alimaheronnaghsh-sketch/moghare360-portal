@@ -7,22 +7,50 @@ require_once dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_
 header('Content-Type: text/html; charset=UTF-8');
 header('X-Robots-Tag: noindex, nofollow');
 
-if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
-    header('Location: customer-intake-contract.php');
+function m360_contract_sign_app_root_web_path(): string
+{
+    $script = str_replace('\\', '/', (string)($_SERVER['SCRIPT_NAME'] ?? ''));
+    $root = dirname($script, 3);
+    if ($root === '/' || $root === '.' || $root === '') {
+        return '';
+    }
+
+    return rtrim($root, '/');
+}
+
+function m360_contract_sign_app_root_url(string $pathAndQuery): string
+{
+    $path = str_starts_with($pathAndQuery, '/') ? $pathAndQuery : '/' . ltrim($pathAndQuery, '/');
+    $root = m360_contract_sign_app_root_web_path();
+
+    return $root . $path;
+}
+
+function m360_contract_sign_redirect(string $pathAndQuery): never
+{
+    header('Location: ' . m360_contract_sign_app_root_url($pathAndQuery), true, 302);
     exit;
+}
+
+if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
+    m360_contract_sign_redirect('/customer-intake-contract.php');
 }
 
 $token = trim((string)($_POST['token'] ?? $_POST['t'] ?? ''));
-$signUrl = 'customer-intake-contract-review.php?t=' . rawurlencode($token);
+$reviewUrl = '/customer-intake-contract-review.php?t=' . rawurlencode($token);
 $resolved = m360_contract_resolve_token($token);
 
 if (!$resolved['ok'] || !is_array($resolved['contract'])) {
-    header('Location: ' . $signUrl . '&msg=' . rawurlencode($resolved['message']) . '&ok=0');
-    exit;
+    m360_contract_sign_redirect($reviewUrl . '&msg=' . rawurlencode($resolved['message']) . '&ok=0');
+}
+
+$contractRow = $resolved['contract'];
+if (m360_intake_contract_is_signed($contractRow)) {
+    m360_contract_sign_redirect('/customer-profile.php?contract_signed=1');
 }
 
 $result = m360_contract_complete_signature(
-    $resolved['contract'],
+    $contractRow,
     $token,
     trim((string)($_POST['signature_data'] ?? '')),
     isset($_POST['confirm_read']),
@@ -31,5 +59,8 @@ $result = m360_contract_complete_signature(
     trim((string)($_POST['otp_code'] ?? ''))
 );
 
-header('Location: ' . $signUrl . '&msg=' . rawurlencode($result['message']) . '&ok=' . ($result['ok'] ? '1' : '0'));
-exit;
+if ($result['ok']) {
+    m360_contract_sign_redirect('/customer-profile.php?contract_signed=1');
+}
+
+m360_contract_sign_redirect($reviewUrl . '&msg=' . rawurlencode($result['message']) . '&ok=0');

@@ -8,6 +8,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'm360-reception-helper.php';
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'm360-intake-contract-helper.php';
+require_once __DIR__ . DIRECTORY_SEPARATOR . 'm360-customer-cartable-helper.php';
 
 function m360_rw_h(string $value): string
 {
@@ -4478,6 +4479,90 @@ function m360_rw_customer_profile_refresh_task_review_access($conn, int $request
  *   counts_toward_badge:bool
  * }>
  */
+/**
+ * @return list<array<string, mixed>>
+ */
+function m360_rw_customer_profile_canonical_active_contract_tasks($conn, int $customerId, string $customerMobile): array
+{
+    if (!is_resource($conn) || !m360_cartable_tables_available($conn)) {
+        return [];
+    }
+
+    return m360_cartable_list_active_for_customer(
+        $conn,
+        $customerId > 0 ? $customerId : null,
+        $customerMobile,
+        M360_CARTABLE_TASK_TYPE_CONTRACT_SIGNATURE
+    );
+}
+
+function m360_rw_customer_profile_canonical_contract_badge_count($conn, int $customerId, string $customerMobile): int
+{
+    if (!is_resource($conn) || !m360_cartable_tables_available($conn)) {
+        return 0;
+    }
+
+    return m360_cartable_count_active_for_customer(
+        $conn,
+        $customerId > 0 ? $customerId : null,
+        $customerMobile
+    );
+}
+
+/**
+ * @param array<string, string>|null $cartableTask
+ * @return ?array<string, mixed>
+ */
+function m360_rw_customer_profile_format_canonical_active_contract_task(
+    $conn,
+    int $customerId,
+    string $customerMobile,
+    ?array $cartableTask
+): ?array {
+    if (!is_resource($conn) || $cartableTask === null || $cartableTask === []) {
+        return null;
+    }
+    if (!m360_cartable_task_belongs_to_customer($cartableTask, $customerId > 0 ? $customerId : null, $customerMobile)) {
+        return null;
+    }
+
+    $requestId = (int)($cartableTask['online_request_id'] ?? 0);
+    $requestRow = $requestId > 0 ? m360_online_req_fetch_by_id($conn, $requestId) : null;
+    $payload = $requestRow !== null
+        ? m360_rw_intake_payload_for_recovery(m360_online_req_parse_payload($requestRow['request_payload_json'] ?? null))
+        : [];
+
+    $action = m360_cartable_resolve_task_action($conn, $cartableTask, $requestRow, $payload);
+    if (!$action['ok'] || trim((string)$action['review_url']) === '') {
+        return null;
+    }
+
+    return [
+        'classification' => M360_RW_CUSTOMER_PROFILE_CONTRACT_CLASS_PENDING_SIGNATURE,
+        'online_request_id' => $requestId,
+        'jobcard_code' => m360_rw_customer_profile_contract_jobcard_code($requestId),
+        'title' => trim((string)($cartableTask['title'] ?? '')) !== ''
+            ? (string)$cartableTask['title']
+            : M360_RW_INTAKE_CARTABLE_TASK_TITLE_FA,
+        'message' => trim((string)($cartableTask['message'] ?? '')) !== ''
+            ? (string)$cartableTask['message']
+            : M360_RW_INTAKE_CARTABLE_TASK_MESSAGE_FA,
+        'status_label' => M360_RW_INTAKE_CARTABLE_TASK_STATUS_ACTION_FA,
+        'action_label' => M360_RW_INTAKE_CARTABLE_TASK_ACTION_LABEL_FA,
+        'review_url' => (string)$action['review_url'],
+        'is_active' => true,
+        'is_completed' => false,
+        'is_legacy' => false,
+        'counts_toward_badge' => true,
+        'canonical_task_id' => (int)($cartableTask['task_id'] ?? 0),
+    ];
+}
+
+/**
+ * Historical contract cards only (signed canonical + legacy accepted). Active inbox uses canonical table.
+ *
+ * @return list<array<string, mixed>>
+ */
 function m360_rw_customer_profile_contract_cartable_tasks($conn, string $customerMobile): array
 {
     if (!is_resource($conn)) {
@@ -4489,7 +4574,6 @@ function m360_rw_customer_profile_contract_cartable_tasks($conn, string $custome
     }
 
     $requests = m360_rw_customer_profile_fetch_online_requests_by_mobile($conn, $customerMobile);
-    $activeCandidates = [];
     $historical = [];
 
     foreach ($requests as $requestRow) {
@@ -4499,10 +4583,6 @@ function m360_rw_customer_profile_contract_cartable_tasks($conn, string $custome
             continue;
         }
         if ($classification === M360_RW_CUSTOMER_PROFILE_CONTRACT_CLASS_PENDING_SIGNATURE) {
-            $requestId = (int)($classified['online_request_id'] ?? 0);
-            if ($requestId > 0) {
-                $activeCandidates[$requestId] = $classified;
-            }
             continue;
         }
         $historical[] = $classified;
@@ -4512,16 +4592,7 @@ function m360_rw_customer_profile_contract_cartable_tasks($conn, string $custome
         return (int)($b['online_request_id'] ?? 0) <=> (int)($a['online_request_id'] ?? 0);
     });
 
-    $tasks = [];
-    if ($activeCandidates !== []) {
-        krsort($activeCandidates);
-        $tasks[] = array_values($activeCandidates)[0];
-    }
-    foreach ($historical as $item) {
-        $tasks[] = $item;
-    }
-
-    return $tasks;
+    return $historical;
 }
 
 /**
@@ -4532,13 +4603,6 @@ function m360_rw_customer_profile_contract_badge_count(array $tasks): int
     $count = 0;
     foreach ($tasks as $task) {
         if (!empty($task['counts_toward_badge'])) {
-            $count++;
-            continue;
-        }
-        if (
-            !empty($task['is_active'])
-            && (string)($task['classification'] ?? '') === M360_RW_CUSTOMER_PROFILE_CONTRACT_CLASS_PENDING_SIGNATURE
-        ) {
             $count++;
         }
     }
@@ -4673,6 +4737,109 @@ function m360_rw_customer_profile_normalize_customer_row(?array $row): array
         'address' => trim((string)($row['address'] ?? '')),
         'city' => trim((string)($row['city'] ?? '')),
         'customer_id' => trim((string)($row['customer_id'] ?? '')),
+    ];
+}
+
+/**
+ * @return array{
+ *   full_name:string,
+ *   display_name:string,
+ *   primary_mobile:string,
+ *   address:string,
+ *   city:string,
+ *   customer_id:int,
+ *   source:string,
+ *   profile_complete:bool,
+ *   needs_completion:bool
+ * }
+ */
+function m360_rw_customer_profile_resolve_display_identity($conn, string $verifiedMobile): array
+{
+    $normalizedMobile = m360_rw_customer_profile_normalize_mobile($verifiedMobile);
+    $empty = [
+        'full_name' => '',
+        'display_name' => '',
+        'primary_mobile' => $normalizedMobile,
+        'address' => '',
+        'city' => '',
+        'customer_id' => 0,
+        'source' => 'verified_mobile_only',
+        'profile_complete' => false,
+        'needs_completion' => true,
+    ];
+    if (!is_resource($conn) || $normalizedMobile === '') {
+        return $empty;
+    }
+
+    $customerRow = m360_rw_customer_profile_fetch_customer_row($conn, $normalizedMobile);
+    $customer = m360_rw_customer_profile_normalize_customer_row($customerRow);
+    $customerId = (int)($customer['customer_id'] ?? 0);
+    $fullName = trim((string)($customer['full_name'] ?? ''));
+    $address = trim((string)($customer['address'] ?? ''));
+    $city = trim((string)($customer['city'] ?? ''));
+    $nationalId = trim((string)($customer['national_id'] ?? ''));
+    $source = 'canonical_customer';
+
+    if ($fullName === '') {
+        $requests = m360_rw_customer_profile_fetch_online_requests_by_mobile($conn, $normalizedMobile);
+        foreach ($requests as $requestRow) {
+            $requestMobile = m360_rw_customer_profile_normalize_mobile((string)($requestRow['mobile'] ?? ''));
+            if ($requestMobile !== $normalizedMobile) {
+                continue;
+            }
+            $name = trim((string)($requestRow['customer_name'] ?? ''));
+            if ($name === '') {
+                $payload = m360_online_req_parse_payload($requestRow['request_payload_json'] ?? null);
+                $payload = m360_rw_intake_payload_for_recovery($payload);
+                $summary = m360_rw_intake_contract_review_summary($payload, $requestRow);
+                $name = trim((string)($summary['customer_name'] ?? ''));
+            }
+            if ($name !== '') {
+                $fullName = $name;
+                $source = 'request_snapshot';
+                break;
+            }
+        }
+    }
+
+    if ($fullName === '' && m360_cartable_tables_available($conn)) {
+        $tasks = m360_cartable_list_active_for_customer($conn, $customerId > 0 ? $customerId : null, $normalizedMobile);
+        foreach ($tasks as $taskRow) {
+            $requestId = (int)($taskRow['online_request_id'] ?? 0);
+            if ($requestId < 1) {
+                continue;
+            }
+            $requestRow = m360_online_req_fetch_by_id($conn, $requestId);
+            if ($requestRow === null) {
+                continue;
+            }
+            $requestMobile = m360_rw_customer_profile_normalize_mobile((string)($requestRow['mobile'] ?? ''));
+            if ($requestMobile !== $normalizedMobile) {
+                continue;
+            }
+            $name = trim((string)($requestRow['customer_name'] ?? ''));
+            if ($name !== '') {
+                $fullName = $name;
+                $source = 'contract_task_snapshot';
+                break;
+            }
+        }
+    }
+
+    $profileComplete = $fullName !== ''
+        && preg_match('/^[0-9]{10}$/', $nationalId) === 1
+        && $address !== '';
+
+    return [
+        'full_name' => $fullName,
+        'display_name' => $fullName !== '' ? $fullName : 'مشتری',
+        'primary_mobile' => $normalizedMobile,
+        'address' => $address,
+        'city' => $city,
+        'customer_id' => $customerId,
+        'source' => $source,
+        'profile_complete' => $profileComplete,
+        'needs_completion' => !$profileComplete,
     ];
 }
 
@@ -5287,6 +5454,20 @@ function m360_rw_intake_bootstrap_contract_cartable_task($conn, int $requestId, 
     }
     $contractId = (int)($generated['contract_id'] ?? 0);
 
+    if ($contractId > 0) {
+        m360_rw_intake_ensure_canonical_contract_cartable_task(
+            $conn,
+            $requestId,
+            $requestRow,
+            $payload,
+            $contractId,
+            $tokenHash,
+            $expires,
+            'STAFF',
+            (string)$userId
+        );
+    }
+
     if (!isset($payload['reception_intake']['customer_cartable']) || !is_array($payload['reception_intake']['customer_cartable'])) {
         $payload['reception_intake']['customer_cartable'] = [];
     }
@@ -5346,7 +5527,26 @@ function m360_rw_intake_ensure_db_contract_for_cartable($conn, int $requestId, a
     }
     $existing = m360_intake_contract_find_active_for_online_request($conn, $requestId);
     if ($existing !== null) {
-        return ['ok' => true, 'contract_id' => (int)$existing['contract_id'], 'message' => ''];
+        $contractId = (int)($existing['contract_id'] ?? 0);
+        if ($contractId > 0) {
+            $payload = m360_rw_intake_ensure_nested($payload);
+            $task = m360_rw_intake_contract_cartable_task($payload);
+            $tokenHash = trim((string)($task['access_token_hash'] ?? ($existing['secure_token_hash'] ?? '')));
+            $expires = trim((string)($task['access_token_expires_at'] ?? ($existing['secure_token_expires_at'] ?? '')));
+            m360_rw_intake_ensure_canonical_contract_cartable_task(
+                $conn,
+                $requestId,
+                $requestRow,
+                $payload,
+                $contractId,
+                $tokenHash,
+                $expires,
+                'SYSTEM',
+                'ensure_db_contract_existing'
+            );
+        }
+
+        return ['ok' => true, 'contract_id' => $contractId, 'message' => ''];
     }
     $payload = m360_rw_intake_ensure_nested($payload);
     $task = m360_rw_intake_contract_cartable_task($payload);
@@ -5386,12 +5586,156 @@ function m360_rw_intake_ensure_db_contract_for_cartable($conn, int $requestId, a
     }
     $contractId = (int)($generated['contract_id'] ?? 0);
     if ($contractId > 0) {
+        $task = m360_rw_intake_contract_cartable_task($payload);
+        $tokenHash = trim((string)($task['access_token_hash'] ?? ''));
+        if ($tokenHash === '' && function_exists('m360_rw_intake_contract_token_hash')) {
+            $tokenHash = m360_rw_intake_contract_token_hash($rawToken);
+        }
+        m360_rw_intake_ensure_canonical_contract_cartable_task(
+            $conn,
+            $requestId,
+            $requestRow,
+            $payload,
+            $contractId,
+            $tokenHash,
+            $expires,
+            'SYSTEM',
+            'ensure_db_contract'
+        );
         $payload['reception_intake']['contract']['contract_id'] = (string)$contractId;
         $payload['reception_intake']['customer_cartable']['contract_task']['contract_id'] = (string)$contractId;
         m360_rw_intake_persist_payload($conn, $requestId, $payload, []);
     }
 
     return ['ok' => $contractId > 0, 'contract_id' => $contractId, 'message' => ''];
+}
+
+/**
+ * @param array<string, mixed> $requestRow
+ * @param array<string, mixed> $payload
+ * @return array{ok:bool,task_id:int,created_new:bool,message:string}
+ */
+function m360_rw_intake_ensure_canonical_contract_cartable_task(
+    $conn,
+    int $requestId,
+    array $requestRow,
+    array $payload,
+    int $contractId,
+    string $tokenHash,
+    string $tokenExpiresAt,
+    string $actorType,
+    ?string $actorId
+): array {
+    $empty = ['ok' => false, 'task_id' => 0, 'created_new' => false, 'message' => ''];
+    if (!is_resource($conn) || $requestId < 1 || $contractId < 1 || !m360_cartable_tables_available($conn)) {
+        return array_merge($empty, ['message' => 'unavailable']);
+    }
+
+    $mobile = m360_rw_intake_resolve_mobile_for_otp($requestRow, $payload);
+    $mobile = m360_cartable_normalize_mobile($mobile);
+    if ($mobile === '') {
+        return array_merge($empty, ['message' => 'missing_mobile']);
+    }
+
+    $customerId = (int)($requestRow['customer_id'] ?? 0);
+    if ($customerId < 1) {
+        $customerRow = m360_rw_customer_profile_fetch_customer_row($conn, $mobile);
+        $customerId = (int)($customerRow['customer_id'] ?? 0);
+    }
+
+    $expiresAt = trim($tokenExpiresAt) !== '' ? str_replace('T', ' ', substr($tokenExpiresAt, 0, 19)) : null;
+    $created = m360_cartable_create_or_get_active($conn, [
+        'customer_id' => $customerId > 0 ? $customerId : null,
+        'customer_mobile_normalized' => $mobile,
+        'task_type' => M360_CARTABLE_TASK_TYPE_CONTRACT_SIGNATURE,
+        'title' => M360_CARTABLE_CONTRACT_TITLE_FA,
+        'message' => M360_CARTABLE_CONTRACT_MESSAGE_FA,
+        'priority' => M360_CARTABLE_CONTRACT_PRIORITY,
+        'status' => M360_CARTABLE_STATUS_PENDING,
+        'source_module' => M360_CARTABLE_SOURCE_MODULE_INTAKE_CONTRACT,
+        'source_entity_type' => M360_CARTABLE_SOURCE_ENTITY_TYPE_INTAKE_CONTRACT,
+        'source_entity_id' => (string)$contractId,
+        'online_request_id' => $requestId,
+        'contract_id' => $contractId,
+        'action_route' => M360_CARTABLE_CONTRACT_ACTION_ROUTE,
+        'action_token_hash' => trim($tokenHash) !== '' ? trim($tokenHash) : null,
+        'action_expires_at' => $expiresAt,
+        'created_by_actor_type' => $actorType,
+        'created_by_actor_id' => $actorId,
+        'event_type' => M360_CARTABLE_EVENT_SYNCED_FROM_MODULE,
+        'event_metadata' => ['online_request_id' => $requestId, 'contract_id' => $contractId],
+    ]);
+
+    if (!$created['ok']) {
+        return array_merge($empty, ['message' => (string)$created['message']]);
+    }
+
+    if ($created['created_new']) {
+        m360_cartable_append_event(
+            $conn,
+            (int)$created['task_id'],
+            M360_CARTABLE_EVENT_SYNCED_TO_COMPATIBILITY_PAYLOAD,
+            $actorType,
+            $actorId,
+            null,
+            null,
+            ['online_request_id' => $requestId, 'contract_id' => $contractId]
+        );
+    }
+
+    return [
+        'ok' => true,
+        'task_id' => (int)$created['task_id'],
+        'created_new' => (bool)$created['created_new'],
+        'message' => '',
+    ];
+}
+
+/**
+ * @param array<string, mixed> $contractRow
+ * @return array{ok:bool,message:string,changed:bool,compatibility_only:bool}
+ */
+function m360_rw_intake_complete_canonical_contract_cartable_task(
+    $conn,
+    array $contractRow,
+    string $completedChannel = 'CUSTOMER_PORTAL'
+): array {
+    $empty = ['ok' => false, 'message' => 'unavailable', 'changed' => false, 'compatibility_only' => false];
+    if (!is_resource($conn) || !m360_cartable_tables_available($conn)) {
+        return $empty;
+    }
+
+    $contractId = (int)($contractRow['contract_id'] ?? 0);
+    if ($contractId < 1) {
+        return array_merge($empty, ['message' => 'missing_contract']);
+    }
+
+    $task = m360_cartable_find_active_by_source(
+        $conn,
+        M360_CARTABLE_SOURCE_MODULE_INTAKE_CONTRACT,
+        M360_CARTABLE_SOURCE_ENTITY_TYPE_INTAKE_CONTRACT,
+        (string)$contractId,
+        M360_CARTABLE_TASK_TYPE_CONTRACT_SIGNATURE
+    );
+    if ($task === null) {
+        return ['ok' => true, 'message' => 'no_canonical_task', 'changed' => false, 'compatibility_only' => true];
+    }
+
+    $result = m360_cartable_complete_task(
+        $conn,
+        (int)$task['task_id'],
+        'CUSTOMER',
+        m360_cartable_normalize_mobile((string)($contractRow['mobile'] ?? '')),
+        $completedChannel,
+        ['contract_id' => $contractId, 'online_request_id' => (int)($contractRow['online_request_id'] ?? 0)]
+    );
+
+    return [
+        'ok' => $result['ok'],
+        'message' => (string)$result['message'],
+        'changed' => (bool)$result['changed'],
+        'compatibility_only' => false,
+    ];
 }
 
 /**

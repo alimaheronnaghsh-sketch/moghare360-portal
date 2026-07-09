@@ -23,7 +23,10 @@ if (!$result['ok']) {
     mogh_api_fail($result['message'], 400);
 }
 
-$data = [];
+$binding = m360_contract_require_verified_session_mobile_for_contract($resolved['contract']);
+$data = [
+    'masked_mobile' => $binding['ok'] ? m360_contract_mask_mobile($binding['mobile']) : '',
+];
 if (!empty($result['test_mode'])) {
     $data['test_mode'] = true;
 }

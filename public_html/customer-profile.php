@@ -25,19 +25,25 @@ if (!is_resource($conn)) {
 try {
     $customerRow = m360_rw_customer_profile_fetch_customer_row($conn, $mobile);
     $customer = m360_rw_customer_profile_normalize_customer_row($customerRow);
-    $fullName = $customer['full_name'];
-    $customerId = (int)($customer['customer_id'] ?? 0);
+    $identity = m360_rw_customer_profile_resolve_display_identity($conn, $mobile);
+    $fullName = (string)$identity['display_name'];
+    $customerId = (int)($identity['customer_id'] ?? 0);
 
     $activeOnlineRequest = m360_rw_customer_profile_detect_active_online_request($conn, $mobile);
     $vehicles = $customerId > 0 ? m360_rw_customer_profile_list_vehicles($conn, $customerId) : [];
 
+    $canonicalActiveTasks = m360_rw_customer_profile_canonical_active_contract_tasks($conn, $customerId, $mobile);
+    $erpContractBadgeCount = m360_rw_customer_profile_canonical_contract_badge_count($conn, $customerId, $mobile);
+    $erpActiveContractTask = m360_rw_customer_profile_format_canonical_active_contract_task(
+        $conn,
+        $customerId,
+        $mobile,
+        $canonicalActiveTasks[0] ?? null
+    );
     $erpContractTasks = m360_rw_customer_profile_contract_cartable_tasks($conn, $mobile);
-    $erpContractBadgeCount = m360_rw_customer_profile_contract_badge_count($erpContractTasks);
-    $erpActiveContractTask = m360_rw_customer_profile_active_contract_task($erpContractTasks);
 
-    $isProfileComplete = $fullName !== ''
-        && preg_match('/^[0-9]{10}$/', $customer['national_id']) === 1
-        && $customer['address'] !== '';
+    $isProfileComplete = (bool)$identity['profile_complete'];
+    $profileNeedsCompletion = (bool)$identity['needs_completion'];
 
     mirror_render_head('پروفایل مشتری', 'customer');
     ?>
@@ -51,13 +57,20 @@ try {
         <p class="m360-pill">کارتابل: <?= mirror_h((string)$erpContractBadgeCount) ?> مأموریت نیازمند اقدام</p>
     <?php endif; ?>
     <div class="m360-profile-summary">
-        <div class="m360-avatar" aria-hidden="true"><?= mirror_h(m360_rw_customer_profile_initial_letter($fullName !== '' ? $fullName : $mobile)) ?></div>
+        <div class="m360-avatar" aria-hidden="true"><?= mirror_h(m360_rw_customer_profile_initial_letter($identity['full_name'] !== '' ? $identity['full_name'] : $mobile)) ?></div>
         <div>
-            <h3 class="m360-step-title"><?= mirror_h($fullName !== '' ? $fullName : 'مشتری') ?></h3>
+            <h3 class="m360-step-title"><?= mirror_h($fullName) ?></h3>
             <p class="m360-muted mobile-field"><?= mirror_h($mobile) ?></p>
-            <p class="m360-muted"><?= mirror_h($customer['address'] !== '' ? $customer['address'] : 'آدرس ثبت نشده') ?></p>
-            <?php if ($customer['city'] !== ''): ?>
-                <p class="m360-muted"><?= mirror_h($customer['city']) ?></p>
+            <?php if ($profileNeedsCompletion): ?>
+                <p class="m360-alert m360-alert-info">پروفایل نیازمند تکمیل است</p>
+                <p class="m360-action-row">
+                    <a class="m360-btn m360-btn-secondary" href="customer-request.php">تکمیل اطلاعات حساب</a>
+                </p>
+            <?php endif; ?>
+            <p class="m360-muted"><?= mirror_h($identity['address'] !== '' ? $identity['address'] : ($customer['address'] !== '' ? $customer['address'] : 'آدرس ثبت نشده')) ?></p>
+            <?php $cityDisplay = $identity['city'] !== '' ? $identity['city'] : $customer['city']; ?>
+            <?php if ($cityDisplay !== ''): ?>
+                <p class="m360-muted"><?= mirror_h($cityDisplay) ?></p>
             <?php endif; ?>
         </div>
     </div>
@@ -144,7 +157,7 @@ try {
         </div>
     <?php endif; ?>
 
-    <?php if (!$isProfileComplete): ?>
+    <?php if ($profileNeedsCompletion): ?>
         <p class="m360-alert m360-alert-info" style="margin-top:1rem;">برای تکمیل اطلاعات پروفایل، از فرم درخواست آنلاین استفاده کنید.</p>
         <p class="m360-action-row">
             <a class="m360-btn m360-btn-secondary" href="customer-request.php">تکمیل پروفایل</a>
