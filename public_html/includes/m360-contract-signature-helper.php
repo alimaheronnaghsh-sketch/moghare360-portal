@@ -10,6 +10,112 @@ require_once __DIR__ . DIRECTORY_SEPARATOR . 'm360-otp-helper.php';
 
 const M360_CONTRACT_OTP_TTL = 120;
 const M360_CONTRACT_OTP_RESEND = 60;
+const M360_CONTRACT_CONSENT_TEXT_FA = 'متن قرارداد را به‌طور کامل مطالعه کردم و مفاد آن را می‌پذیرم.';
+const M360_CONTRACT_OTP_PURPOSE = 'CONTRACT_CONFIRMATION';
+
+function m360_contract_workflow_review_completed(array $contractRow): bool
+{
+    $workflow = m360_intake_contract_get_workflow_meta($contractRow);
+
+    return trim((string)($workflow['review_completed_at'] ?? '')) !== '';
+}
+
+function m360_contract_workflow_consent_accepted(array $contractRow): bool
+{
+    $workflow = m360_intake_contract_get_workflow_meta($contractRow);
+
+    return trim((string)($workflow['consent_at'] ?? '')) !== '';
+}
+
+function m360_contract_workflow_signature_draft_ready(array $contractRow): bool
+{
+    $workflow = m360_intake_contract_get_workflow_meta($contractRow);
+
+    return trim((string)($workflow['signature_draft_hash'] ?? '')) !== '';
+}
+
+/** @return array{ok:bool,message:string} */
+function m360_contract_mark_review_completed(array $contractRow): array
+{
+    if (m360_intake_contract_is_signed($contractRow)) {
+        return ['ok' => false, 'message' => 'قرارداد قبلاً تأیید شده است.'];
+    }
+    $conn = customer_core_db();
+    if ($conn === false) {
+        return ['ok' => false, 'message' => 'خطا در اتصال به سامانه.'];
+    }
+    $contractId = (int)($contractRow['contract_id'] ?? 0);
+    $patch = ['review_completed_at' => gmdate('c')];
+    $result = m360_intake_contract_patch_workflow_meta($conn, $contractId, $patch);
+    if ($result['ok']) {
+        m360_intake_contract_record_event($conn, $contractId, 'CONTRACT_REVIEW_COMPLETED', null, null);
+        customer_core_execute(
+            $conn,
+            'UPDATE dbo.' . M360_CONTRACT_TABLE . ' SET viewed_at = COALESCE(viewed_at, SYSUTCDATETIME()), contract_status = ?, updated_at = SYSUTCDATETIME() WHERE contract_id = ? AND contract_status IN (?, ?)',
+            [M360_CONTRACT_STATUS_VIEWED, $contractId, M360_CONTRACT_STATUS_SENT, M360_CONTRACT_STATUS_GENERATED]
+        );
+    }
+
+    return $result;
+}
+
+/** @return array{ok:bool,message:string} */
+function m360_contract_mark_consent_accepted(array $contractRow): array
+{
+    if (m360_intake_contract_is_signed($contractRow)) {
+        return ['ok' => false, 'message' => 'قرارداد قبلاً تأیید شده است.'];
+    }
+    if (!m360_contract_workflow_review_completed($contractRow)) {
+        return ['ok' => false, 'message' => 'ابتدا باید متن قرارداد را تا انتها مطالعه کنید.'];
+    }
+    $conn = customer_core_db();
+    if ($conn === false) {
+        return ['ok' => false, 'message' => 'خطا در اتصال به سامانه.'];
+    }
+    $contractId = (int)($contractRow['contract_id'] ?? 0);
+    $patch = [
+        'consent_at' => gmdate('c'),
+        'consent_text' => M360_CONTRACT_CONSENT_TEXT_FA,
+    ];
+    $result = m360_intake_contract_patch_workflow_meta($conn, $contractId, $patch);
+    if ($result['ok']) {
+        m360_intake_contract_record_event($conn, $contractId, 'CUSTOMER_CONSENT_ACCEPTED', M360_CONTRACT_CONSENT_TEXT_FA, null);
+    }
+
+    return $result;
+}
+
+/** @return array{ok:bool,message:string} */
+function m360_contract_save_signature_draft(array $contractRow, string $signatureImageData): array
+{
+    if (m360_intake_contract_is_signed($contractRow)) {
+        return ['ok' => false, 'message' => 'قرارداد قبلاً تأیید شده است.'];
+    }
+    if (!m360_contract_workflow_consent_accepted($contractRow)) {
+        return ['ok' => false, 'message' => 'ابتدا باید پذیرش صریح متن قرارداد را ثبت کنید.'];
+    }
+    if ($signatureImageData === '' || strlen($signatureImageData) < 100) {
+        return ['ok' => false, 'message' => 'امضای مستقیم روی صفحه الزامی است.'];
+    }
+    $conn = customer_core_db();
+    if ($conn === false) {
+        return ['ok' => false, 'message' => 'خطا در اتصال به سامانه.'];
+    }
+    $contractId = (int)($contractRow['contract_id'] ?? 0);
+    $sigHash = m360_intake_contract_hash($signatureImageData);
+    $patch = [
+        'signature_draft_hash' => $sigHash,
+        'signature_draft_at' => gmdate('c'),
+    ];
+    $result = m360_intake_contract_patch_workflow_meta($conn, $contractId, $patch);
+    if ($result['ok']) {
+        m360_contract_sig_session_start();
+        $_SESSION['m360_contract_sig_draft_' . $contractId] = $signatureImageData;
+        m360_intake_contract_record_event($conn, $contractId, 'DIRECT_SIGNATURE_CAPTURED', 'hash=' . substr($sigHash, 0, 16), null);
+    }
+
+    return $result;
+}
 
 function m360_contract_sig_session_key(int $contractId): string
 {
@@ -34,6 +140,15 @@ function m360_contract_send_otp(array $contractRow): array
     }
     if (m360_intake_contract_is_signed($contractRow)) {
         return ['ok' => false, 'message' => 'این قرارداد قبلاً امضا شده است.'];
+    }
+    if (!m360_contract_workflow_review_completed($contractRow)) {
+        return ['ok' => false, 'message' => 'ابتدا باید مطالعه کامل قرارداد ثبت شود.'];
+    }
+    if (!m360_contract_workflow_consent_accepted($contractRow)) {
+        return ['ok' => false, 'message' => 'ابتدا باید پذیرش صریح متن قرارداد ثبت شود.'];
+    }
+    if (!m360_contract_workflow_signature_draft_ready($contractRow)) {
+        return ['ok' => false, 'message' => 'ابتدا باید امضای مستقیم ثبت شود.'];
     }
 
     $key = m360_contract_sig_session_key($contractId);
@@ -63,7 +178,7 @@ function m360_contract_send_otp(array $contractRow): array
                 'UPDATE dbo.' . M360_CONTRACT_TABLE . ' SET contract_status = ?, updated_at = SYSUTCDATETIME() WHERE contract_id = ? AND contract_status <> ?',
                 [M360_CONTRACT_STATUS_OTP_SENT, $contractId, M360_CONTRACT_STATUS_SIGNED]
             );
-            m360_intake_contract_record_event($conn, $contractId, 'CONTRACT_OTP_SENT', null, null);
+            m360_intake_contract_record_event($conn, $contractId, 'CONTRACT_OTP_SENT', M360_CONTRACT_OTP_PURPOSE, null);
         }
         return ['ok' => true, 'message' => 'کد تأیید برای شما ارسال شد.'];
     }
@@ -182,11 +297,30 @@ function m360_contract_complete_signature(
     if (m360_intake_contract_is_signed($contractRow)) {
         return ['ok' => false, 'message' => 'این قرارداد قبلاً امضا شده است.'];
     }
-    if (!$readConfirmed || !$infoConfirmed || !$otpTermsConfirmed) {
-        return ['ok' => false, 'message' => 'لطفاً تمام تأییدهای الزامی را انتخاب کنید.'];
+    if (!m360_contract_workflow_review_completed($contractRow)) {
+        return ['ok' => false, 'message' => 'مطالعه کامل قرارداد ثبت نشده است.'];
+    }
+    if (!m360_contract_workflow_consent_accepted($contractRow)) {
+        return ['ok' => false, 'message' => 'پذیرش صریح متن قرارداد ثبت نشده است.'];
+    }
+    if (!$readConfirmed) {
+        return ['ok' => false, 'message' => 'تأیید مطالعه قرارداد الزامی است.'];
+    }
+    if ($signatureImageData === '' || strlen($signatureImageData) < 100) {
+        m360_contract_sig_session_start();
+        $sessionDraft = (string)($_SESSION['m360_contract_sig_draft_' . $contractId] ?? '');
+        if ($sessionDraft !== '' && strlen($sessionDraft) >= 100) {
+            $signatureImageData = $sessionDraft;
+        }
     }
     if ($signatureImageData === '' || strlen($signatureImageData) < 100) {
         return ['ok' => false, 'message' => 'امضا روی صفحه الزامی است.'];
+    }
+    $workflow = m360_intake_contract_get_workflow_meta($contractRow);
+    $draftHash = trim((string)($workflow['signature_draft_hash'] ?? ''));
+    $sigHash = m360_intake_contract_hash($signatureImageData);
+    if ($draftHash === '' || !hash_equals($draftHash, $sigHash)) {
+        return ['ok' => false, 'message' => 'امضای ثبت‌شده با امضای تأییدشده مطابقت ندارد.'];
     }
 
     $otpCheck = m360_contract_verify_otp($contractId, $mobile, $otpCode);
@@ -243,10 +377,17 @@ function m360_contract_complete_signature(
         }
     }
 
+    m360_intake_contract_record_event($conn, $contractId, 'CONTRACT_OTP_VERIFIED', M360_CONTRACT_OTP_PURPOSE, null);
+    m360_intake_contract_record_event($conn, $contractId, 'CONTRACT_CONFIRMED', null, null);
+    m360_intake_contract_record_event($conn, $contractId, 'CONTRACT_LOCKED', null, null);
     m360_intake_contract_record_event($conn, $contractId, 'CONTRACT_SIGNED', 'signed_hash=' . substr($signedHash, 0, 16), null);
+    if (function_exists('m360_rw_intake_sync_cartable_from_signed_contract')) {
+        m360_rw_intake_sync_cartable_from_signed_contract($conn, $contractRow);
+    }
     unset($_SESSION[m360_contract_sig_session_key($contractId)]);
+    unset($_SESSION['m360_contract_sig_draft_' . $contractId]);
 
-    return ['ok' => true, 'message' => 'قرارداد با موفقیت امضا شد.'];
+    return ['ok' => true, 'message' => 'قرارداد با موفقیت امضا و تأیید شد.'];
 }
 
 /** @return array{ok:bool,message:string,contract:?array} */

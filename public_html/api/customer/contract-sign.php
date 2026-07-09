@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-contract-signature-helper.php';
+require_once dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-reception-workbench-helper.php';
 
 header('Content-Type: text/html; charset=UTF-8');
 header('X-Robots-Tag: noindex, nofollow');
@@ -11,12 +12,12 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
     exit;
 }
 
-$token = trim((string)($_POST['token'] ?? ''));
-$signUrl = 'customer-intake-contract-sign.php?token=' . rawurlencode($token);
+$token = trim((string)($_POST['token'] ?? $_POST['t'] ?? ''));
+$signUrl = 'customer-intake-contract-review.php?t=' . rawurlencode($token);
 $resolved = m360_contract_resolve_token($token);
 
 if (!$resolved['ok'] || !is_array($resolved['contract'])) {
-    header('Location: customer-intake-contract.php?token=' . rawurlencode($token) . '&msg=' . rawurlencode($resolved['message']) . '&ok=0');
+    header('Location: ' . $signUrl . '&msg=' . rawurlencode($resolved['message']) . '&ok=0');
     exit;
 }
 

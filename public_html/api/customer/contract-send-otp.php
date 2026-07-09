@@ -11,7 +11,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
 }
 
 $body = mogh_api_read_json_body();
-$token = trim((string)($body['token'] ?? ''));
+$token = trim((string)($body['token'] ?? $body['t'] ?? ''));
 $resolved = m360_contract_resolve_token($token);
 
 if (!$resolved['ok'] || !is_array($resolved['contract'])) {

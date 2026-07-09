@@ -3297,6 +3297,12 @@ function m360_rw_intake_apply_action(array $payload, string $actionType, array $
                 return ['ok' => false, 'error' => 'شناسه درخواست نامعتبر است.', 'payload' => $payload, 'column_updates' => []];
             }
             $requestRow = [
+                'online_request_id' => (string)$requestId,
+                'customer_id' => (string)($post['_rw_request_customer_id'] ?? ''),
+                'vehicle_id' => (string)($post['_rw_request_vehicle_id'] ?? ''),
+                'customer_name' => trim((string)($post['_rw_request_customer_name'] ?? '')),
+                'vehicle_plate' => trim((string)($post['_rw_request_vehicle_plate'] ?? '')),
+                'visit_date' => trim((string)($post['_rw_request_visit_date'] ?? '')),
                 'mobile' => trim((string)($post['_rw_request_mobile'] ?? '')) !== ''
                     ? trim((string)$post['_rw_request_mobile'])
                     : m360_rw_intake_resolve_mobile_for_otp([], $payload),
@@ -3312,53 +3318,19 @@ function m360_rw_intake_apply_action(array $payload, string $actionType, array $
                     'column_updates' => [],
                 ];
             }
-            $payload = m360_rw_intake_ensure_nested($payload);
-            $rawToken = m360_rw_intake_contract_generate_review_token($requestId);
-            $tokenHash = m360_rw_intake_contract_token_hash($rawToken);
-            $now = gmdate('Y-m-d\TH:i:s\Z');
-            $expires = gmdate('Y-m-d\TH:i:s\Z', time() + M360_RW_INTAKE_CONTRACT_REVIEW_TTL_SECONDS);
+            $conn = customer_core_db();
             $userId = erp_auth_current_user_id() ?? ERP_PHASE1_PLATFORM_OWNER_ID;
-            $mobile = m360_rw_intake_resolve_mobile_for_otp($requestRow, $payload);
-            if (!isset($payload['reception_intake']['customer_cartable']) || !is_array($payload['reception_intake']['customer_cartable'])) {
-                $payload['reception_intake']['customer_cartable'] = [];
+            $boot = m360_rw_intake_bootstrap_contract_cartable_task(
+                $conn !== false ? $conn : null,
+                $requestId,
+                $requestRow,
+                $payload,
+                (int)$userId
+            );
+            if (!$boot['ok']) {
+                return ['ok' => false, 'error' => $boot['error'], 'payload' => $payload, 'column_updates' => []];
             }
-            $payload['reception_intake']['customer_cartable']['contract_task'] = [
-                'status' => M360_RW_INTAKE_CARTABLE_STATUS_PENDING,
-                'assigned_at' => gmdate('Y-m-d H:i:s'),
-                'assigned_by_user_id' => (string)$userId,
-                'customer_mobile' => $mobile,
-                'access_token_hash' => $tokenHash,
-                'access_token_created_at' => $now,
-                'access_token_expires_at' => $expires,
-            ];
-            if (!isset($payload['reception_intake']['contract']) || !is_array($payload['reception_intake']['contract'])) {
-                $payload['reception_intake']['contract'] = [];
-            }
-            $payload['reception_intake']['contract'] = array_merge($payload['reception_intake']['contract'], [
-                'status' => M360_RW_INTAKE_CONTRACT_STATUS_PENDING_CUSTOMER_REVIEW,
-                'contract_text' => m360_rw_intake_contract_template_text($requestRow, $payload),
-                'review_token_hash' => $tokenHash,
-                'review_token_created_at' => $now,
-                'review_token_expires_at' => $expires,
-                'prepared_at' => $now,
-            ]);
-            if (!isset($payload['reception_intake']['documents']) || !is_array($payload['reception_intake']['documents'])) {
-                $payload['reception_intake']['documents'] = [];
-            }
-            $payload['reception_intake']['documents']['contract_status'] = M360_RW_INTAKE_DOC_CONTRACT_STATUS_CUSTOMER_PENDING;
-            $payload['contract_status'] = M360_RW_INTAKE_CONTRACT_STATUS_PENDING_CUSTOMER_REVIEW;
-            $validate = m360_rw_intake_contract_validate_review_token($payload, $requestId, $rawToken);
-            if (!$validate['ok']) {
-                return [
-                    'ok' => false,
-                    'error' => 'خطای داخلی: ذخیره توکن کارتابل مشتری تأیید نشد.',
-                    'payload' => $payload,
-                    'column_updates' => [],
-                ];
-            }
-            $payload['_contract_review_token_once'] = $rawToken;
-            m360_rw_intake_mark_section_saved($payload, 'contract');
-            $payload['_contract_sms_after_save'] = '1';
+            $payload = $boot['payload'];
             break;
 
         case 'complete_reception_intake':
@@ -3408,50 +3380,30 @@ function m360_rw_intake_apply_action(array $payload, string $actionType, array $
             if (!m360_rw_intake_contract_customer_accepted($payload) && !m360_rw_intake_contract_cartable_pending($payload)) {
                 $prereq = m360_rw_intake_contract_cartable_prerequisites($payload, $requestRow);
                 if ($prereq['ready'] && $requestId > 0) {
-                    $rawToken = m360_rw_intake_contract_generate_review_token($requestId);
-                    $tokenHash = m360_rw_intake_contract_token_hash($rawToken);
-                    $expires = gmdate('Y-m-d\TH:i:s\Z', time() + M360_RW_INTAKE_CONTRACT_REVIEW_TTL_SECONDS);
-                    $mobile = m360_rw_intake_resolve_mobile_for_otp($requestRow, $payload);
-                    if (!isset($payload['reception_intake']['customer_cartable']) || !is_array($payload['reception_intake']['customer_cartable'])) {
-                        $payload['reception_intake']['customer_cartable'] = [];
+                    $connBoot = customer_core_db();
+                    $boot = m360_rw_intake_bootstrap_contract_cartable_task(
+                        $connBoot !== false ? $connBoot : null,
+                        $requestId,
+                        array_merge($requestRow, [
+                            'online_request_id' => (string)$requestId,
+                            'customer_id' => (string)($post['_rw_request_customer_id'] ?? ''),
+                            'vehicle_id' => (string)($post['_rw_request_vehicle_id'] ?? ''),
+                            'customer_name' => trim((string)($post['_rw_request_customer_name'] ?? '')),
+                            'vehicle_plate' => trim((string)($post['_rw_request_vehicle_plate'] ?? '')),
+                            'visit_date' => trim((string)($post['_rw_request_visit_date'] ?? '')),
+                        ]),
+                        $payload,
+                        (int)$userId
+                    );
+                    if ($boot['ok']) {
+                        $payload = $boot['payload'];
+                    } else {
+                        if (!isset($payload['reception_intake']['contract']) || !is_array($payload['reception_intake']['contract'])) {
+                            $payload['reception_intake']['contract'] = [];
+                        }
+                        $payload['reception_intake']['contract']['status'] = M360_RW_INTAKE_CONTRACT_STATUS_PENDING_CUSTOMER_REVIEW;
+                        $payload['contract_status'] = M360_RW_INTAKE_CONTRACT_STATUS_PENDING_CUSTOMER_REVIEW;
                     }
-                    $payload['reception_intake']['customer_cartable']['contract_task'] = [
-                        'status' => M360_RW_INTAKE_CARTABLE_STATUS_PENDING,
-                        'assigned_at' => gmdate('Y-m-d H:i:s'),
-                        'assigned_by_user_id' => (string)$userId,
-                        'customer_mobile' => $mobile,
-                        'access_token_hash' => $tokenHash,
-                        'access_token_created_at' => $now,
-                        'access_token_expires_at' => $expires,
-                    ];
-                    if (!isset($payload['reception_intake']['contract']) || !is_array($payload['reception_intake']['contract'])) {
-                        $payload['reception_intake']['contract'] = [];
-                    }
-                    $payload['reception_intake']['contract'] = array_merge($payload['reception_intake']['contract'], [
-                        'status' => M360_RW_INTAKE_CONTRACT_STATUS_PENDING_CUSTOMER_REVIEW,
-                        'contract_text' => m360_rw_intake_contract_template_text($requestRow, $payload),
-                        'review_token_hash' => $tokenHash,
-                        'review_token_created_at' => $now,
-                        'review_token_expires_at' => $expires,
-                        'prepared_at' => $now,
-                    ]);
-                    if (!isset($payload['reception_intake']['documents']) || !is_array($payload['reception_intake']['documents'])) {
-                        $payload['reception_intake']['documents'] = [];
-                    }
-                    $payload['reception_intake']['documents']['contract_status'] = M360_RW_INTAKE_DOC_CONTRACT_STATUS_CUSTOMER_PENDING;
-                    $payload['contract_status'] = M360_RW_INTAKE_CONTRACT_STATUS_PENDING_CUSTOMER_REVIEW;
-                    $validate = m360_rw_intake_contract_validate_review_token($payload, $requestId, $rawToken);
-                    if (!$validate['ok']) {
-                        return [
-                            'ok' => false,
-                            'error' => 'خطای داخلی: ذخیره توکن کارتابل مشتری تأیید نشد.',
-                            'payload' => $payload,
-                            'column_updates' => [],
-                        ];
-                    }
-                    $payload['_contract_review_token_once'] = $rawToken;
-                    $payload['_contract_sms_after_save'] = '1';
-                    m360_rw_intake_mark_section_saved($payload, 'contract');
                 } else {
                     if (!isset($payload['reception_intake']['contract']) || !is_array($payload['reception_intake']['contract'])) {
                         $payload['reception_intake']['contract'] = [];
@@ -3759,7 +3711,14 @@ function m360_rw_intake_process_save_inner($conn, int $requestId, string $action
     }
     if ($contractSmsAfterSave) {
         $mobile = m360_rw_intake_resolve_mobile_for_otp($request, $newPayload);
-        $sms = m360_rw_intake_send_contract_notification_sms($mobile, true);
+        $reviewPath = '';
+        $task = m360_rw_intake_contract_cartable_task($newPayload);
+        if (trim((string)($task['review_url_path'] ?? '')) !== '') {
+            $reviewPath = (string)$task['review_url_path'];
+        } elseif (trim((string)($newPayload['_contract_review_token_once'] ?? '')) !== '') {
+            $reviewPath = m360_rw_intake_contract_review_url((string)$newPayload['_contract_review_token_once']);
+        }
+        $sms = m360_rw_intake_send_contract_notification_sms($mobile, true, $reviewPath);
         if (!isset($newPayload['reception_intake']['operation_gate']) || !is_array($newPayload['reception_intake']['operation_gate'])) {
             $newPayload['reception_intake']['operation_gate'] = [];
         }
@@ -4117,7 +4076,692 @@ function m360_rw_intake_wizard_operational_keys(): array
     );
 }
 
-const M360_RW_INTAKE_CONTRACT_SMS_TEXT_FA = 'قرارداد شما منظر تائید و امضا می باشد لطفا وارد پروفایل خود در سامنه مقاره 360 شوید.';
+const M360_RW_INTAKE_CONTRACT_SMS_TEXT_FA = 'لطفاً قرارداد خودروی خود را در سامانه مقاره موتورز امضا فرمایید.';
+const M360_RW_INTAKE_CARTABLE_TASK_TITLE_FA = 'قرارداد نیازمند امضا';
+const M360_RW_INTAKE_CARTABLE_TASK_MESSAGE_FA = 'قرارداد پذیرش خودروی شما آماده بررسی و امضا است.';
+const M360_RW_INTAKE_CARTABLE_TASK_STATUS_ACTION_FA = 'نیازمند اقدام';
+const M360_RW_INTAKE_CARTABLE_TASK_STATUS_COMPLETED_FA = 'امضاشده';
+const M360_RW_INTAKE_CARTABLE_TASK_ACTION_LABEL_FA = 'بررسی و امضای قرارداد';
+
+const M360_RW_CUSTOMER_PROFILE_CONTRACT_CLASS_SIGNED_CANONICAL = 'SIGNED_CANONICAL';
+const M360_RW_CUSTOMER_PROFILE_CONTRACT_CLASS_PENDING_SIGNATURE = 'PENDING_SIGNATURE';
+const M360_RW_CUSTOMER_PROFILE_CONTRACT_CLASS_LEGACY_ACCEPTED_UNVERIFIED = 'LEGACY_ACCEPTED_UNVERIFIED';
+const M360_RW_CUSTOMER_PROFILE_CONTRACT_CLASS_NO_CONTRACT = 'NO_CONTRACT';
+
+const M360_RW_CUSTOMER_PROFILE_CONTRACT_HISTORY_TITLE_FA = 'سوابق قرارداد پذیرش';
+const M360_RW_CUSTOMER_PROFILE_CONTRACT_LEGACY_STATUS_FA = 'تأیید قدیمی فاقد امضای دیجیتال';
+const M360_RW_CUSTOMER_PROFILE_CONTRACT_LEGACY_MESSAGE_FA = 'این تأیید از مسیر قدیمی ثبت شده و دارای قرارداد قفل‌شده، امضای دیجیتال و OTP قرارداد نیست.';
+const M360_RW_CUSTOMER_PROFILE_CONTRACT_SIGNED_STATUS_FA = 'امضاشده و قفل‌شده';
+const M360_RW_CUSTOMER_PROFILE_CONTRACT_SIGNED_MESSAGE_FA = 'قرارداد با امضای دیجیتال و تأیید OTP ثبت و قفل شده است.';
+
+function m360_rw_customer_profile_contract_jobcard_code(int $requestId): string
+{
+    return 'REQ-' . (string)$requestId;
+}
+
+function m360_rw_customer_profile_contract_has_signature_proof($conn, int $contractId): bool
+{
+    if (!is_resource($conn) || $contractId < 1) {
+        return false;
+    }
+    if (!m360_rw_table_exists($conn, M360_CONTRACT_SIG_TABLE)) {
+        return false;
+    }
+    $sql = 'SELECT TOP 1 contract_id FROM dbo.' . M360_CONTRACT_SIG_TABLE . ' WHERE contract_id = ?';
+    $stmt = @odbc_prepare($conn, $sql);
+    if ($stmt === false || !@odbc_execute($stmt, [$contractId])) {
+        return false;
+    }
+
+    return odbc_fetch_array($stmt) !== false;
+}
+
+/**
+ * @param array<string, mixed> $requestRow
+ * @param array<string, mixed>|null $dbContract
+ */
+function m360_rw_customer_profile_contract_binding_valid(array $requestRow, ?array $dbContract, string $normalizedMobile): bool
+{
+    if ($dbContract === null) {
+        return false;
+    }
+    $requestId = (int)($requestRow['online_request_id'] ?? 0);
+    $contractRequestId = (int)($dbContract['online_request_id'] ?? 0);
+    if ($requestId < 1 || $contractRequestId !== $requestId) {
+        return false;
+    }
+    $requestMobile = m360_rw_customer_profile_normalize_mobile((string)($requestRow['mobile'] ?? ''));
+    if ($requestMobile !== $normalizedMobile) {
+        return false;
+    }
+    $contractMobile = m360_rw_customer_profile_normalize_mobile((string)($dbContract['mobile'] ?? ''));
+    if ($contractMobile !== '' && $contractMobile !== $normalizedMobile) {
+        return false;
+    }
+
+    return true;
+}
+
+/**
+ * @param array<string, mixed> $requestRow
+ * @param array<string, mixed>|null $dbContract
+ */
+function m360_rw_customer_profile_contract_is_canonically_signed($conn, array $requestRow, ?array $dbContract, string $normalizedMobile): bool
+{
+    if ($dbContract === null) {
+        return false;
+    }
+    $contractId = (int)($dbContract['contract_id'] ?? 0);
+    if ($contractId < 1) {
+        return false;
+    }
+    if (!m360_rw_customer_profile_contract_binding_valid($requestRow, $dbContract, $normalizedMobile)) {
+        return false;
+    }
+    if (!m360_intake_contract_is_signed($dbContract)) {
+        return false;
+    }
+
+    return m360_rw_customer_profile_contract_has_signature_proof($conn, $contractId);
+}
+
+/**
+ * @param array<string, mixed> $payload
+ */
+function m360_rw_customer_profile_contract_review_url_readonly(array $payload): string
+{
+    $task = m360_rw_intake_contract_cartable_task($payload);
+    $reviewPath = trim((string)($task['review_url_path'] ?? ''));
+    if ($reviewPath !== '' && str_contains($reviewPath, 'customer-intake-contract-review.php')) {
+        return $reviewPath;
+    }
+
+    return '';
+}
+
+/**
+ * @param array<string, mixed> $requestRow
+ * @param array<string, mixed> $payload
+ * @param array<string, mixed>|null $dbContract
+ */
+function m360_rw_customer_profile_contract_is_pending_signature($conn, array $requestRow, array $payload, ?array $dbContract, string $normalizedMobile): bool
+{
+    if ($dbContract === null) {
+        return false;
+    }
+    if ((int)($dbContract['contract_id'] ?? 0) < 1 || m360_intake_contract_is_signed($dbContract)) {
+        return false;
+    }
+    if (!m360_rw_customer_profile_contract_binding_valid($requestRow, $dbContract, $normalizedMobile)) {
+        return false;
+    }
+    $task = m360_rw_intake_contract_cartable_task($payload);
+    $taskMobile = m360_rw_customer_profile_normalize_mobile((string)($task['customer_mobile'] ?? ''));
+    if ($taskMobile !== '' && $taskMobile !== $normalizedMobile) {
+        return false;
+    }
+    if (m360_rw_intake_contract_customer_accepted($payload)) {
+        return false;
+    }
+    if (!m360_rw_intake_contract_cartable_pending($payload)) {
+        $taskStatus = trim((string)($task['status'] ?? ''));
+        if ($taskStatus !== M360_RW_INTAKE_CARTABLE_STATUS_PENDING) {
+            return false;
+        }
+    }
+
+    return m360_rw_customer_profile_contract_review_url_readonly($payload) !== '';
+}
+
+/**
+ * @param array<string, mixed> $requestRow
+ * @return array{
+ *   classification:string,
+ *   online_request_id:int,
+ *   jobcard_code:string,
+ *   title:string,
+ *   message:string,
+ *   status_label:string,
+ *   action_label:string,
+ *   review_url:string,
+ *   is_active:bool,
+ *   is_completed:bool,
+ *   is_legacy:bool,
+ *   counts_toward_badge:bool
+ * }
+ */
+function m360_rw_customer_profile_classify_contract_request($conn, array $requestRow, string $customerMobile): array
+{
+    $empty = [
+        'classification' => M360_RW_CUSTOMER_PROFILE_CONTRACT_CLASS_NO_CONTRACT,
+        'online_request_id' => 0,
+        'jobcard_code' => '',
+        'title' => '',
+        'message' => '',
+        'status_label' => '',
+        'action_label' => '',
+        'review_url' => '',
+        'is_active' => false,
+        'is_completed' => false,
+        'is_legacy' => false,
+        'counts_toward_badge' => false,
+    ];
+    $requestId = (int)($requestRow['online_request_id'] ?? 0);
+    if ($requestId < 1) {
+        return $empty;
+    }
+    $normalizedCustomer = m360_rw_customer_profile_normalize_mobile($customerMobile);
+    $requestMobile = m360_rw_customer_profile_normalize_mobile((string)($requestRow['mobile'] ?? ''));
+    if ($normalizedCustomer === '' || $requestMobile !== $normalizedCustomer) {
+        return $empty;
+    }
+
+    $payload = m360_online_req_parse_payload($requestRow['request_payload_json'] ?? null);
+    $payload = m360_rw_intake_payload_for_recovery($payload);
+    $dbContract = is_resource($conn) ? m360_intake_contract_find_active_for_online_request($conn, $requestId) : null;
+    $jobcardCode = m360_rw_customer_profile_contract_jobcard_code($requestId);
+
+    if (is_resource($conn) && m360_rw_customer_profile_contract_is_canonically_signed($conn, $requestRow, $dbContract, $normalizedCustomer)) {
+        return [
+            'classification' => M360_RW_CUSTOMER_PROFILE_CONTRACT_CLASS_SIGNED_CANONICAL,
+            'online_request_id' => $requestId,
+            'jobcard_code' => $jobcardCode,
+            'title' => M360_RW_CUSTOMER_PROFILE_CONTRACT_HISTORY_TITLE_FA,
+            'message' => M360_RW_CUSTOMER_PROFILE_CONTRACT_SIGNED_MESSAGE_FA,
+            'status_label' => M360_RW_CUSTOMER_PROFILE_CONTRACT_SIGNED_STATUS_FA,
+            'action_label' => '',
+            'review_url' => '',
+            'is_active' => false,
+            'is_completed' => true,
+            'is_legacy' => false,
+            'counts_toward_badge' => false,
+        ];
+    }
+
+    if (m360_rw_intake_contract_customer_accepted($payload)) {
+        return [
+            'classification' => M360_RW_CUSTOMER_PROFILE_CONTRACT_CLASS_LEGACY_ACCEPTED_UNVERIFIED,
+            'online_request_id' => $requestId,
+            'jobcard_code' => $jobcardCode,
+            'title' => M360_RW_CUSTOMER_PROFILE_CONTRACT_HISTORY_TITLE_FA,
+            'message' => M360_RW_CUSTOMER_PROFILE_CONTRACT_LEGACY_MESSAGE_FA,
+            'status_label' => M360_RW_CUSTOMER_PROFILE_CONTRACT_LEGACY_STATUS_FA,
+            'action_label' => '',
+            'review_url' => '',
+            'is_active' => false,
+            'is_completed' => true,
+            'is_legacy' => true,
+            'counts_toward_badge' => false,
+        ];
+    }
+
+    if (is_resource($conn) && m360_rw_customer_profile_contract_is_pending_signature($conn, $requestRow, $payload, $dbContract, $normalizedCustomer)) {
+        $task = m360_rw_intake_contract_cartable_task($payload);
+
+        return [
+            'classification' => M360_RW_CUSTOMER_PROFILE_CONTRACT_CLASS_PENDING_SIGNATURE,
+            'online_request_id' => $requestId,
+            'jobcard_code' => $jobcardCode,
+            'title' => trim((string)($task['title'] ?? '')) !== '' ? (string)$task['title'] : M360_RW_INTAKE_CARTABLE_TASK_TITLE_FA,
+            'message' => trim((string)($task['message'] ?? '')) !== '' ? (string)$task['message'] : M360_RW_INTAKE_CARTABLE_TASK_MESSAGE_FA,
+            'status_label' => M360_RW_INTAKE_CARTABLE_TASK_STATUS_ACTION_FA,
+            'action_label' => M360_RW_INTAKE_CARTABLE_TASK_ACTION_LABEL_FA,
+            'review_url' => m360_rw_customer_profile_contract_review_url_readonly($payload),
+            'is_active' => true,
+            'is_completed' => false,
+            'is_legacy' => false,
+            'counts_toward_badge' => true,
+        ];
+    }
+
+    return array_merge($empty, [
+        'online_request_id' => $requestId,
+        'jobcard_code' => $jobcardCode,
+    ]);
+}
+
+function m360_rw_customer_profile_normalize_mobile(string $mobile): string
+{
+    $mobile = trim($mobile);
+    if ($mobile === '') {
+        return '';
+    }
+    $otpHelper = __DIR__ . DIRECTORY_SEPARATOR . 'm360-otp-helper.php';
+    if (is_file($otpHelper)) {
+        require_once $otpHelper;
+        if (function_exists('m360_otp_normalize_phone')) {
+            $normalized = m360_otp_normalize_phone($mobile);
+            if ($normalized !== null && $normalized !== '') {
+                return $normalized;
+            }
+        }
+    }
+
+    return preg_replace('/\D+/', '', $mobile) ?? '';
+}
+
+/**
+ * @return list<array<string, mixed>>
+ */
+function m360_rw_customer_profile_fetch_online_requests_by_mobile($conn, string $customerMobile): array
+{
+    if (!is_resource($conn) || $customerMobile === '') {
+        return [];
+    }
+    if (!m360_rw_table_exists($conn, m360_online_req_table())) {
+        return [];
+    }
+    $normalized = m360_rw_customer_profile_normalize_mobile($customerMobile);
+    if ($normalized === '') {
+        return [];
+    }
+    $sql = 'SELECT online_request_id, mobile
+            FROM dbo.' . m360_online_req_table() . '
+            WHERE mobile IS NOT NULL AND LTRIM(RTRIM(mobile)) <> \'\'
+            ORDER BY online_request_id DESC';
+    $stmt = @odbc_prepare($conn, $sql);
+    if ($stmt === false || !@odbc_execute($stmt)) {
+        return [];
+    }
+    $rows = [];
+    while (($row = odbc_fetch_array($stmt)) !== false) {
+        $rowMobile = m360_rw_customer_profile_normalize_mobile((string)($row['mobile'] ?? $row['MOBILE'] ?? ''));
+        if ($rowMobile === '' || $rowMobile !== $normalized) {
+            continue;
+        }
+        $requestId = (int)($row['online_request_id'] ?? $row['ONLINE_REQUEST_ID'] ?? 0);
+        if ($requestId < 1) {
+            continue;
+        }
+        $fullRow = m360_online_req_fetch_by_id($conn, $requestId);
+        if ($fullRow === null) {
+            continue;
+        }
+        $fullMobile = m360_rw_customer_profile_normalize_mobile((string)($fullRow['mobile'] ?? ''));
+        if ($fullMobile !== $normalized) {
+            continue;
+        }
+        $rows[] = $fullRow;
+    }
+    if (is_resource($stmt)) {
+        @odbc_free_result($stmt);
+    }
+
+    return $rows;
+}
+
+/**
+ * @param array<string, mixed> $requestRow
+ * @param array<string, mixed> $payload
+ * @return array{ok:bool,payload:array<string,mixed>,review_url_path:string,error:string}
+ */
+function m360_rw_customer_profile_refresh_task_review_access($conn, int $requestId, array $requestRow, array $payload): array
+{
+    if (!is_resource($conn) || $requestId < 1) {
+        return ['ok' => false, 'payload' => $payload, 'review_url_path' => '', 'error' => 'invalid_request'];
+    }
+    if (m360_rw_intake_contract_customer_accepted($payload)) {
+        return ['ok' => false, 'payload' => $payload, 'review_url_path' => '', 'error' => 'already_accepted'];
+    }
+    $task = m360_rw_intake_contract_cartable_task($payload);
+    $existingPath = trim((string)($task['review_url_path'] ?? ''));
+    if ($existingPath !== '' && str_contains($existingPath, 'customer-intake-contract-review.php')) {
+        return ['ok' => true, 'payload' => $payload, 'review_url_path' => $existingPath, 'error' => ''];
+    }
+
+    $rawToken = m360_rw_intake_contract_generate_review_token($requestId);
+    $tokenHash = m360_rw_intake_contract_token_hash($rawToken);
+    $now = gmdate('Y-m-d\TH:i:s\Z');
+    $expires = gmdate('Y-m-d\TH:i:s\Z', time() + M360_RW_INTAKE_CONTRACT_REVIEW_TTL_SECONDS);
+    $payload = m360_rw_intake_ensure_nested($payload);
+    if (!isset($payload['reception_intake']['customer_cartable']) || !is_array($payload['reception_intake']['customer_cartable'])) {
+        $payload['reception_intake']['customer_cartable'] = [];
+    }
+    $mobile = m360_rw_intake_resolve_mobile_for_otp($requestRow, $payload);
+    $payload['reception_intake']['customer_cartable']['contract_task'] = array_merge($task, [
+        'status' => M360_RW_INTAKE_CARTABLE_STATUS_PENDING,
+        'title' => M360_RW_INTAKE_CARTABLE_TASK_TITLE_FA,
+        'message' => M360_RW_INTAKE_CARTABLE_TASK_MESSAGE_FA,
+        'customer_mobile' => $mobile,
+        'access_token_hash' => $tokenHash,
+        'access_token_created_at' => $now,
+        'access_token_expires_at' => $expires,
+        'review_url_path' => m360_rw_intake_contract_review_url($rawToken),
+    ]);
+    if (!isset($payload['reception_intake']['contract']) || !is_array($payload['reception_intake']['contract'])) {
+        $payload['reception_intake']['contract'] = [];
+    }
+    $payload['reception_intake']['contract'] = array_merge($payload['reception_intake']['contract'], [
+        'status' => M360_RW_INTAKE_CONTRACT_STATUS_PENDING_CUSTOMER_REVIEW,
+        'review_token_hash' => $tokenHash,
+        'review_token_created_at' => $now,
+        'review_token_expires_at' => $expires,
+    ]);
+    $persistToken = m360_rw_intake_persist_payload($conn, $requestId, $payload, []);
+    if (!$persistToken['ok']) {
+        return ['ok' => false, 'payload' => $payload, 'review_url_path' => '', 'error' => 'persist_failed'];
+    }
+    m360_rw_intake_ensure_db_contract_for_cartable($conn, $requestId, $requestRow, $payload, $rawToken);
+    $requestFresh = m360_online_req_fetch_by_id($conn, $requestId);
+    if ($requestFresh !== null) {
+        $payload = m360_rw_intake_payload_for_recovery(m360_online_req_parse_payload($requestFresh['request_payload_json'] ?? null));
+        $taskFresh = m360_rw_intake_contract_cartable_task($payload);
+        if (trim((string)($taskFresh['review_url_path'] ?? '')) === '') {
+            $payload['reception_intake']['customer_cartable']['contract_task']['review_url_path'] = m360_rw_intake_contract_review_url($rawToken);
+            m360_rw_intake_persist_payload($conn, $requestId, $payload, []);
+        }
+    }
+    $task = m360_rw_intake_contract_cartable_task($payload);
+    $reviewPath = trim((string)($task['review_url_path'] ?? ''));
+
+    return [
+        'ok' => $reviewPath !== '',
+        'payload' => $payload,
+        'review_url_path' => $reviewPath,
+        'error' => $reviewPath !== '' ? '' : 'missing_review_path',
+    ];
+}
+
+/**
+ * @return list<array{
+ *   classification:string,
+ *   online_request_id:int,
+ *   jobcard_code:string,
+ *   title:string,
+ *   message:string,
+ *   status_label:string,
+ *   action_label:string,
+ *   review_url:string,
+ *   is_active:bool,
+ *   is_completed:bool,
+ *   is_legacy:bool,
+ *   counts_toward_badge:bool
+ * }>
+ */
+function m360_rw_customer_profile_contract_cartable_tasks($conn, string $customerMobile): array
+{
+    if (!is_resource($conn)) {
+        return [];
+    }
+    $normalizedCustomer = m360_rw_customer_profile_normalize_mobile($customerMobile);
+    if ($normalizedCustomer === '') {
+        return [];
+    }
+
+    $requests = m360_rw_customer_profile_fetch_online_requests_by_mobile($conn, $customerMobile);
+    $activeCandidates = [];
+    $historical = [];
+
+    foreach ($requests as $requestRow) {
+        $classified = m360_rw_customer_profile_classify_contract_request($conn, $requestRow, $customerMobile);
+        $classification = (string)($classified['classification'] ?? '');
+        if ($classification === M360_RW_CUSTOMER_PROFILE_CONTRACT_CLASS_NO_CONTRACT) {
+            continue;
+        }
+        if ($classification === M360_RW_CUSTOMER_PROFILE_CONTRACT_CLASS_PENDING_SIGNATURE) {
+            $requestId = (int)($classified['online_request_id'] ?? 0);
+            if ($requestId > 0) {
+                $activeCandidates[$requestId] = $classified;
+            }
+            continue;
+        }
+        $historical[] = $classified;
+    }
+
+    usort($historical, static function (array $a, array $b): int {
+        return (int)($b['online_request_id'] ?? 0) <=> (int)($a['online_request_id'] ?? 0);
+    });
+
+    $tasks = [];
+    if ($activeCandidates !== []) {
+        krsort($activeCandidates);
+        $tasks[] = array_values($activeCandidates)[0];
+    }
+    foreach ($historical as $item) {
+        $tasks[] = $item;
+    }
+
+    return $tasks;
+}
+
+/**
+ * @param list<array<string, mixed>> $tasks
+ */
+function m360_rw_customer_profile_contract_badge_count(array $tasks): int
+{
+    $count = 0;
+    foreach ($tasks as $task) {
+        if (!empty($task['counts_toward_badge'])) {
+            $count++;
+            continue;
+        }
+        if (
+            !empty($task['is_active'])
+            && (string)($task['classification'] ?? '') === M360_RW_CUSTOMER_PROFILE_CONTRACT_CLASS_PENDING_SIGNATURE
+        ) {
+            $count++;
+        }
+    }
+
+    return $count;
+}
+
+/**
+ * @param list<array<string, mixed>> $tasks
+ * @return ?array<string, mixed>
+ */
+function m360_rw_customer_profile_active_contract_task(array $tasks): ?array
+{
+    foreach ($tasks as $task) {
+        if (!empty($task['is_active'])) {
+            return $task;
+        }
+    }
+
+    return null;
+}
+
+function m360_rw_customer_profile_unauthenticated_redirect_url(): string
+{
+    return 'customer-request.php';
+}
+
+/**
+ * @return array{ok:bool,mobile:string,error:string}
+ */
+function m360_rw_customer_profile_resolve_verified_session_mobile(): array
+{
+    $otpHelper = __DIR__ . DIRECTORY_SEPARATOR . 'm360-otp-helper.php';
+    if (!is_file($otpHelper)) {
+        return ['ok' => false, 'mobile' => '', 'error' => 'otp_helper_missing'];
+    }
+    require_once $otpHelper;
+    m360_otp_session_start();
+    $verified = trim((string)($_SESSION['otp_verified_phone'] ?? ''));
+    if ($verified === '') {
+        return ['ok' => false, 'mobile' => '', 'error' => 'not_verified'];
+    }
+    if (!function_exists('m360_otp_normalize_phone')) {
+        return ['ok' => false, 'mobile' => '', 'error' => 'otp_helper_incomplete'];
+    }
+    $normalized = m360_otp_normalize_phone($verified);
+    if ($normalized === null || $normalized === '') {
+        return ['ok' => false, 'mobile' => '', 'error' => 'invalid_mobile'];
+    }
+    if (!m360_otp_is_verified($normalized)) {
+        return ['ok' => false, 'mobile' => '', 'error' => 'session_expired'];
+    }
+
+    return ['ok' => true, 'mobile' => $normalized, 'error' => ''];
+}
+
+function m360_rw_customer_profile_require_verified_session(): string
+{
+    $resolved = m360_rw_customer_profile_resolve_verified_session_mobile();
+    if (!$resolved['ok']) {
+        header('Location: ' . m360_rw_customer_profile_unauthenticated_redirect_url(), true, 302);
+        exit;
+    }
+
+    return $resolved['mobile'];
+}
+
+function m360_rw_customer_profile_render_error_page(string $message, int $status = 500): never
+{
+    if (!headers_sent()) {
+        http_response_code($status);
+        header('Content-Type: text/html; charset=UTF-8');
+        header('X-Robots-Tag: noindex, nofollow');
+        header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+    }
+    $layout = __DIR__ . DIRECTORY_SEPARATOR . 'mirror-layout.php';
+    if (is_file($layout)) {
+        require_once $layout;
+        mirror_render_head('خطا — پروفایل مشتری', 'customer');
+        echo '<section class="m360-card"><h2 class="m360-step-title">خطا</h2>';
+        echo '<p class="m360-alert m360-alert-error">' . m360_rw_h($message) . '</p>';
+        echo '<p class="m360-action-row"><a class="m360-btn m360-btn-primary" href="customer-request.php">بازگشت</a></p></section>';
+        mirror_render_foot();
+        exit;
+    }
+    echo '<!DOCTYPE html><html lang="fa" dir="rtl"><head><meta charset="UTF-8"><title>خطا</title></head><body><p>';
+    echo htmlspecialchars($message, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+    echo '</p></body></html>';
+    exit;
+}
+
+function m360_rw_customer_profile_initial_letter(string $value): string
+{
+    $value = trim($value);
+    if ($value === '') {
+        return '؟';
+    }
+    if (function_exists('mb_substr')) {
+        return (string)mb_substr($value, 0, 1);
+    }
+
+    return substr($value, 0, 1) ?: '؟';
+}
+
+/**
+ * @param ?array<string, mixed> $row
+ * @return array<string, string>
+ */
+function m360_rw_customer_profile_normalize_customer_row(?array $row): array
+{
+    if ($row === null) {
+        return [
+            'full_name' => '',
+            'first_name' => '',
+            'last_name' => '',
+            'national_id' => '',
+            'primary_mobile' => '',
+            'address' => '',
+            'city' => '',
+            'customer_id' => '',
+        ];
+    }
+    $fullName = trim((string)($row['full_name'] ?? ''));
+    $parts = preg_split('/\s+/u', $fullName, 2) ?: [];
+
+    return [
+        'full_name' => $fullName,
+        'first_name' => trim((string)($parts[0] ?? '')),
+        'last_name' => trim((string)($parts[1] ?? '')),
+        'national_id' => trim((string)($row['national_id'] ?? '')),
+        'primary_mobile' => trim((string)($row['primary_mobile'] ?? '')),
+        'address' => trim((string)($row['address'] ?? '')),
+        'city' => trim((string)($row['city'] ?? '')),
+        'customer_id' => trim((string)($row['customer_id'] ?? '')),
+    ];
+}
+
+/**
+ * @return ?array<string, mixed>
+ */
+function m360_rw_customer_profile_fetch_customer_row($conn, string $mobile): ?array
+{
+    if (!is_resource($conn) || $mobile === '') {
+        return null;
+    }
+    $submitHelper = __DIR__ . DIRECTORY_SEPARATOR . 'm360-customer-online-submit-helper.php';
+    if (!is_file($submitHelper)) {
+        return null;
+    }
+    require_once $submitHelper;
+    if (!function_exists('m360_pr02b_fetch_customer_row') || !function_exists('m360_reception_default_company_id')) {
+        return null;
+    }
+    $companyId = m360_reception_default_company_id($conn);
+    if ($companyId < 1) {
+        return null;
+    }
+
+    return m360_pr02b_fetch_customer_row($conn, $companyId, $mobile);
+}
+
+/**
+ * @return list<array<string, mixed>>
+ */
+function m360_rw_customer_profile_list_vehicles($conn, int $customerId): array
+{
+    if (!is_resource($conn) || $customerId < 1) {
+        return [];
+    }
+    $submitHelper = __DIR__ . DIRECTORY_SEPARATOR . 'm360-customer-online-submit-helper.php';
+    if (!is_file($submitHelper)) {
+        return [];
+    }
+    require_once $submitHelper;
+    if (!function_exists('m360_pr02b_list_customer_vehicles')) {
+        return [];
+    }
+
+    return m360_pr02b_list_customer_vehicles($conn, $customerId);
+}
+
+/**
+ * @return ?array<string, mixed>
+ */
+function m360_rw_customer_profile_detect_active_online_request($conn, string $mobile): ?array
+{
+    $requests = m360_rw_customer_profile_fetch_online_requests_by_mobile($conn, $mobile);
+    $terminal = ['DELIVERED', 'CANCELLED', 'CLOSED', 'DONE', 'REJECTED'];
+    foreach ($requests as $row) {
+        $status = strtoupper(trim((string)($row['request_status'] ?? '')));
+        if ($status !== '' && in_array($status, $terminal, true)) {
+            continue;
+        }
+        $requestId = (int)($row['online_request_id'] ?? 0);
+        if ($requestId < 1) {
+            continue;
+        }
+        $payload = m360_online_req_parse_payload($row['request_payload_json'] ?? null);
+        $vehiclePlate = '';
+        if (is_array($payload)) {
+            $vehicle = $payload['reception_intake']['vehicle'] ?? null;
+            if (is_array($vehicle)) {
+                $vehiclePlate = trim((string)($vehicle['plate'] ?? ''));
+            }
+            if ($vehiclePlate === '') {
+                $vehiclePlate = trim((string)($payload['vehicle_plate'] ?? ''));
+            }
+        }
+        $statusLabel = function_exists('m360_online_req_status_label_fa')
+            ? m360_online_req_status_label_fa($status !== '' ? $status : 'NEW')
+            : 'در حال بررسی';
+
+        return [
+            'online_request_id' => $requestId,
+            'request_status' => $status !== '' ? $status : 'NEW',
+            'request_status_label' => $statusLabel,
+            'vehicle_plate' => $vehiclePlate,
+            'jobcard_code' => 'REQ-' . (string)$requestId,
+        ];
+    }
+
+    return null;
+}
 
 /**
  * @param array<string, mixed> $payload
@@ -4165,7 +4809,7 @@ function m360_rw_intake_operation_gate_message_fa(array $payload): string
 /**
  * @return array{ok:bool,sent:bool,message:string,skipped_reason:string}
  */
-function m360_rw_intake_send_contract_notification_sms(string $mobile, bool $allowLiveSend = true): array
+function m360_rw_intake_send_contract_notification_sms(string $mobile, bool $allowLiveSend = true, string $reviewUrl = ''): array
 {
     $phone = trim($mobile);
     if ($phone === '') {
@@ -4194,7 +4838,14 @@ function m360_rw_intake_send_contract_notification_sms(string $mobile, bool $all
     if (($settings['provider'] ?? '') !== 'ippanel') {
         return ['ok' => false, 'sent' => false, 'message' => 'ارسال پیامک قرارداد فقط از مسیر IPPanel پشتیبانی می‌شود.', 'skipped_reason' => 'unsupported_provider'];
     }
-    $payload = m360_otp_ippanel_webservice_payload($normalized, M360_RW_INTAKE_CONTRACT_SMS_TEXT_FA, $settings);
+    $message = M360_RW_INTAKE_CONTRACT_SMS_TEXT_FA;
+    $reviewUrl = trim($reviewUrl);
+    if ($reviewUrl !== '') {
+        $base = m360_intake_contract_public_base_url();
+        $fullUrl = str_starts_with($reviewUrl, 'http') ? $reviewUrl : rtrim($base, '/') . '/' . ltrim($reviewUrl, '/');
+        $message .= ' ' . $fullUrl;
+    }
+    $payload = m360_otp_ippanel_webservice_payload($normalized, $message, $settings);
     $send = m360_otp_ippanel_send($payload, (string)($settings['api_key'] ?? ''));
     if (empty($send['ok'])) {
         return [
@@ -4584,6 +5235,238 @@ function m360_rw_intake_contract_review_url(string $rawToken): string
     return 'customer-intake-contract-review.php?t=' . rawurlencode($rawToken);
 }
 
+/**
+ * @param resource $conn
+ * @param array<string, mixed> $payload
+ * @param array<string, mixed> $requestRow
+ * @return array{ok:bool,error:string,payload:array<string,mixed>,raw_token:string}
+ */
+function m360_rw_intake_bootstrap_contract_cartable_task($conn, int $requestId, array $requestRow, array $payload, int $userId): array
+{
+    if ($requestId < 1) {
+        return ['ok' => false, 'error' => 'شناسه درخواست نامعتبر است.', 'payload' => $payload, 'raw_token' => ''];
+    }
+
+    $payload = m360_rw_intake_ensure_nested($payload);
+    $rawToken = m360_rw_intake_contract_generate_review_token($requestId);
+    $tokenHash = m360_rw_intake_contract_token_hash($rawToken);
+    $now = gmdate('Y-m-d\TH:i:s\Z');
+    $expires = gmdate('Y-m-d\TH:i:s\Z', time() + M360_RW_INTAKE_CONTRACT_REVIEW_TTL_SECONDS);
+    $mobile = m360_rw_intake_resolve_mobile_for_otp($requestRow, $payload);
+    $vehicle = m360_rw_intake_vehicle_canonical($payload, $requestRow);
+    $summary = m360_rw_intake_contract_review_summary($payload, $requestRow);
+    $snapshot = [
+        'customer_name' => $summary['customer_name'] !== '' ? $summary['customer_name'] : (string)($requestRow['customer_name'] ?? '-'),
+        'mobile' => $mobile !== '' ? $mobile : '-',
+        'vehicle' => $summary['brand_model'] !== '' ? $summary['brand_model'] : '-',
+        'plate' => $vehicle['plate'] !== '' ? $vehicle['plate'] : (string)($requestRow['vehicle_plate'] ?? '-'),
+        'vin' => $vehicle['vin'] !== '' ? $vehicle['vin'] : '-',
+        'odometer' => $vehicle['mileage'] !== '' ? $vehicle['mileage'] : '-',
+        'service_type' => $summary['service_route'] !== '' ? $summary['service_route'] : '-',
+        'cost_range' => $summary['cost_agreement'] !== '' ? $summary['cost_agreement'] : '-',
+        'visit_date' => trim((string)($requestRow['visit_date'] ?? ($payload['visit_date'] ?? date('Y-m-d')))),
+        'reception_date' => date('Y-m-d'),
+    ];
+
+    $contractId = 0;
+    if (!is_resource($conn)) {
+        return ['ok' => false, 'error' => 'اتصال به پایگاه داده برقرار نشد.', 'payload' => $payload, 'raw_token' => ''];
+    }
+    $generated = m360_intake_contract_generate_for_online_request(
+        $conn,
+        $requestId,
+        $rawToken,
+        gmdate('Y-m-d H:i:s', time() + M360_RW_INTAKE_CONTRACT_REVIEW_TTL_SECONDS),
+        $mobile,
+        (int)($requestRow['customer_id'] ?? 0) ?: null,
+        (int)($requestRow['vehicle_id'] ?? 0) ?: null,
+        $snapshot
+    );
+    if (!$generated['ok'] && empty($generated['reused'])) {
+        return ['ok' => false, 'error' => (string)($generated['message'] ?? 'ثبت قرارداد ناموفق بود.'), 'payload' => $payload, 'raw_token' => ''];
+    }
+    $contractId = (int)($generated['contract_id'] ?? 0);
+
+    if (!isset($payload['reception_intake']['customer_cartable']) || !is_array($payload['reception_intake']['customer_cartable'])) {
+        $payload['reception_intake']['customer_cartable'] = [];
+    }
+    $payload['reception_intake']['customer_cartable']['contract_task'] = [
+        'status' => M360_RW_INTAKE_CARTABLE_STATUS_PENDING,
+        'title' => M360_RW_INTAKE_CARTABLE_TASK_TITLE_FA,
+        'message' => M360_RW_INTAKE_CARTABLE_TASK_MESSAGE_FA,
+        'assigned_at' => gmdate('Y-m-d H:i:s'),
+        'assigned_by_user_id' => (string)$userId,
+        'customer_mobile' => $mobile,
+        'contract_id' => $contractId > 0 ? (string)$contractId : '',
+        'access_token_hash' => $tokenHash,
+        'access_token_created_at' => $now,
+        'access_token_expires_at' => $expires,
+        'review_url_path' => m360_rw_intake_contract_review_url($rawToken),
+    ];
+    if (!isset($payload['reception_intake']['contract']) || !is_array($payload['reception_intake']['contract'])) {
+        $payload['reception_intake']['contract'] = [];
+    }
+    $payload['reception_intake']['contract'] = array_merge($payload['reception_intake']['contract'], [
+        'status' => M360_RW_INTAKE_CONTRACT_STATUS_PENDING_CUSTOMER_REVIEW,
+        'contract_id' => $contractId > 0 ? (string)$contractId : '',
+        'contract_version' => M360_CONTRACT_VERSION,
+        'review_token_hash' => $tokenHash,
+        'review_token_created_at' => $now,
+        'review_token_expires_at' => $expires,
+        'prepared_at' => $now,
+    ]);
+    if (!isset($payload['reception_intake']['documents']) || !is_array($payload['reception_intake']['documents'])) {
+        $payload['reception_intake']['documents'] = [];
+    }
+    $payload['reception_intake']['documents']['contract_status'] = M360_RW_INTAKE_DOC_CONTRACT_STATUS_CUSTOMER_PENDING;
+    $payload['contract_status'] = M360_RW_INTAKE_CONTRACT_STATUS_PENDING_CUSTOMER_REVIEW;
+
+    $validate = m360_rw_intake_contract_validate_review_token($payload, $requestId, $rawToken);
+    if (!$validate['ok']) {
+        return ['ok' => false, 'error' => 'خطای داخلی: ذخیره توکن کارتابل مشتری تأیید نشد.', 'payload' => $payload, 'raw_token' => ''];
+    }
+
+    $payload['_contract_review_token_once'] = $rawToken;
+    $payload['_contract_sms_after_save'] = '1';
+    m360_rw_intake_mark_section_saved($payload, 'contract');
+
+    return ['ok' => true, 'error' => '', 'payload' => $payload, 'raw_token' => $rawToken];
+}
+
+/**
+ * @param resource $conn
+ * @param array<string, mixed> $requestRow
+ * @param array<string, mixed> $payload
+ * @return array{ok:bool,contract_id:int,message:string}
+ */
+function m360_rw_intake_ensure_db_contract_for_cartable($conn, int $requestId, array $requestRow, array $payload, string $rawToken): array
+{
+    if (!is_resource($conn) || $requestId < 1 || trim($rawToken) === '') {
+        return ['ok' => false, 'contract_id' => 0, 'message' => 'اطلاعات ناقص است.'];
+    }
+    $existing = m360_intake_contract_find_active_for_online_request($conn, $requestId);
+    if ($existing !== null) {
+        return ['ok' => true, 'contract_id' => (int)$existing['contract_id'], 'message' => ''];
+    }
+    $payload = m360_rw_intake_ensure_nested($payload);
+    $task = m360_rw_intake_contract_cartable_task($payload);
+    $expires = trim((string)($task['access_token_expires_at'] ?? ''));
+    if ($expires === '') {
+        $expires = gmdate('Y-m-d H:i:s', time() + M360_RW_INTAKE_CONTRACT_REVIEW_TTL_SECONDS);
+    } else {
+        $expires = str_replace('T', ' ', substr($expires, 0, 19));
+    }
+    $mobile = m360_rw_intake_resolve_mobile_for_otp($requestRow, $payload);
+    $vehicle = m360_rw_intake_vehicle_canonical($payload, $requestRow);
+    $summary = m360_rw_intake_contract_review_summary($payload, $requestRow);
+    $snapshot = [
+        'customer_name' => $summary['customer_name'] !== '' ? $summary['customer_name'] : (string)($requestRow['customer_name'] ?? '-'),
+        'mobile' => $mobile !== '' ? $mobile : '-',
+        'vehicle' => $summary['brand_model'] !== '' ? $summary['brand_model'] : '-',
+        'plate' => $vehicle['plate'] !== '' ? $vehicle['plate'] : (string)($requestRow['vehicle_plate'] ?? '-'),
+        'vin' => $vehicle['vin'] !== '' ? $vehicle['vin'] : '-',
+        'odometer' => $vehicle['mileage'] !== '' ? $vehicle['mileage'] : '-',
+        'service_type' => $summary['service_route'] !== '' ? $summary['service_route'] : '-',
+        'cost_range' => $summary['cost_agreement'] !== '' ? $summary['cost_agreement'] : '-',
+        'visit_date' => trim((string)($requestRow['visit_date'] ?? ($payload['visit_date'] ?? date('Y-m-d')))),
+        'reception_date' => date('Y-m-d'),
+    ];
+    $generated = m360_intake_contract_generate_for_online_request(
+        $conn,
+        $requestId,
+        $rawToken,
+        $expires,
+        $mobile,
+        (int)($requestRow['customer_id'] ?? 0) ?: null,
+        (int)($requestRow['vehicle_id'] ?? 0) ?: null,
+        $snapshot
+    );
+    if (!$generated['ok'] && empty($generated['reused'])) {
+        return ['ok' => false, 'contract_id' => 0, 'message' => (string)($generated['message'] ?? '')];
+    }
+    $contractId = (int)($generated['contract_id'] ?? 0);
+    if ($contractId > 0) {
+        $payload['reception_intake']['contract']['contract_id'] = (string)$contractId;
+        $payload['reception_intake']['customer_cartable']['contract_task']['contract_id'] = (string)$contractId;
+        m360_rw_intake_persist_payload($conn, $requestId, $payload, []);
+    }
+
+    return ['ok' => $contractId > 0, 'contract_id' => $contractId, 'message' => ''];
+}
+
+/**
+ * @param resource $conn
+ * @param array<string, mixed> $contractRow
+ */
+function m360_rw_intake_sync_cartable_from_signed_contract($conn, array $contractRow): void
+{
+    if (!is_resource($conn)) {
+        return;
+    }
+    $requestId = (int)($contractRow['online_request_id'] ?? 0);
+    $contractId = (int)($contractRow['contract_id'] ?? 0);
+    if ($requestId < 1 || $contractId < 1) {
+        return;
+    }
+    $request = m360_online_req_fetch_by_id($conn, $requestId);
+    if ($request === null) {
+        return;
+    }
+    $payload = m360_online_req_parse_payload($request['request_payload_json'] ?? null);
+    $payload = m360_rw_intake_payload_for_recovery($payload);
+    if (m360_rw_intake_contract_customer_accepted($payload)) {
+        return;
+    }
+
+    $payload = m360_rw_intake_ensure_nested($payload);
+    $now = gmdate('Y-m-d\TH:i:s\Z');
+    $mobile = trim((string)($contractRow['mobile'] ?? ''));
+    $task = m360_rw_intake_contract_cartable_task($payload);
+    $payload['reception_intake']['customer_cartable']['contract_task'] = array_merge($task, [
+        'status' => M360_RW_INTAKE_CARTABLE_STATUS_CUSTOMER_ACCEPTED,
+        'title' => M360_RW_INTAKE_CARTABLE_TASK_TITLE_FA,
+        'contract_id' => (string)$contractId,
+        'accepted_at' => gmdate('Y-m-d H:i:s'),
+        'completed_at' => gmdate('Y-m-d H:i:s'),
+        'accepted_mobile' => $mobile,
+        'acceptance_method' => 'contract_signature_otp_confirmed',
+        'review_url_path' => '',
+    ]);
+    $payload['reception_intake']['contract'] = array_merge(
+        is_array($payload['reception_intake']['contract'] ?? null) ? $payload['reception_intake']['contract'] : [],
+        [
+            'status' => M360_RW_INTAKE_CONTRACT_STATUS_CUSTOMER_ACCEPTED,
+            'contract_id' => (string)$contractId,
+            'customer_accepted_at' => $now,
+            'acceptance_method' => 'contract_signature_otp_confirmed',
+            'contract_body_hash' => (string)($contractRow['contract_body_hash'] ?? ''),
+        ]
+    );
+    $payload['reception_intake']['documents']['contract_status'] = M360_RW_INTAKE_DOC_CONTRACT_STATUS_CUSTOMER_ACCEPTED;
+    $payload['contract_status'] = M360_RW_INTAKE_CONTRACT_STATUS_CUSTOMER_ACCEPTED;
+    if (!isset($payload['reception_intake']['operation_gate']) || !is_array($payload['reception_intake']['operation_gate'])) {
+        $payload['reception_intake']['operation_gate'] = [];
+    }
+    $payload['reception_intake']['operation_gate']['contract_customer_confirmed'] = true;
+    $payload['reception_intake']['operation_gate']['contract_confirmed_at'] = $now;
+    $payload['reception_intake']['operation_gate']['contract_pending_customer_review'] = false;
+    if (m360_rw_intake_reception_is_completed($payload)) {
+        $payload['reception_intake']['operation_gate']['hall_manager_allowed'] = true;
+        $payload['reception_intake']['operation_gate']['message_fa'] = '';
+    }
+
+    m360_rw_intake_persist_payload($conn, $requestId, $payload, []);
+    m360_online_req_write_history(
+        $conn,
+        $requestId,
+        'CUSTOMER_CONTRACT_SIGNATURE_CONFIRMED',
+        (string)($request['request_status'] ?? ''),
+        (string)($request['request_status'] ?? ''),
+        'contract_id=' . $contractId,
+        null
+    );
+}
+
 function m360_rw_intake_store_contract_review_token_once(int $requestId, string $rawToken): void
 {
     if ($requestId < 1 || trim($rawToken) === '') {
@@ -4712,22 +5595,13 @@ function m360_rw_intake_process_customer_contract_accept($conn, string $rawToken
         return ['ok' => false, 'message' => $tokenCheck['error']];
     }
     if (m360_rw_intake_contract_customer_accepted($payload)) {
-        return ['ok' => true, 'message' => 'قرارداد پذیرش در کارتابل مشتری تأیید شد.'];
+        return ['ok' => true, 'message' => 'قرارداد پذیرش قبلاً تأیید شده است.'];
     }
     $accepted = isset($post['customer_accepts_contract']) && (string)$post['customer_accepts_contract'] === '1';
-    if (!$accepted) {
-        return ['ok' => false, 'message' => 'تأیید صریح مطالعه و پذیرش قرارداد در کارتابل مشتری الزامی است.'];
+    if ($accepted) {
+        return ['ok' => false, 'message' => 'تأیید قرارداد فقط پس از مطالعه کامل، پذیرش صریح، امضای مستقیم و OTP قرارداد امکان‌پذیر است.'];
     }
-    $applied = m360_rw_intake_apply_customer_contract_acceptance($payload, $request, $server);
-    if (!$applied['ok']) {
-        return ['ok' => false, 'message' => $applied['error']];
-    }
-    $persist = m360_rw_intake_persist_payload($conn, $requestId, $applied['payload'], []);
-    if (!$persist['ok']) {
-        return ['ok' => false, 'message' => $persist['message']];
-    }
-
-    return ['ok' => true, 'message' => 'قرارداد پذیرش در کارتابل مشتری تأیید شد.'];
+    return ['ok' => false, 'message' => 'عملیات نامعتبر است.'];
 }
 
 function m360_rw_intake_contract_status_label_fa(array $payload): string

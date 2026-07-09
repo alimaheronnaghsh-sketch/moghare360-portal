@@ -281,6 +281,179 @@ function m360_intake_contract_find_active_for_jobcard($conn, int $jobcardId): ?a
     return null;
 }
 
+/** @return array<string, mixed>|null */
+function m360_intake_contract_find_active_for_online_request($conn, int $onlineRequestId): ?array
+{
+    if (!is_resource($conn) || $onlineRequestId < 1) {
+        return null;
+    }
+    $sql = "SELECT TOP 1 * FROM dbo." . M360_CONTRACT_TABLE . "
+            WHERE online_request_id = ? AND contract_status NOT IN (N'CANCELLED', N'EXPIRED')
+            ORDER BY contract_id DESC";
+    $stmt = @odbc_prepare($conn, $sql);
+    if ($stmt === false || !@odbc_execute($stmt, [$onlineRequestId])) {
+        return null;
+    }
+    $row = odbc_fetch_array($stmt);
+    if ($row === false) {
+        return null;
+    }
+    $normalized = [];
+    foreach ($row as $k => $v) {
+        $normalized[strtolower((string)$k)] = $v === null ? '' : (string)$v;
+    }
+    if (m360_intake_contract_is_signed($normalized)) {
+        return $normalized;
+    }
+    if (in_array(strtoupper((string)$normalized['contract_status']), [M360_CONTRACT_STATUS_GENERATED, M360_CONTRACT_STATUS_SENT, M360_CONTRACT_STATUS_VIEWED, M360_CONTRACT_STATUS_OTP_SENT], true)) {
+        return $normalized;
+    }
+
+    return null;
+}
+
+/**
+ * @param array<string, mixed> $snapshotData
+ * @return array{ok:bool,message:string,contract_id:?int,reused:bool}
+ */
+function m360_intake_contract_generate_for_online_request(
+    $conn,
+    int $onlineRequestId,
+    string $rawToken,
+    string $tokenExpiresAt,
+    string $mobile,
+    ?int $customerId,
+    ?int $vehicleId,
+    array $snapshotData
+): array {
+    if (!is_resource($conn) || $onlineRequestId < 1 || trim($rawToken) === '') {
+        return ['ok' => false, 'message' => 'اطلاعات قرارداد معتبر نیست.', 'contract_id' => null, 'reused' => false];
+    }
+
+    $existing = m360_intake_contract_find_active_for_online_request($conn, $onlineRequestId);
+    if ($existing !== null) {
+        if (m360_intake_contract_is_signed($existing)) {
+            return ['ok' => false, 'message' => 'قرارداد این درخواست قبلاً امضا شده است.', 'contract_id' => (int)$existing['contract_id'], 'reused' => true];
+        }
+
+        return ['ok' => true, 'message' => 'قرارداد فعال موجود استفاده شد.', 'contract_id' => (int)$existing['contract_id'], 'reused' => true];
+    }
+
+    $snapshot = m360_intake_contract_build_snapshot($conn, null, $onlineRequestId);
+    $snapshot = array_merge($snapshot, $snapshotData);
+    $snapshot['online_request_id'] = (string)$onlineRequestId;
+    $html = m360_contract_render_html($snapshot, true);
+    $bodyHash = m360_intake_contract_hash($html);
+    $snapshot['contract_hash'] = $bodyHash;
+    $snapshot['workflow'] = [
+        'review_completed_at' => '',
+        'consent_at' => '',
+        'consent_text' => '',
+        'signature_draft_hash' => '',
+        'signature_draft_at' => '',
+    ];
+    $json = json_encode($snapshot, JSON_UNESCAPED_UNICODE);
+    if ($json === false) {
+        $json = '{}';
+    }
+
+    $tokenHash = m360_intake_contract_hash(trim($rawToken));
+    $expires = trim($tokenExpiresAt) !== '' ? $tokenExpiresAt : gmdate('Y-m-d H:i:s', time() + M360_CONTRACT_TOKEN_TTL_SECONDS);
+    erp_auth_context_start();
+    $userId = erp_auth_current_user_id() ?? ERP_PHASE1_PLATFORM_OWNER_ID;
+    $mobile = trim($mobile);
+    if ($mobile === '' || $mobile === '-') {
+        return ['ok' => false, 'message' => 'شماره موبایل مشتری برای قرارداد یافت نشد.', 'contract_id' => null, 'reused' => false];
+    }
+
+    $insertOk = customer_core_execute(
+        $conn,
+        'INSERT INTO dbo.' . M360_CONTRACT_TABLE . ' (
+            contract_version, online_request_id, jobcard_id, customer_id, vehicle_id, mobile,
+            contract_status, contract_title, contract_body_hash, contract_data_json,
+            secure_token_hash, secure_token_expires_at, created_by_user_id
+        ) VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [
+            M360_CONTRACT_VERSION,
+            $onlineRequestId,
+            $customerId !== null && $customerId > 0 ? $customerId : null,
+            $vehicleId !== null && $vehicleId > 0 ? $vehicleId : null,
+            $mobile,
+            M360_CONTRACT_STATUS_SENT,
+            M360_CONTRACT_TITLE,
+            $bodyHash,
+            $json,
+            $tokenHash,
+            $expires,
+            $userId,
+        ]
+    );
+
+    if ($insertOk === false) {
+        return ['ok' => false, 'message' => 'ثبت قرارداد ناموفق بود.', 'contract_id' => null, 'reused' => false];
+    }
+
+    $contractId = (int)(customer_core_scope_identity($conn) ?? 0);
+    m360_intake_contract_record_event($conn, $contractId, 'CONTRACT_ISSUED', 'online_request #' . $onlineRequestId, $userId);
+    m360_intake_contract_record_event($conn, $contractId, 'CUSTOMER_SIGNATURE_TASK_CREATED', null, $userId);
+
+    return ['ok' => true, 'message' => 'قرارداد پذیرش تولید شد.', 'contract_id' => $contractId, 'reused' => false];
+}
+
+/** @return array<string, mixed> */
+function m360_intake_contract_get_workflow_meta(array $contractRow): array
+{
+    $json = trim((string)($contractRow['contract_data_json'] ?? ''));
+    if ($json === '') {
+        return [];
+    }
+    $decoded = json_decode($json, true);
+    if (!is_array($decoded)) {
+        return [];
+    }
+    $workflow = $decoded['workflow'] ?? [];
+
+    return is_array($workflow) ? $workflow : [];
+}
+
+/**
+ * @param array<string, mixed> $patch
+ * @return array{ok:bool,message:string}
+ */
+function m360_intake_contract_patch_workflow_meta($conn, int $contractId, array $patch): array
+{
+    if (!is_resource($conn) || $contractId < 1) {
+        return ['ok' => false, 'message' => 'قرارداد معتبر نیست.'];
+    }
+    $row = m360_intake_contract_fetch_by_id($conn, $contractId);
+    if ($row === null) {
+        return ['ok' => false, 'message' => 'قرارداد یافت نشد.'];
+    }
+    if (m360_intake_contract_is_signed($row)) {
+        return ['ok' => false, 'message' => 'قرارداد قبلاً تأیید شده است.'];
+    }
+
+    $json = trim((string)($row['contract_data_json'] ?? ''));
+    $data = $json !== '' ? json_decode($json, true) : [];
+    if (!is_array($data)) {
+        $data = [];
+    }
+    $workflow = is_array($data['workflow'] ?? null) ? $data['workflow'] : [];
+    $data['workflow'] = array_merge($workflow, $patch);
+    $encoded = json_encode($data, JSON_UNESCAPED_UNICODE);
+    if ($encoded === false) {
+        return ['ok' => false, 'message' => 'خطا در ذخیره وضعیت قرارداد.'];
+    }
+
+    $ok = customer_core_execute(
+        $conn,
+        'UPDATE dbo.' . M360_CONTRACT_TABLE . ' SET contract_data_json = ?, updated_at = SYSUTCDATETIME() WHERE contract_id = ?',
+        [$encoded, $contractId]
+    );
+
+    return ['ok' => $ok !== false, 'message' => $ok !== false ? '' : 'ذخیره وضعیت قرارداد ناموفق بود.'];
+}
+
 function m360_intake_contract_record_event(
     $conn,
     int $contractId,
