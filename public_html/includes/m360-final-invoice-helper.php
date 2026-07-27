@@ -46,6 +46,16 @@ function m360_fi_h(string $v): string
     return htmlspecialchars($v, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 }
 
+function m360_fi_mask_mobile(string $mobile): string
+{
+    $digits = preg_replace('/\D+/', '', $mobile) ?? '';
+    if (preg_match('/^09\d{9}$/', $digits)) {
+        return substr($digits, 0, 4) . '***' . substr($digits, -4);
+    }
+
+    return $mobile;
+}
+
 function m360_fi_require_staff(): void
 {
     erp_auth_context_start();
@@ -72,6 +82,65 @@ function m360_fi_generate_token(): array
         'hash' => m360_fi_hash($raw),
         'expires_at' => $expires,
     ];
+}
+
+function m360_fi_store_delivery_token($conn, int $jobcardId, int $invoiceId, array $token)
+{
+    if (customer_core_column_exists($conn, M360_FI_TABLE, 'delivery_token_hash')
+        && customer_core_column_exists($conn, M360_FI_TABLE, 'delivery_token_expires_at')) {
+        $sets = ['delivery_token_hash = ?', 'delivery_token_expires_at = ?'];
+        $params = [(string)$token['hash'], (string)$token['expires_at']];
+        if (customer_core_column_exists($conn, M360_FI_TABLE, 'customer_notified_at')) {
+            $sets[] = 'customer_notified_at = SYSUTCDATETIME()';
+        }
+        if (customer_core_column_exists($conn, M360_FI_TABLE, 'updated_at')) {
+            $sets[] = 'updated_at = SYSUTCDATETIME()';
+        }
+        $params[] = $invoiceId;
+
+        return customer_core_execute(
+            $conn,
+            'UPDATE dbo.' . M360_FI_TABLE . ' SET ' . implode(', ', $sets) . ' WHERE final_invoice_id = ?',
+            $params
+        );
+    }
+
+    if (!customer_core_table_exists($conn, 'erp_customer_delivery_confirmations')
+        || !customer_core_column_exists($conn, 'erp_customer_delivery_confirmations', 'secure_token_hash')
+        || !customer_core_column_exists($conn, 'erp_customer_delivery_confirmations', 'secure_token_expires_at')) {
+        return false;
+    }
+
+    $jobcardRow = m360_fi_fetch_jobcard($conn, $jobcardId);
+    $mobile = trim((string)($jobcardRow['customer_mobile'] ?? ''));
+    $existingId = (int)(customer_core_scalar(
+        $conn,
+        "SELECT TOP 1 delivery_confirmation_id
+         FROM dbo.erp_customer_delivery_confirmations
+         WHERE jobcard_id = ? AND final_invoice_id = ? AND confirmation_status <> N'DELIVERY_SIGNED'
+         ORDER BY delivery_confirmation_id DESC",
+        [$jobcardId, $invoiceId]
+    ) ?? 0);
+    if ($existingId > 0) {
+        return customer_core_execute(
+            $conn,
+            "UPDATE dbo.erp_customer_delivery_confirmations
+             SET confirmation_status = N'TOKEN_ISSUED',
+                 secure_token_hash = ?,
+                 secure_token_expires_at = ?,
+                 otp_verified = 0
+             WHERE delivery_confirmation_id = ?",
+            [(string)$token['hash'], (string)$token['expires_at'], $existingId]
+        );
+    }
+
+    return customer_core_execute(
+        $conn,
+        "INSERT INTO dbo.erp_customer_delivery_confirmations
+            (jobcard_id, final_invoice_id, mobile, confirmation_status, secure_token_hash, secure_token_expires_at, otp_verified)
+         VALUES (?, ?, ?, N'TOKEN_ISSUED', ?, ?, 0)",
+        [$jobcardId, $invoiceId, $mobile !== '' ? $mobile : null, (string)$token['hash'], (string)$token['expires_at']]
+    );
 }
 
 /** @return array<string, mixed>|null */
@@ -942,10 +1011,24 @@ function m360_fi_action_finalize($conn, int $jobcardId, int $invoiceId, int $use
     }
 
     $overrideSql = $overrideReason !== '' ? $overrideReason : null;
+    $sets = [
+        'invoice_status = ?',
+        'finalized_at = SYSUTCDATETIME()',
+        'variance_amount = ?',
+        'variance_status = ?',
+    ];
+    $params = [M360_FI_FINALIZED, $varEval['variance'], $varEval['variance_status']];
+    if (customer_core_column_exists($conn, M360_FI_TABLE, 'variance_override_reason')) {
+        $sets[] = 'variance_override_reason = ?';
+        $params[] = $overrideSql;
+    }
+    $sets[] = 'updated_at = SYSUTCDATETIME()';
+    $params[] = $invoiceId;
+    $params[] = $jobcardId;
     $ok = customer_core_execute(
         $conn,
-        'UPDATE dbo.' . M360_FI_TABLE . ' SET invoice_status = ?, finalized_at = SYSUTCDATETIME(), variance_amount = ?, variance_status = ?, variance_override_reason = ?, updated_at = SYSUTCDATETIME() WHERE final_invoice_id = ? AND jobcard_id = ?',
-        [M360_FI_FINALIZED, $varEval['variance'], $varEval['variance_status'], $overrideSql, $invoiceId, $jobcardId]
+        'UPDATE dbo.' . M360_FI_TABLE . ' SET ' . implode(', ', $sets) . ' WHERE final_invoice_id = ? AND jobcard_id = ?',
+        $params
     );
     if ($ok === false) {
         return ['ok' => false, 'message' => 'نهایی‌سازی فاکتور ناموفق بود.', 'invoice_id' => $invoiceId, 'delivery_token' => null];
@@ -1007,11 +1090,7 @@ function m360_fi_action_notify_customer($conn, int $jobcardId, int $invoiceId, i
     }
 
     $token = m360_fi_generate_token();
-    $ok = customer_core_execute(
-        $conn,
-        'UPDATE dbo.' . M360_FI_TABLE . ' SET delivery_token_hash = ?, delivery_token_expires_at = ?, customer_notified_at = SYSUTCDATETIME(), updated_at = SYSUTCDATETIME() WHERE final_invoice_id = ?',
-        [$token['hash'], $token['expires_at'], $invoiceId]
-    );
+    $ok = m360_fi_store_delivery_token($conn, $jobcardId, $invoiceId, $token);
     if ($ok === false) {
         return ['ok' => false, 'message' => 'ثبت لینک تحویل ناموفق بود.', 'invoice_id' => $invoiceId, 'delivery_token' => null];
     }

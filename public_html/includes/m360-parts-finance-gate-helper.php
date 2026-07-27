@@ -188,7 +188,7 @@ function m360_gates_can_approve_for_work($conn, array $estimateRow): array
 {
     $estimateId = (int)($estimateRow['estimate_id'] ?? 0);
     $estStatus = strtoupper((string)($estimateRow['estimate_status'] ?? ''));
-    if ($estStatus !== 'CUSTOMER_APPROVED') {
+    if (!in_array($estStatus, ['CUSTOMER_APPROVED', 'PARTS_GATE_CLEARED', 'FINANCE_GATE_CLEARED'], true)) {
         return ['ok' => false, 'parts_gate_status' => '', 'finance_gate_status' => ''];
     }
 
