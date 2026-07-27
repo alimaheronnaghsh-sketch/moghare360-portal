@@ -12,7 +12,6 @@ m360_work_require_staff();
 $filter = isset($_GET['status']) ? strtoupper(trim((string)$_GET['status'])) : 'ALL';
 $conn = customer_core_db();
 $rows = $conn !== false ? m360_work_board_list($conn, $filter === 'ALL' ? null : $filter, 150) : [];
-
 ?>
 <!DOCTYPE html>
 <html lang="fa" dir="rtl">
@@ -23,14 +22,19 @@ $rows = $conn !== false ? m360_work_board_list($conn, $filter === 'ALL' ? null :
     <link rel="stylesheet" href="assets/moghare360-ui/moghare360-soft-run-release.css">
     <link rel="stylesheet" href="assets/css/m360-work-execution.css">
     <link rel="stylesheet" href="<?= m360_operational_shell_h(m360_operational_shell_css_href()) ?>">
+    <link rel="stylesheet" href="assets/css/mirror.css">
+    <link rel="stylesheet" href="assets/css/moghare360-v1-luxury-ui.css">
 </head>
 <body class="m360-wx-page">
 <div class="w1c-wrap m360-wx-wrap">
     <?php m360_operational_shell_render_board('work_board'); ?>
     <header class="w1c-banner">
         <h1>برد اجرای کار</h1>
-        <p>پس از تأیید برآورد — مصرف قطعه — تکمیل فنی — آماده QC</p>
+        <p>اجرای کار فقط پس از تأیید مشتری، رفع درخواست‌های باز، روشن شدن قطعات/خدمات خارجی و مجوز مالی مجاز است.</p>
     </header>
+    <section class="w1c-card m360-lux-warn">
+        <strong>گیت اجرا:</strong> تا وقتی برآورد/هزینه اضافه توسط مشتری تأیید نشده باشد، اجرای کار مسدود است. اقدام ممنوع: شروع کار با تأیید پرسنل به جای مشتری.
+    </section>
     <?php if ($conn === false): ?>
         <section class="w1c-card"><p>اتصال به پایگاه داده برقرار نشد.</p></section>
     <?php else: ?>
@@ -47,14 +51,14 @@ $rows = $conn !== false ? m360_work_board_list($conn, $filter === 'ALL' ? null :
                 <table class="m360-wx-table">
                     <thead><tr>
                         <th>کارت کار</th><th>مشتری</th><th>موبایل</th><th>خودرو</th><th>پلاک</th>
-                        <th>فنی</th><th>برآورد</th><th>قطعه</th><th>مالی</th><th>اجرای کار</th><th>QC</th><th></th>
+                        <th>فنی</th><th>برآورد</th><th>قطعه</th><th>مالی</th><th>اجرای کار</th><th>آماده QC</th><th>اقدام</th>
                     </tr></thead>
                     <tbody>
                     <?php foreach ($rows as $r): ?>
                         <tr>
                             <td><?= m360_work_h((string)$r['jobcard_id']) ?></td>
                             <td><?= m360_work_h((string)($r['customer_name'] ?? '-')) ?></td>
-                            <td><?= m360_work_h((string)($r['customer_mobile'] ?? '-')) ?></td>
+                            <td><?= m360_work_h(m360_work_mask_mobile((string)($r['customer_mobile'] ?? '-'))) ?></td>
                             <td><?= m360_work_h((string)($r['vehicle_label'] ?? '-')) ?></td>
                             <td><?= m360_work_h((string)($r['plate_number'] ?? '-')) ?></td>
                             <td><?= m360_work_h(m360_technician_workflow_status_label((string)($r['technical_status'] ?? ''))) ?></td>

@@ -51,6 +51,16 @@ function m360_work_h(string $v): string
     return htmlspecialchars($v, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 }
 
+function m360_work_mask_mobile(string $mobile): string
+{
+    $digits = preg_replace('/\D+/', '', $mobile) ?? '';
+    if (preg_match('/^09\d{9}$/', $digits)) {
+        return substr($digits, 0, 4) . '***' . substr($digits, -4);
+    }
+
+    return $mobile;
+}
+
 function m360_work_require_staff(): void
 {
     erp_auth_context_start();

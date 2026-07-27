@@ -67,6 +67,15 @@ function m360_technician_workflow_effective_status(array $row): string
 {
     $tech = strtoupper(trim((string)($row['technical_status'] ?? '')));
     if ($tech !== '') {
+        if ($tech === 'HALL_REVIEW') {
+            return M360_TECH_STATUS_READY_FOR_TECHNICAL;
+        }
+        if ($tech === 'TEAM_ASSIGNED') {
+            return M360_TECH_STATUS_TECHNICAL_QUEUE;
+        }
+        if ($tech === 'TECHNICIAN_ASSIGNED') {
+            return M360_TECH_STATUS_ASSIGNED;
+        }
         return $tech;
     }
     $jc = m360_jobcard_workflow_normalize_status((string)($row['jobcard_status'] ?? ''));
