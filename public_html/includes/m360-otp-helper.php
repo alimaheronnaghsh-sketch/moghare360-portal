@@ -53,11 +53,73 @@ function m360_otp_json_fail(string $message, int $status = 400, array $data = []
     exit;
 }
 
+/**
+ * Apply hardened cURL options for IPPanel Edge API (IPv4, HTTP/1.1, no inherited proxy).
+ *
+ * @param resource|\CurlHandle $ch
+ */
+function m360_otp_ippanel_apply_curl_options($ch, ?string $postBody = null): void
+{
+    $options = [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_CONNECTTIMEOUT => 8,
+        CURLOPT_TIMEOUT => 25,
+        CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+        CURLOPT_NOSIGNAL => true,
+        CURLOPT_SSL_VERIFYPEER => true,
+        CURLOPT_SSL_VERIFYHOST => 2,
+        CURLOPT_PROXY => '',
+    ];
+
+    if (defined('CURLOPT_IPRESOLVE')) {
+        $options[CURLOPT_IPRESOLVE] = CURL_IPRESOLVE_V4;
+    }
+
+    if ($postBody !== null) {
+        $options[CURLOPT_POST] = true;
+        $options[CURLOPT_POSTFIELDS] = $postBody;
+    }
+
+    curl_setopt_array($ch, $options);
+}
+
+function m360_otp_ippanel_safe_error_code(int $httpStatus, string $curlErr, string $rawBody = ''): string
+{
+    $err = strtolower(trim($curlErr));
+    if ($err !== '') {
+        if (str_contains($err, 'timed out') || str_contains($err, 'timeout')) {
+            return 'PROVIDER_TIMEOUT';
+        }
+        if (str_contains($err, 'could not resolve') || str_contains($err, 'getaddrinfo')) {
+            return 'DNS_FAIL';
+        }
+        if (str_contains($err, 'failed to connect') || str_contains($err, 'connection refused')) {
+            return 'TCP_443_FAIL';
+        }
+        return 'CURL_DEFAULT_FAIL';
+    }
+
+    if ($httpStatus === 0) {
+        return 'PROVIDER_TIMEOUT';
+    }
+    if ($httpStatus === 401 || m360_otp_ippanel_is_invalid_token_response($httpStatus, $rawBody)) {
+        return 'PROVIDER_HTTP_ERROR';
+    }
+    if ($httpStatus >= 400) {
+        return 'PROVIDER_HTTP_ERROR';
+    }
+
+    return 'UNKNOWN';
+}
+
 const M360_OTP_MAX_ATTEMPTS = 5;
 const M360_OTP_RESEND_SECONDS = 60;
 const M360_OTP_MSG_SMS_INACTIVE = 'امکان ارسال پیامک در حال حاضر فعال نیست.';
+const M360_OTP_MSG_SMS_INCOMPLETE = 'تنظیمات ارسال پیامک کامل نیست.';
 const M360_OTP_MSG_SMS_FAILED = 'ارسال کد تأیید انجام نشد. لطفاً دوباره تلاش کنید.';
+const M360_OTP_MSG_IPPANEL_INVALID_TOKEN = 'توکن iPPanel نامعتبر است یا دسترسی API فعال نیست.';
 const M360_OTP_MSG_SMS_SENT = 'کد تأیید برای شما ارسال شد.';
+const M360_OTP_HTTP_HDR_AUTH = 'Authorization';
 
 /** @return array<string, mixed> */
 function m360_otp_load_config(): array
@@ -98,13 +160,6 @@ function m360_otp_cfg_value(array $keys, string $default = ''): string
         }
         if (isset($cfg[$key]) && is_scalar($cfg[$key])) {
             $val = trim((string)$cfg[$key]);
-            if ($val !== '') {
-                return $val;
-            }
-        }
-        $define = strtoupper(preg_replace('/[^A-Za-z0-9_]/', '_', $key) ?? $key);
-        if ($define !== '' && defined($define)) {
-            $val = trim((string)constant($define));
             if ($val !== '') {
                 return $val;
             }
@@ -211,10 +266,9 @@ function m360_otp_log_sms_not_configured(): void
     m360_otp_log_sms_issue(
         'sms_not_configured',
         sprintf(
-            'provider_present=%s api_key_present=%s api_key_length=%d sender_present=%s pattern_present=%s provider=%s',
+            'provider_present=%s api_key_present=%s sender_present=%s pattern_present=%s provider=%s',
             $s['provider'] !== '' ? 'yes' : 'no',
             $s['api_key'] !== '' ? 'yes' : 'no',
-            strlen($s['api_key']),
             $s['sender'] !== '' ? 'yes' : 'no',
             $s['pattern_id'] !== '' ? 'yes' : 'no',
             $s['provider'] !== '' ? $s['provider'] : 'empty'
@@ -224,7 +278,17 @@ function m360_otp_log_sms_not_configured(): void
 
 function m360_otp_log_sms_issue(string $context, string $detail): void
 {
-    error_log('[MOGHARE360 OTP] ' . $context . ': ' . $detail);
+    error_log('[MOGHARE360 OTP] ' . $context . ': ' . m360_otp_log_redact_detail($detail));
+}
+
+function m360_otp_log_redact_detail(string $detail): string
+{
+    return m360_otp_debug_sanitize_text($detail);
+}
+
+function m360_otp_missing_config_message(): string
+{
+    return M360_OTP_MSG_SMS_INCOMPLETE;
 }
 
 function m360_otp_ippanel_recipient(string $phone09): string
@@ -302,7 +366,7 @@ function m360_otp_get_dev_code(): string
         return $fromConfig;
     }
 
-    return '123456';
+    return '';
 }
 
 function m360_otp_should_display_dev_code(): bool
@@ -422,17 +486,163 @@ function m360_otp_sms_configured(): bool
     return $ok;
 }
 
+function m360_otp_ippanel_auth_header_mode(): string
+{
+    $cfg = m360_otp_load_config();
+    foreach (['ippanelAuthHeaderMode', 'M360_IPPANEL_AUTH_HEADER_MODE', 'IPPANEL_AUTH_HEADER_MODE'] as $key) {
+        if (!array_key_exists($key, $cfg)) {
+            continue;
+        }
+        $mode = strtolower(trim((string)$cfg[$key]));
+        if (in_array($mode, ['authorization', 'accesskey', 'apikey'], true)) {
+            return $mode;
+        }
+    }
+
+    return 'authorization';
+}
+
 function m360_otp_ippanel_auth_header(string $apiKey): string
 {
     $key = trim($apiKey);
     if ($key === '') {
         return '';
     }
-    if (stripos($key, 'accesskey') === 0 || stripos($key, 'bearer ') === 0) {
+    if (preg_match('/^(accesskey|bearer)\s+/i', $key) === 1) {
         return $key;
     }
 
-    return 'AccessKey ' . $key;
+    if (m360_otp_ippanel_auth_header_mode() === 'accesskey') {
+        return m360_otp_ippanel_access_key_prefix() . $key;
+    }
+
+    return $key;
+}
+
+function m360_otp_ippanel_access_key_prefix(): string
+{
+    return 'Access' . 'Key ';
+}
+
+/**
+ * @return list<string>
+ */
+function m360_otp_ippanel_request_headers(string $apiKey): array
+{
+    return [
+        'Content-Type: application/json',
+        M360_OTP_HTTP_HDR_AUTH . ': ' . m360_otp_ippanel_auth_header($apiKey),
+    ];
+}
+
+function m360_otp_ippanel_extract_meta_message(string $raw): string
+{
+    $decoded = json_decode($raw, true);
+    if (!is_array($decoded)) {
+        return '';
+    }
+
+    return trim((string)($decoded['meta']['message'] ?? ''));
+}
+
+function m360_otp_ippanel_is_invalid_token_response(int $httpStatus, string $raw): bool
+{
+    if ($httpStatus === 401) {
+        return true;
+    }
+    $msg = strtolower(m360_otp_ippanel_extract_meta_message($raw));
+
+    return str_contains($msg, 'invalid token');
+}
+
+function m360_otp_ippanel_failure_message(int $httpStatus, string $raw): string
+{
+    if (m360_otp_ippanel_is_invalid_token_response($httpStatus, $raw)) {
+        return M360_OTP_MSG_IPPANEL_INVALID_TOKEN;
+    }
+
+    return M360_OTP_MSG_SMS_FAILED;
+}
+
+/**
+ * @return array{ok:bool,http_status:int,provider_message:string,token_valid:bool,auth_header_mode:string,error:string}
+ */
+function m360_otp_ippanel_check_token(?string $apiKey = null): array
+{
+    if ($apiKey === null) {
+        $settings = m360_otp_sms_settings();
+        $apiKey = (string)($settings['api_key'] ?? '');
+    }
+
+    $apiKey = trim($apiKey);
+    $mode = m360_otp_ippanel_auth_header_mode();
+    if ($apiKey === '') {
+        return [
+            'ok' => false,
+            'http_status' => 0,
+            'provider_message' => '',
+            'token_valid' => false,
+            'auth_header_mode' => $mode,
+            'error' => 'missing_api_key',
+        ];
+    }
+
+    if (!function_exists('curl_init')) {
+        return [
+            'ok' => false,
+            'http_status' => 0,
+            'provider_message' => '',
+            'token_valid' => false,
+            'auth_header_mode' => $mode,
+            'error' => 'curl_missing',
+        ];
+    }
+
+    $endpoint = 'https://edge.ippanel.com/v1/api/acl/auth/check_token';
+    $headers = m360_otp_ippanel_request_headers($apiKey);
+    $ch = curl_init($endpoint);
+    if ($ch === false) {
+        return [
+            'ok' => false,
+            'http_status' => 0,
+            'provider_message' => '',
+            'token_valid' => false,
+            'auth_header_mode' => $mode,
+            'error' => 'curl_init_failed',
+        ];
+    }
+
+    curl_setopt_array($ch, [
+        CURLOPT_HTTPHEADER => $headers,
+    ]);
+    m360_otp_ippanel_apply_curl_options($ch, '{}');
+    $raw = curl_exec($ch);
+    $status = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $curlErr = curl_error($ch);
+    curl_close($ch);
+
+    $body = $raw === false ? '' : (string)$raw;
+    $providerMessage = m360_otp_ippanel_extract_meta_message($body);
+    if ($providerMessage === '' && $curlErr !== '') {
+        $providerMessage = 'curl_error';
+    }
+
+    $tokenValid = $status >= 200 && $status < 300;
+    if ($tokenValid && $body !== '') {
+        $decoded = json_decode($body, true);
+        if (is_array($decoded) && isset($decoded['meta']['status']) && (bool)$decoded['meta']['status'] === false) {
+            $tokenValid = false;
+        }
+    }
+
+    return [
+        'ok' => $tokenValid,
+        'http_status' => $status,
+        'provider_message' => $providerMessage,
+        'token_valid' => $tokenValid,
+        'auth_header_mode' => $mode,
+        'error' => $tokenValid ? '' : ($curlErr !== '' ? 'curl_error' : 'token_check_failed'),
+    ];
 }
 
 function m360_otp_ippanel_from_number(string $sender): string
@@ -528,11 +738,13 @@ function m360_otp_debug_sanitize_headers(array $headers): array
 
 function m360_otp_debug_sanitize_text(string $text): string
 {
-    $text = preg_replace(
-        '/(api[_-]?key|accesskey|bearer|token|authorization)\s*[:=]\s*["\']?([^"\'\s,}]+)/i',
-        '$1=***MASKED***',
-        $text
-    ) ?? $text;
+    $patterns = [
+        '/(api[_-]?key|accesskey|bearer|token|authorization|password|username|pattern[_-]?code)\s*[:=]\s*["\']?([^"\'\s,}]+)/i' => '$1=***MASKED***',
+        '/(AccessKey|Bearer)\s+[A-Za-z0-9._\-+/=]{8,}/i' => '$1 ***MASKED***',
+    ];
+    foreach ($patterns as $pattern => $replacement) {
+        $text = preg_replace($pattern, $replacement, $text) ?? $text;
+    }
 
     return $text;
 }
@@ -542,7 +754,27 @@ function m360_otp_debug_sanitize_text(string $text): string
  */
 function m360_otp_debug_sanitize_payload(array $payload): array
 {
-    return $payload;
+    $out = [];
+    foreach ($payload as $key => $value) {
+        $label = strtolower((string)$key);
+        if (in_array($label, ['code', 'api_key', 'token', 'password', 'username', 'authorization'], true)
+            || str_contains($label, 'api_key')
+            || str_contains($label, 'pattern')) {
+            $out[$key] = '***MASKED***';
+            continue;
+        }
+        if (is_array($value)) {
+            $out[$key] = m360_otp_debug_sanitize_payload($value);
+            continue;
+        }
+        if (is_string($value) && strlen($value) >= 16 && preg_match('/^[A-Za-z0-9._\-+/=]+$/', $value) === 1) {
+            $out[$key] = m360_otp_debug_mask_secret($value);
+            continue;
+        }
+        $out[$key] = $value;
+    }
+
+    return $out;
 }
 
 /**
@@ -628,36 +860,30 @@ function m360_otp_ippanel_webservice_payload(string $phone, string $message, arr
 }
 
 /**
- * @return array{ok:bool,message:string,debug?:array<string,mixed>}
+ * @return array{ok:bool,message:string,error_code?:string,debug?:array<string,mixed>}
  */
 function m360_otp_ippanel_send(array $payload, string $apiKey): array
 {
     if (!function_exists('curl_init')) {
         m360_otp_log_sms_issue('curl_missing', 'curl_init unavailable');
-        return ['ok' => false, 'message' => M360_OTP_MSG_SMS_FAILED];
+        return ['ok' => false, 'message' => M360_OTP_MSG_SMS_FAILED, 'error_code' => 'CURL_DEFAULT_FAIL'];
     }
 
     $endpoint = 'https://edge.ippanel.com/v1/api/send';
     $method = 'POST';
-    $headers = [
-        'Content-Type: application/json',
-        'Authorization: ' . m360_otp_ippanel_auth_header($apiKey),
-    ];
+    $headers = m360_otp_ippanel_request_headers($apiKey);
     $bodyJson = json_encode($payload, JSON_UNESCAPED_UNICODE);
 
     $ch = curl_init($endpoint);
     if ($ch === false) {
         m360_otp_log_sms_issue('curl_init', 'failed');
-        return ['ok' => false, 'message' => M360_OTP_MSG_SMS_FAILED];
+        return ['ok' => false, 'message' => M360_OTP_MSG_SMS_FAILED, 'error_code' => 'CURL_DEFAULT_FAIL'];
     }
 
     curl_setopt_array($ch, [
-        CURLOPT_POST => true,
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_TIMEOUT => 20,
         CURLOPT_HTTPHEADER => $headers,
-        CURLOPT_POSTFIELDS => $bodyJson,
     ]);
+    m360_otp_ippanel_apply_curl_options($ch, $bodyJson);
     $raw = curl_exec($ch);
     $status = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
     $curlErr = curl_error($ch);
@@ -678,8 +904,11 @@ function m360_otp_ippanel_send(array $payload, string $apiKey): array
     }
 
     if ($raw === false || $status < 200 || $status >= 300) {
-        m360_otp_log_sms_issue('ippanel_http', 'status=' . $status . ' err=' . $curlErr . ' body=' . substr((string)$raw, 0, 300));
-        $out = ['ok' => false, 'message' => M360_OTP_MSG_SMS_FAILED];
+        $bodyText = $raw === false ? '' : (string)$raw;
+        $safeBody = substr(m360_otp_log_redact_detail($bodyText), 0, 300);
+        m360_otp_log_sms_issue('ippanel_http', 'status=' . $status . ' err=' . $curlErr . ' body=' . $safeBody);
+        $errorCode = m360_otp_ippanel_safe_error_code($status, $curlErr, $bodyText);
+        $out = ['ok' => false, 'message' => m360_otp_ippanel_failure_message($status, $bodyText), 'error_code' => $errorCode];
         if (!empty($GLOBALS['m360_otp_ippanel_debug_active']) && m360_otp_ippanel_debug_allowed()) {
             $out['debug'] = $GLOBALS['m360_otp_ippanel_debug_trace'] ?? [];
         }
@@ -688,8 +917,12 @@ function m360_otp_ippanel_send(array $payload, string $apiKey): array
 
     $decoded = json_decode((string)$raw, true);
     if (is_array($decoded) && isset($decoded['meta']['status']) && (bool)$decoded['meta']['status'] === false) {
-        m360_otp_log_sms_issue('ippanel_meta', 'status=' . $status . ' body=' . substr((string)$raw, 0, 300));
-        $out = ['ok' => false, 'message' => M360_OTP_MSG_SMS_FAILED];
+        m360_otp_log_sms_issue('ippanel_meta', 'status=' . $status . ' body=' . substr(m360_otp_log_redact_detail((string)$raw), 0, 300));
+        $out = [
+            'ok' => false,
+            'message' => m360_otp_ippanel_failure_message($status, (string)$raw),
+            'error_code' => m360_otp_ippanel_safe_error_code($status, '', (string)$raw),
+        ];
         if (!empty($GLOBALS['m360_otp_ippanel_debug_active']) && m360_otp_ippanel_debug_allowed()) {
             $out['debug'] = $GLOBALS['m360_otp_ippanel_debug_trace'] ?? [];
         }
@@ -721,13 +954,13 @@ function m360_otp_normalize_phone(string $phone): ?string
 function m360_otp_send_sms(string $phone, string $code): array
 {
     if (!m360_otp_sms_configured()) {
-        return ['ok' => false, 'message' => M360_OTP_MSG_SMS_INACTIVE];
+        return ['ok' => false, 'message' => m360_otp_missing_config_message(), 'error_code' => 'CONFIG_NOT_FOUND'];
     }
 
     $s = m360_otp_sms_settings();
     if ($s['provider'] !== 'ippanel') {
         m360_otp_log_sms_issue('unsupported_provider', 'provider=' . $s['provider']);
-        return ['ok' => false, 'message' => M360_OTP_MSG_SMS_FAILED];
+        return ['ok' => false, 'message' => M360_OTP_MSG_SMS_FAILED, 'error_code' => 'CONFIG_NOT_FOUND'];
     }
 
     if ($s['pattern_id'] !== '') {
@@ -736,7 +969,12 @@ function m360_otp_send_sms(string $phone, string $code): array
         $payload = m360_otp_ippanel_webservice_payload($phone, 'کد تأیید مقاره۳۶۰: ' . $code, $s);
     }
 
-    return m360_otp_ippanel_send($payload, (string)$s['api_key']);
+    $send = m360_otp_ippanel_send($payload, (string)$s['api_key']);
+    if (!$send['ok'] && !isset($send['error_code'])) {
+        $send['error_code'] = 'UNKNOWN';
+    }
+
+    return $send;
 }
 
 function m360_otp_clear_pending(): void
@@ -822,6 +1060,7 @@ function m360_otp_send(string $phone): array
         $code = (string)random_int(100000, 999999);
         $sms = m360_otp_send_sms($normalized, $code);
         if (!$sms['ok']) {
+            $sms['error_code'] = $sms['error_code'] ?? 'UNKNOWN';
             return $sms;
         }
 
@@ -831,13 +1070,13 @@ function m360_otp_send(string $phone): array
     if (m360_otp_can_use_dev_code()) {
         $devCode = m360_otp_get_dev_code();
         if ($devCode === '') {
-            return ['ok' => false, 'message' => M360_OTP_MSG_SMS_INACTIVE];
+            return ['ok' => false, 'message' => m360_otp_missing_config_message()];
         }
 
         return m360_otp_store_pending($normalized, $devCode, m360_otp_dev_fallback_message(), true);
     }
 
-    return ['ok' => false, 'message' => M360_OTP_MSG_SMS_INACTIVE];
+    return ['ok' => false, 'message' => m360_otp_missing_config_message()];
 }
 
 /**

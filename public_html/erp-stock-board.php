@@ -20,13 +20,18 @@ try {
     inventory_require_auth($connection, 'inventory.stock.view');
 
     if (inventory_table_exists($connection, 'erp_inventory_items')) {
-        $sql = 'SELECT i.inventory_item_id, i.item_code, i.item_name, i.min_stock_qty,
-                       ISNULL(SUM(b.available_qty),0) AS available_qty,
-                       ISNULL(SUM(b.reserved_qty),0) AS reserved_qty,
-                       ISNULL(SUM(b.pending_receive_qty),0) AS pending_receive_qty
+        $sql = "SELECT i.inventory_item_id, i.item_code, i.item_name, i.min_stock_qty,
+                       ISNULL(SUM(CASE
+                           WHEN m.movement_type IN (N'OUTBOUND', N'JOB_CARD_CONSUMPTION') THEN -ABS(m.movement_qty)
+                           WHEN m.movement_type = N'COUNT_ADJUSTMENT' THEN m.movement_qty
+                           ELSE ABS(m.movement_qty)
+                       END),0) AS available_qty,
+                       CAST(0 AS DECIMAL(18,2)) AS reserved_qty,
+                       ISNULL(SUM(CASE WHEN m.movement_type = N'PENDING_RECEIVE' THEN ABS(m.movement_qty) ELSE 0 END),0) AS pending_receive_qty
                 FROM dbo.erp_inventory_items i
-                LEFT JOIN dbo.erp_stock_balances b ON b.inventory_item_id = i.inventory_item_id
-                WHERE i.is_active = 1';
+                LEFT JOIN dbo.erp_inventory_stock_movements m
+                  ON m.inventory_item_id = i.inventory_item_id AND m.movement_status = N'RECORDED'
+                WHERE i.is_active = 1";
         $params = [];
         if ($filterName !== '') {
             $sql .= ' AND i.item_name LIKE ?';

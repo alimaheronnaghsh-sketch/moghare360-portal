@@ -27,6 +27,41 @@ function m360_delivery_session_start(): void
 }
 
 /** @return array{ok:bool,message:string,invoice:?array} */
+function m360_delivery_resolve_confirmation_token($conn, string $tokenHash): array
+{
+    if (!is_resource($conn)
+        || $tokenHash === ''
+        || !customer_core_table_exists($conn, M360_DEL_CONF_TABLE)
+        || !customer_core_column_exists($conn, M360_DEL_CONF_TABLE, 'secure_token_hash')) {
+        return ['ok' => false, 'message' => 'Invalid or expired delivery link.', 'invoice' => null];
+    }
+
+    $rows = customer_core_fetch_rows(
+        $conn,
+        'SELECT TOP 1 * FROM dbo.' . M360_DEL_CONF_TABLE . ' WHERE secure_token_hash = ? ORDER BY delivery_confirmation_id DESC',
+        [$tokenHash]
+    );
+    if ($rows === []) {
+        return ['ok' => false, 'message' => 'Invalid or expired delivery link.', 'invoice' => null];
+    }
+    $confirmation = $rows[0];
+    $exp = strtotime((string)($confirmation['secure_token_expires_at'] ?? ''));
+    if ($exp > 0 && $exp < time()) {
+        return ['ok' => false, 'message' => 'Delivery link expired.', 'invoice' => null];
+    }
+    $invoiceId = (int)($confirmation['final_invoice_id'] ?? 0);
+    if ($invoiceId < 1) {
+        return ['ok' => false, 'message' => 'Final invoice is not ready.', 'invoice' => null];
+    }
+    $invoice = m360_fi_fetch_invoice($conn, $invoiceId);
+    if ($invoice === null || strtoupper((string)($invoice['invoice_status'] ?? '')) !== M360_FI_FINALIZED) {
+        return ['ok' => false, 'message' => 'Final invoice is not ready.', 'invoice' => null];
+    }
+
+    return ['ok' => true, 'message' => '', 'invoice' => $invoice];
+}
+
+/** @return array{ok:bool,message:string,invoice:?array} */
 function m360_delivery_resolve_token(string $rawToken): array
 {
     $rawToken = trim($rawToken);
@@ -38,6 +73,9 @@ function m360_delivery_resolve_token(string $rawToken): array
         return ['ok' => false, 'message' => 'سرویس در دسترس نیست.', 'invoice' => null];
     }
     $hash = m360_fi_hash($rawToken);
+    if (!customer_core_column_exists($conn, M360_FI_TABLE, 'delivery_token_hash')) {
+        return m360_delivery_resolve_confirmation_token($conn, $hash);
+    }
     $rows = customer_core_fetch_rows(
         $conn,
         'SELECT TOP 1 * FROM dbo.' . M360_FI_TABLE . ' WHERE delivery_token_hash = ?',

@@ -1,20 +1,22 @@
 <?php
 declare(strict_types=1);
 
-require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/inventory-controlled-helpers.php';
 require_once __DIR__ . '/meeting-helpers.php';
 
-function inv_has_text(string $haystack, string $needle): bool
-{
-    if ($needle === '') {
-        return true;
-    }
+if (!function_exists('inv_has_text')) {
+    function inv_has_text(string $haystack, string $needle): bool
+    {
+        if ($needle === '') {
+            return true;
+        }
 
-    if (function_exists('mb_strpos')) {
-        return mb_strpos($haystack, $needle, 0, 'UTF-8') !== false;
-    }
+        if (function_exists('mb_strpos')) {
+            return mb_strpos($haystack, $needle, 0, 'UTF-8') !== false;
+        }
 
-    return strpos($haystack, $needle) !== false;
+        return strpos($haystack, $needle) !== false;
+    }
 }
 
 if (!function_exists('inventoryCategories')) {
@@ -110,9 +112,13 @@ if (!function_exists('inventoryCanEditFull')) {
         }
 
         $role = (string)($staff['role_name'] ?? '');
+        $roleCode = strtoupper((string)($staff['role_code'] ?? ''));
         $username = (string)($staff['username'] ?? '');
 
         return !empty($staff['is_master_admin'])
+            || $roleCode === 'PARTS'
+            || in_array('inventory_staff', $staff['role_keys'] ?? [], true)
+            || inv_has_any_permission($staff, ['inventory', 'stock', 'parts', 'purchase'])
             || inv_has_text($role, 'مالک')
             || inv_has_text($role, 'انبار')
             || $username === 'warehouse_price';
@@ -151,8 +157,8 @@ if (!function_exists('inventoryCount')) {
     function inventoryCount(): int
     {
         try {
-            return (int)getPdo()->query('SELECT COUNT(*) FROM inventory_items_staging')->fetchColumn();
-        } catch (Throwable $e) {
+            return (int)(inv_scalar('SELECT COUNT(*) FROM dbo.erp_inventory_items WHERE is_active = 1') ?? 0);
+        } catch (Throwable) {
             return 0;
         }
     }

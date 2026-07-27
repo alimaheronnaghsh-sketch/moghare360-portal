@@ -10,6 +10,8 @@ require_once __DIR__ . DIRECTORY_SEPARATOR . 'erp-customer-core-helper.php';
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'moghare360-customer-v2-write-helper.php';
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'moghare360-vehicle-v2-write-helper.php';
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'moghare360-jobcard-v2-write-helper.php';
+require_once __DIR__ . DIRECTORY_SEPARATOR . 'm360-intake-prepayment-gate-helper.php';
+require_once __DIR__ . DIRECTORY_SEPARATOR . 'm360-intake-contract-helper.php';
 
 const M360_RECEPTION_CSRF_PURPOSE = 'online_request_reception';
 
@@ -18,12 +20,26 @@ function m360_reception_h(string $value): string
     return htmlspecialchars($value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 }
 
+/** Stable session-scope CSRF token for reception intake (reused across page renders/tabs). */
+function m360_reception_csrf_token_value(): string
+{
+    if (!function_exists('erp_csrf_get_or_create_token')) {
+        return '';
+    }
+
+    return erp_csrf_get_or_create_token(M360_RECEPTION_CSRF_PURPOSE);
+}
+
 /** Single CSRF hidden input for all reception action forms on one page. */
 function m360_reception_csrf_input_html(): string
 {
-    ob_start();
-    echo erp_csrf_input(M360_RECEPTION_CSRF_PURPOSE);
-    return (string)ob_get_clean();
+    $token = m360_reception_csrf_token_value();
+    if ($token === '') {
+        return '';
+    }
+
+    return '<input type="hidden" name="erp_csrf_token" value="' .
+        m360_reception_h($token) . '">';
 }
 
 function m360_reception_csrf_is_valid(?string $token): bool
@@ -35,9 +51,60 @@ function m360_reception_csrf_is_valid(?string $token): bool
     return erp_csrf_validate_token(M360_RECEPTION_CSRF_PURPOSE, trim((string)($token ?? '')));
 }
 
-/** @return array{title:string,text:string,button:string,detail_href:string} */
-function m360_reception_action_error_content(string $type, int $requestId): array
+function m360_reception_intake_recover_step_key(string $activeStep): string
 {
+    $activeStep = trim($activeStep);
+    if (in_array($activeStep, ['photos', 'camera_photo'], true)) {
+        return 'condition';
+    }
+    if ($activeStep === 'contract') {
+        return 'signature';
+    }
+    $allowed = ['otp', 'customer', 'vehicle', 'service', 'condition', 'documents', 'signature', 'referral', 'locked_summary'];
+
+    return in_array($activeStep, $allowed, true) ? $activeStep : 'documents';
+}
+
+function m360_reception_intake_step_hash(string $stepKey): string
+{
+    return match (m360_reception_intake_recover_step_key($stepKey)) {
+        'otp' => 'step-otp',
+        'customer' => 'step-customer',
+        'vehicle' => 'step-vehicle',
+        'condition' => 'step-condition',
+        'service' => 'step-service',
+        'referral' => 'step-referral',
+        'documents' => 'step-documents',
+        'signature' => 'step-signature',
+        'locked_summary' => 'step-locked',
+        default => 'step-documents',
+    };
+}
+
+/** @return array{title:string,text:string,button:string,detail_href:string} */
+function m360_reception_action_error_content(string $type, int $requestId, string $context = 'default', string $activeStep = 'documents'): array
+{
+    if ($type === 'csrf' && $context === 'intake') {
+        if ($requestId > 0) {
+            $step = m360_reception_intake_recover_step_key($activeStep);
+            $hash = m360_reception_intake_step_hash($step);
+            $detailHref = 'erp-reception-intake-file.php?online_request_id=' . $requestId
+                . '&active_step=' . rawurlencode($step)
+                . '#' . rawurlencode($hash);
+            $button = $step === 'documents' ? 'بازگشت به مرحله مستندات' : 'بازگشت به پرونده پذیرش';
+        } else {
+            $detailHref = 'erp-reception-workbench.php';
+            $button = 'بازگشت به میز کار پذیرش';
+        }
+
+        return [
+            'title' => 'اعتبار امنیتی فرم منقضی شده است',
+            'text' => 'اعتبار امنیتی فرم منقضی شده است؛ لطفاً صفحه را تازه‌سازی و دوباره تلاش کنید.',
+            'button' => $button,
+            'detail_href' => $detailHref,
+        ];
+    }
+
     $detailHref = $requestId > 0
         ? 'erp-reception-online-request-detail.php?request_id=' . $requestId
         : 'erp-reception-online-requests.php';
@@ -59,16 +126,16 @@ function m360_reception_action_error_content(string $type, int $requestId): arra
     ];
 }
 
-function m360_reception_render_action_error_page(string $type, int $requestId = 0): void
+function m360_reception_render_action_error_page(string $type, int $requestId = 0, string $context = 'default', string $activeStep = 'documents'): void
 {
-    $content = m360_reception_action_error_content($type, $requestId);
+    $content = m360_reception_action_error_content($type, $requestId, $context, $activeStep);
     http_response_code($type === 'csrf' ? 403 : 200);
     header('Content-Type: text/html; charset=UTF-8');
     header('X-Robots-Tag: noindex, nofollow');
     echo '<!DOCTYPE html><html lang="fa" dir="rtl"><head>';
     echo '<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">';
     echo '<title>' . m360_reception_h($content['title']) . '</title>';
-    echo '<link rel="stylesheet" href="assets/moghare360-ui/moghare360-soft-run-release.css">';
+    echo '<link rel="stylesheet" href="assets/css/moghare360-v1-luxury-ui.css">';
     echo '<style>.p1-gate-wrap{max-width:480px;margin:2rem auto;padding:0 1rem;}';
     echo '.p1-gate-card{background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:1.5rem;text-align:center;}';
     echo '.p1-gate-card h1{margin:0 0 .75rem;font-size:1.1rem;color:#991b1b;}';
@@ -125,17 +192,29 @@ function m360_reception_status_counts($conn): array
         return [];
     }
 
-    $sql = 'SELECT request_status, COUNT(*) AS cnt FROM dbo.' . m360_online_req_table() . ' GROUP BY request_status';
-    $stmt = @odbc_exec($conn, $sql);
-    if ($stmt === false) {
+    $where = '1=1';
+    if (m360_online_req_has_column($conn, 'otp_verified')) {
+        $where .= " AND (ISNULL(r.otp_verified, 0) = 1 OR r.source_channel = N'" . M360_ONLINE_REQ_SOURCE_STAFF_WALKIN . "')";
+    }
+
+    $sql = 'SELECT r.request_status, COUNT(*) AS cnt
+            FROM dbo.' . m360_online_req_table() . ' r
+            WHERE ' . $where . '
+            GROUP BY r.request_status';
+
+    $stmt = @odbc_prepare($conn, $sql);
+    if ($stmt === false || !@odbc_execute($stmt, [])) {
         return [];
     }
 
     $byDb = [];
     $total = 0;
     while (($row = odbc_fetch_array($stmt)) !== false) {
-        $status = strtoupper(trim((string)($row['request_status'] ?? '')));
-        $cnt = (int)($row['cnt'] ?? 0);
+        $status = strtoupper(trim((string)($row['request_status'] ?? $row['REQUEST_STATUS'] ?? '')));
+        if ($status === '') {
+            continue;
+        }
+        $cnt = (int)($row['cnt'] ?? $row['CNT'] ?? 0);
         $byDb[$status] = ($byDb[$status] ?? 0) + $cnt;
         $total += $cnt;
     }
@@ -191,6 +270,10 @@ function m360_reception_list_requests($conn, ?string $statusFilter = null, int $
     $params = [];
     $where = '1=1';
 
+    if (m360_online_req_has_column($conn, 'otp_verified')) {
+        $where .= " AND (ISNULL(r.otp_verified, 0) = 1 OR r.source_channel = N'" . M360_ONLINE_REQ_SOURCE_STAFF_WALKIN . "')";
+    }
+
     if ($statusFilter !== null && $statusFilter !== '' && $statusFilter !== 'ALL') {
         $canonical = strtoupper(trim($statusFilter));
         if ($canonical === M360_ONLINE_REQ_STATUS_NEW) {
@@ -201,7 +284,8 @@ function m360_reception_list_requests($conn, ?string $statusFilter = null, int $
         }
     }
 
-    $sql = 'SELECT TOP ' . $limit . '
+    $fetchLimit = min(500, max($limit, $limit * 3));
+    $sql = 'SELECT TOP ' . $fetchLimit . '
             r.online_request_id,
             r.company_id,
             r.customer_name,
@@ -216,6 +300,8 @@ function m360_reception_list_requests($conn, ?string $statusFilter = null, int $
             r.vehicle_id,
             r.converted_jobcard_id,
             r.created_at,
+            r.request_payload_json,
+            r.otp_verified,
             c.full_name AS erp_customer_name,
             v.brand AS vehicle_brand,
             v.model AS vehicle_model
@@ -230,13 +316,27 @@ function m360_reception_list_requests($conn, ?string $statusFilter = null, int $
         return [];
     }
 
+    $hasOtpColumn = m360_online_req_list_has_otp_verified_column($conn);
     $rows = [];
     while (($row = odbc_fetch_array($stmt)) !== false) {
         $normalized = [];
         foreach ($row as $key => $value) {
             $normalized[strtolower((string)$key)] = $value === null ? '' : (string)$value;
         }
+        if ($hasOtpColumn) {
+            if (!m360_online_req_payload_otp_verified_for_list($conn, $normalized) && !m360_online_req_is_staff_walkin($normalized)) {
+                continue;
+            }
+        } else {
+            $normalized = m360_online_req_hydrate_row_payload_json($conn, $normalized);
+            if (!m360_online_req_payload_otp_verified($normalized) && !m360_online_req_is_staff_walkin($normalized)) {
+                continue;
+            }
+        }
         $rows[] = $normalized;
+        if (count($rows) >= $limit) {
+            break;
+        }
     }
 
     return $rows;
@@ -501,8 +601,29 @@ function m360_reception_convert_to_jobcard(int $requestId): array
         ];
     }
 
-    if (!m360_online_req_payload_otp_verified($row)) {
+    $staffWalkin = m360_online_req_is_staff_walkin($row);
+    $payload = m360_online_req_parse_payload($row['request_payload_json'] ?? null);
+    if (!m360_online_req_payload_otp_verified($row) && !$staffWalkin) {
         return ['ok' => false, 'message' => 'درخواست بدون تأیید OTP قابل تبدیل نیست.', 'jobcard_id' => null, 'jobcard_number' => null, 'already_converted' => false];
+    }
+
+    if (!m360_intake_prepayment_contract_signed_from_payload($payload)) {
+        return ['ok' => false, 'message' => 'پرونده قبل از تأیید قرارداد توسط خود مشتری قابل تبدیل به کارت کار نیست.', 'jobcard_id' => null, 'jobcard_number' => null, 'already_converted' => false];
+    }
+
+    $prepaymentGate = m360_intake_prepayment_gate_evaluate(
+        $payload,
+        true,
+        m360_intake_prepayment_fetch_backend_summary($conn, 0, (int)($row['customer_id'] ?? ($payload['customer_id'] ?? 0)))
+    );
+    if (empty($prepaymentGate['allow_handoff'])) {
+        return [
+            'ok' => false,
+            'message' => (string)($prepaymentGate['message'] !== '' ? $prepaymentGate['message'] : $prepaymentGate['label']),
+            'jobcard_id' => null,
+            'jobcard_number' => null,
+            'already_converted' => false,
+        ];
     }
 
     $status = strtoupper(trim((string)($row['request_status'] ?? '')));
@@ -529,7 +650,6 @@ function m360_reception_convert_to_jobcard(int $requestId): array
 
     m360_reception_bind_request_entities($conn, $requestId, $customerId, $vehicleId);
 
-    $payload = m360_online_req_parse_payload($row['request_payload_json'] ?? null);
     $visitDate = trim((string)($row['visit_date'] ?? $payload['visit_date'] ?? ''));
     $complaint = trim((string)($row['service_note'] ?? ''));
     if ($complaint === '') {
@@ -557,6 +677,34 @@ function m360_reception_convert_to_jobcard(int $requestId): array
     }
 
     $jobcardId = (int)$jobcardWrite['jobcard_id'];
+    if (customer_core_column_exists($conn, 'erp_jobcards', 'online_request_id')) {
+        customer_core_execute(
+            $conn,
+            'UPDATE dbo.erp_jobcards SET online_request_id = ?, updated_at = SYSUTCDATETIME() WHERE jobcard_id = ?',
+            [$requestId, $jobcardId]
+        );
+    }
+    $contractId = 0;
+    if (customer_core_table_exists($conn, M360_CONTRACT_TABLE)) {
+        customer_core_execute(
+            $conn,
+            'UPDATE dbo.' . M360_CONTRACT_TABLE . ' SET jobcard_id = ?, updated_at = SYSUTCDATETIME()
+             WHERE online_request_id = ? AND (jobcard_id IS NULL OR jobcard_id = 0)',
+            [$jobcardId, $requestId]
+        );
+        $contractId = (int)(customer_core_scalar(
+            $conn,
+            'SELECT TOP 1 contract_id FROM dbo.' . M360_CONTRACT_TABLE . ' WHERE online_request_id = ? ORDER BY contract_id DESC',
+            [$requestId]
+        ) ?? 0);
+    }
+    if ($contractId > 0 && customer_core_column_exists($conn, 'erp_jobcards', 'contract_status')) {
+        customer_core_execute(
+            $conn,
+            'UPDATE dbo.erp_jobcards SET contract_status = ?, intake_contract_id = ?, contract_signed_at = COALESCE(contract_signed_at, SYSUTCDATETIME()), updated_at = SYSUTCDATETIME() WHERE jobcard_id = ?',
+            ['SIGNED', $contractId, $jobcardId]
+        );
+    }
     $previousStatus = (string)($row['request_status'] ?? '');
     erp_auth_context_start();
     $userId = erp_auth_current_user_id() ?? ERP_PHASE1_PLATFORM_OWNER_ID;

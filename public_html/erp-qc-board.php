@@ -12,7 +12,6 @@ m360_qc_require_staff();
 $filter = isset($_GET['status']) ? strtoupper(trim((string)$_GET['status'])) : 'ALL';
 $conn = customer_core_db();
 $rows = $conn !== false ? m360_qc_board_list($conn, $filter === 'ALL' ? null : $filter, 150) : [];
-
 ?>
 <!DOCTYPE html>
 <html lang="fa" dir="rtl">
@@ -23,14 +22,19 @@ $rows = $conn !== false ? m360_qc_board_list($conn, $filter === 'ALL' ? null : $
     <link rel="stylesheet" href="assets/moghare360-ui/moghare360-soft-run-release.css">
     <link rel="stylesheet" href="assets/css/m360-qc.css">
     <link rel="stylesheet" href="<?= m360_operational_shell_h(m360_operational_shell_css_href()) ?>">
+    <link rel="stylesheet" href="assets/css/mirror.css">
+    <link rel="stylesheet" href="assets/css/moghare360-v1-luxury-ui.css">
 </head>
 <body class="m360-qc-page">
 <div class="w1c-wrap m360-qc-wrap">
     <?php m360_operational_shell_render_board('qc_board'); ?>
     <header class="w1c-banner">
         <h1>برد QC و بازبینی نهایی</h1>
-        <p>کنترل کیفیت — Pass/Fail — Rework — آمادگی تحویل</p>
+        <p>QC فقط پس از تکمیل اجرای کار مجاز است. هیچ QC Pass قبل از تکمیل کار معتبر نیست.</p>
     </header>
+    <section class="w1c-card m360-lux-warn">
+        <strong>گیت QC:</strong> اگر اجرای کار کامل نشده باشد، QC مسدود است. در صورت Fail یا Rework، پرونده به اجرای کار برمی‌گردد.
+    </section>
     <?php if ($conn === false): ?>
         <section class="w1c-card"><p>اتصال به پایگاه داده برقرار نشد.</p></section>
     <?php else: ?>
@@ -47,14 +51,14 @@ $rows = $conn !== false ? m360_qc_board_list($conn, $filter === 'ALL' ? null : $
                 <table class="m360-qc-table">
                     <thead><tr>
                         <th>کارت کار</th><th>مشتری</th><th>موبایل</th><th>خودرو</th><th>پلاک</th>
-                        <th>اجرای کار</th><th>QC</th><th>برآورد</th><th>آماده QC</th><th>تحویل</th><th></th>
+                        <th>اجرای کار</th><th>QC</th><th>برآورد</th><th>آماده QC</th><th>تحویل</th><th>اقدام</th>
                     </tr></thead>
                     <tbody>
                     <?php foreach ($rows as $r): ?>
                         <tr>
                             <td><?= m360_qc_h((string)$r['jobcard_id']) ?></td>
                             <td><?= m360_qc_h((string)($r['customer_name'] ?? '-')) ?></td>
-                            <td><?= m360_qc_h((string)($r['customer_mobile'] ?? '-')) ?></td>
+                            <td><?= m360_qc_h(m360_qc_mask_mobile((string)($r['customer_mobile'] ?? '-'))) ?></td>
                             <td><?= m360_qc_h((string)($r['vehicle_label'] ?? '-')) ?></td>
                             <td><?= m360_qc_h((string)($r['plate_number'] ?? '-')) ?></td>
                             <td><?= m360_qc_h((string)($r['work_status_label'] ?? '-')) ?></td>

@@ -8,6 +8,9 @@ declare(strict_types=1);
 
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'm360-reception-helper.php';
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'm360-intake-contract-helper.php';
+require_once __DIR__ . DIRECTORY_SEPARATOR . 'm360-customer-cartable-helper.php';
+require_once __DIR__ . DIRECTORY_SEPARATOR . 'm360-intake-prepayment-gate-helper.php';
+require_once __DIR__ . DIRECTORY_SEPARATOR . 'm360-fulljob-lifecycle-helper.php';
 
 function m360_rw_h(string $value): string
 {
@@ -76,24 +79,98 @@ function m360_rw_payload_label_map(): array
 }
 
 /**
- * @return array{valid:bool,items:array<string,mixed>,raw_warning:string}
+ * @return array{
+ *   valid:bool,
+ *   items:array<string,mixed>,
+ *   raw_warning:string,
+ *   payload_status:string,
+ *   sql_len:int,
+ *   read_len:int,
+ *   recovery_source:string
+ * }
  */
-function m360_rw_decode_payload(?string $json): array
+function m360_rw_decode_payload(?string $json, array $readMeta = []): array
 {
+    $sqlLen = (int)($readMeta['sql_len'] ?? 0);
+    $readLen = (int)($readMeta['read_len'] ?? 0);
+    $readOk = array_key_exists('ok', $readMeta) ? (bool)$readMeta['ok'] : true;
+    $readError = trim((string)($readMeta['error'] ?? ''));
+    $runtimeReadFailed = !$readOk
+        || $readError === 'RUNTIME_PAYLOAD_READ_FAILED'
+        || ($sqlLen > 0 && $readLen > 0 && $readLen < $sqlLen);
+    $runtimeWarning = 'خواندن کامل اطلاعات درخواست با خطای فنی مواجه شد؛ داده اصلی در پایگاه داده حذف یا نامعتبر تشخیص داده نشده است.';
+
     if ($json === null || trim($json) === '') {
-        return ['valid' => true, 'items' => [], 'raw_warning' => ''];
+        if ($sqlLen > 0 && $runtimeReadFailed) {
+            return [
+                'valid' => false,
+                'items' => [],
+                'raw_warning' => $runtimeWarning,
+                'payload_status' => 'RUNTIME_PAYLOAD_READ_FAILED',
+                'sql_len' => $sqlLen,
+                'read_len' => $readLen,
+                'recovery_source' => '',
+            ];
+        }
+
+        return [
+            'valid' => true,
+            'items' => [],
+            'raw_warning' => '',
+            'payload_status' => 'PAYLOAD_VALID',
+            'sql_len' => $sqlLen,
+            'read_len' => $readLen,
+            'recovery_source' => '',
+        ];
     }
 
     $decoded = json_decode($json, true);
+
+    if ($runtimeReadFailed) {
+        if (is_array($decoded)) {
+            return [
+                'valid' => false,
+                'items' => $decoded,
+                'raw_warning' => $runtimeWarning,
+                'payload_status' => 'RUNTIME_PAYLOAD_READ_FAILED',
+                'sql_len' => $sqlLen,
+                'read_len' => $readLen,
+                'recovery_source' => 'residual-valid',
+            ];
+        }
+
+        return [
+            'valid' => false,
+            'items' => [],
+            'raw_warning' => $runtimeWarning,
+            'payload_status' => 'RUNTIME_PAYLOAD_READ_FAILED',
+            'sql_len' => $sqlLen,
+            'read_len' => $readLen,
+            'recovery_source' => '',
+        ];
+    }
+
     if (!is_array($decoded)) {
         return [
             'valid' => false,
             'items' => [],
             'raw_warning' => 'ساختار JSON فرم آنلاین نامعتبر است. اطلاعات پایه از ستون‌های درخواست نمایش داده می‌شود.',
+            'payload_status' => 'STORED_JSON_INVALID',
+            'sql_len' => $sqlLen,
+            'read_len' => $readLen,
+            'recovery_source' => '',
         ];
     }
 
-    return ['valid' => true, 'items' => $decoded, 'raw_warning' => ''];
+    return [
+        'valid' => true,
+        'items' => $decoded,
+        'raw_warning' => '',
+        'payload_status' => 'PAYLOAD_VALID',
+        'sql_len' => $sqlLen,
+        'read_len' => $readLen,
+        'recovery_source' => '',
+    ];
 }
 
 /** @return list<array{key:string,label_fa:string,value:string,is_nested:bool}> */
@@ -202,6 +279,7 @@ function m360_rw_source_label_fa(string $sourceKey): string
     return match ($sourceKey) {
         'online_request' => 'از درخواست آنلاین خوانده شد',
         'payload' => 'در Payload موجود است',
+        'reception_intake' => 'از پیش‌نویس پذیرش خوانده شد',
         'erp_vehicle' => 'از پرونده خودرو ERP خوانده شد',
         'erp_customer' => 'از پرونده مشتری ERP خوانده شد',
         'erp_jobcard' => 'از کارت کار خوانده شد',
@@ -238,11 +316,108 @@ function m360_rw_recover_plate_from_parts(array $payload): string
     $letter = trim((string)($pp['letter'] ?? ''));
     $mid = trim((string)($pp['middle_3'] ?? ''));
     $region = trim((string)($pp['region_2'] ?? ''));
+
+    if ($left === '') {
+        $d1 = trim((string)($pp['first_digit_1'] ?? ''));
+        $d2 = trim((string)($pp['first_digit_2'] ?? ''));
+        if ($d1 !== '' && $d2 !== '') {
+            $left = $d1 . $d2;
+        }
+    }
+    if ($mid === '') {
+        $m1 = trim((string)($pp['middle_digit_1'] ?? ''));
+        $m2 = trim((string)($pp['middle_digit_2'] ?? ''));
+        $m3 = trim((string)($pp['middle_digit_3'] ?? ''));
+        if ($m1 !== '' && $m2 !== '' && $m3 !== '') {
+            $mid = $m1 . $m2 . $m3;
+        }
+    }
+    if ($region === '') {
+        $r1 = trim((string)($pp['region_digit_1'] ?? ''));
+        $r2 = trim((string)($pp['region_digit_2'] ?? ''));
+        if ($r1 !== '' && $r2 !== '') {
+            $region = $r1 . $r2;
+        }
+    }
+
     if ($left !== '' && $letter !== '' && $mid !== '' && $region !== '') {
         return $left . $letter . $mid . '-' . $region;
     }
 
     return '';
+}
+
+/**
+ * Display-only mojibake guard for Persian legacy strings. Never persists conversions.
+ */
+function m360_rw_display_text_is_mojibake(string $value): bool
+{
+    $value = trim($value);
+    if ($value === '') {
+        return false;
+    }
+    $markers = ['Ø', 'Ù', 'ط§', 'ط¨', 'ظ†', 'ظ…'];
+    foreach ($markers as $marker) {
+        if (str_contains($value, $marker)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+function m360_rw_mojibake_field_message(string $fieldLabelFa): string
+{
+    $label = trim($fieldLabelFa);
+    if ($label === '') {
+        return 'داده قدیمی دارای اشکال کدگذاری است و باید توسط مدیر سیستم اصلاح شود.';
+    }
+
+    return 'فیلد «' . $label . '»: داده قدیمی دارای اشکال کدگذاری است و باید توسط مدیر سیستم اصلاح شود.';
+}
+
+/**
+ * Prefer clean text; skip empty and obvious mojibake (display-only).
+ *
+ * @param list<array{value:string,source_key:string}> $candidates
+ * @return array{value:string,source_key:string,mojibake:bool,warning:string}
+ */
+function m360_rw_pick_clean_display_text(array $candidates, string $fieldLabelFa, bool $guardMojibake = true): array
+{
+    $mojibakeOnly = '';
+    $mojibakeSource = '';
+    foreach ($candidates as $candidate) {
+        $value = trim((string)($candidate['value'] ?? ''));
+        if ($value === '') {
+            continue;
+        }
+        $source = (string)($candidate['source_key'] ?? '');
+        if ($guardMojibake && m360_rw_display_text_is_mojibake($value)) {
+            if ($mojibakeOnly === '') {
+                $mojibakeOnly = $value;
+                $mojibakeSource = $source;
+            }
+            continue;
+        }
+
+        return [
+            'value' => $value,
+            'source_key' => $source,
+            'mojibake' => false,
+            'warning' => '',
+        ];
+    }
+
+    if ($mojibakeOnly !== '') {
+        return [
+            'value' => '',
+            'source_key' => $mojibakeSource,
+            'mojibake' => true,
+            'warning' => m360_rw_mojibake_field_message($fieldLabelFa),
+        ];
+    }
+
+    return ['value' => '', 'source_key' => '', 'mojibake' => false, 'warning' => ''];
 }
 
 /**
@@ -278,8 +453,8 @@ function m360_rw_recover_intake_fields(
 ): array {
     $map = m360_rw_intake_source_map($request, $payload, $customer, $vehicle, $intake, $jobcard);
 
-    $plateMeta = m360_rw_pick_meta($map, ['vehicle_plate', 'plate', 'plate_number', 'license_plate', 'plate_display', 'car_plate']);
-    if ($plateMeta['value'] === '') {
+    $plateMeta = m360_rw_pick_meta($map, ['plate_display', 'vehicle_plate', 'plate', 'plate_number', 'license_plate', 'car_plate']);
+    if ($plateMeta['value'] === '' || ($plateMeta['value'] !== '' && m360_rw_display_text_is_mojibake($plateMeta['value']))) {
         $fromParts = m360_rw_recover_plate_from_parts($payload);
         if ($fromParts !== '') {
             $plateMeta = ['value' => $fromParts, 'source_key' => 'payload'];
@@ -288,10 +463,19 @@ function m360_rw_recover_intake_fields(
     if ($plateMeta['value'] === '' && $intake !== null) {
         $plateMeta = m360_rw_pick_meta(['erp_intake' => $intake], ['license_plate']);
     }
+    if ($plateMeta['value'] !== '' && m360_rw_display_text_is_mojibake($plateMeta['value'])) {
+        $plateMeta = ['value' => '', 'source_key' => $plateMeta['source_key']];
+    }
 
-    $vinMeta = m360_rw_pick_meta($map, ['vin', 'chassis', 'chassis_no', 'chassis_number', 'vehicle_vin']);
+    $vinMeta = m360_rw_pick_meta($map, ['vin', 'vehicle_vin', 'chassis_vin']);
     $brandMeta = m360_rw_pick_meta($map, ['brand', 'vehicle_brand']);
     $modelMeta = m360_rw_pick_meta($map, ['model', 'vehicle_model']);
+    if ($brandMeta['value'] !== '' && m360_rw_display_text_is_mojibake($brandMeta['value'])) {
+        $brandMeta = ['value' => '', 'source_key' => $brandMeta['source_key']];
+    }
+    if ($modelMeta['value'] !== '' && m360_rw_display_text_is_mojibake($modelMeta['value'])) {
+        $modelMeta = ['value' => '', 'source_key' => $modelMeta['source_key']];
+    }
     $mileageMeta = m360_rw_pick_meta($map, ['odometer_km', 'mileage', 'odometer', 'kilometer', 'km', 'intake_mileage']);
     $fuelMeta = m360_rw_pick_meta($map, ['fuel_level', 'intake_fuel_level', 'fuel']);
     $belongingsMeta = m360_rw_pick_meta($map, ['belongings', 'vehicle_items', 'internal_items']);
@@ -351,7 +535,17 @@ function m360_rw_recover_intake_fields(
             'detail' => '',
             'verified' => $otpOk,
         ],
-        'plate' => m360_rw_field_result($plateMeta['value'], $plateMeta['source_key'], 'پلاک ثبت نشده است'),
+        'plate' => ($plateMeta['value'] === '' && $vehicle !== null && trim((string)($vehicle['plate_number'] ?? '')) !== '' && m360_rw_display_text_is_mojibake((string)$vehicle['plate_number']))
+            ? array_merge(m360_rw_field_result('', 'erp_vehicle', m360_rw_mojibake_field_message('پلاک')), ['warning' => m360_rw_mojibake_field_message('پلاک'), 'mojibake' => true])
+            : m360_rw_field_result(
+                $plateMeta['value'] !== '' ? $plateMeta['value'] : (
+                    ($vehicle !== null && trim((string)($vehicle['plate_number'] ?? '')) !== '' && !m360_rw_display_text_is_mojibake((string)$vehicle['plate_number']))
+                        ? trim((string)$vehicle['plate_number'])
+                        : ''
+                ),
+                $plateMeta['value'] !== '' ? $plateMeta['source_key'] : (($vehicle !== null && trim((string)($vehicle['plate_number'] ?? '')) !== '') ? 'erp_vehicle' : ''),
+                'پلاک ثبت نشده است'
+            ),
         'vin' => m360_rw_field_result($vinMeta['value'], $vinMeta['source_key'], 'VIN/شاسی ثبت نشده است'),
         'brand' => m360_rw_field_result($brandMeta['value'], $brandMeta['source_key'], 'برند ثبت نشده است'),
         'model' => m360_rw_field_result($modelMeta['value'], $modelMeta['source_key'], 'مدل ثبت نشده است'),
@@ -437,6 +631,7 @@ function m360_rw_build_empty_gate(): array
 /** @return array<string, array{label:string,subs:array<string,string>}> */
 function m360_rw_service_classification_taxonomy(): array
 {
+    // Locked main reception categories (Owner C7). Diagnostic subs reused unchanged.
     return [
         'diag' => [
             'label' => 'کارشناسی و عیب‌یابی',
@@ -449,9 +644,849 @@ function m360_rw_service_classification_taxonomy(): array
                 'options' => 'آپشن',
             ],
         ],
-        'periodic' => ['label' => 'سرویس‌های دوره‌ای', 'subs' => []],
-        'trade' => ['label' => 'کارشناسی خرید و فروش', 'subs' => []],
+        'trade' => [
+            'label' => 'کارشناسی خرید و فروش خودرو',
+            'subs' => [
+                'technical_inspection' => 'کارشناسی فنی',
+                'body_inspection' => 'کارشناسی بدنه',
+                'full_inspection' => 'کارشناسی کامل',
+            ],
+        ],
+        'periodic' => [
+            'label' => 'سرویس دوره‌ای',
+            'subs' => [
+                'oil_filter' => 'سرویس روغن و فیلتر',
+                'mileage_service' => 'سرویس کیلومتری',
+                'periodic_inspection' => 'بازدید دوره‌ای',
+            ],
+        ],
+        'options' => [
+            'label' => 'آپشن',
+            'subs' => [],
+        ],
+        'other' => [
+            'label' => 'سایر',
+            'subs' => [],
+        ],
     ];
+}
+
+/**
+ * @param list<string> $selectedSubs
+ */
+function m360_rw_render_public_diagnostic_parity_fields(array $selectedSubs = [], string $pathClear = ''): void
+{
+    $taxonomy = m360_rw_service_classification_taxonomy();
+    $diagSubs = $taxonomy['diag']['subs'] ?? [];
+    echo '<fieldset class="m360-rw-diagnostic-parity" data-diagnostic-parity hidden>';
+    echo '<legend>حوزه‌های مشکل و مسیر عیب‌یابی</legend>';
+    echo '<input type="hidden" name="service_route" value="diag" disabled data-diagnostic-input>';
+    echo '<div class="m360-rw-checkbox-grid">';
+    foreach ($diagSubs as $subCode => $subLabel) {
+        $checked = in_array((string)$subCode, $selectedSubs, true) ? ' checked' : '';
+        echo '<label class="m360-rw-check-label"><input type="checkbox" name="diagnostic_subcategories[]" value="' . m360_rw_h((string)$subCode) . '"' . $checked . ' disabled data-diagnostic-input> ' . m360_rw_h((string)$subLabel) . '</label>';
+    }
+    echo '</div>';
+    echo '<div class="m360-rw-radio-grid">';
+    echo '<label class="m360-rw-check-label"><input type="radio" name="service_path_clear" value="1"' . ($pathClear === '1' ? ' checked' : '') . ' disabled data-diagnostic-input> مسیر مشخص است</label>';
+    echo '<label class="m360-rw-check-label"><input type="radio" name="service_path_clear" value="0"' . ($pathClear === '0' ? ' checked' : '') . ' disabled data-diagnostic-input> در حال بررسی است</label>';
+    echo '</div>';
+    echo '</fieldset>';
+}
+
+/** @return array<string, string> */
+function m360_rw_customer_request_type_labels(): array
+{
+    return [
+        'diagnostic_inspection' => 'کارشناسی و عیب‌یابی',
+        'buy_sell_inspection' => 'کارشناسی خرید/فروش',
+        'periodic_service' => 'سرویس‌های دوره‌ای',
+        'option_add' => 'افزودن آپشن',
+        'other' => 'سایر',
+    ];
+}
+
+function m360_rw_request_service_policy_group(string $requestType): string
+{
+    $requestType = strtolower(trim($requestType));
+
+    return match ($requestType) {
+        'buy_sell_inspection' => 'DEFINED_INSPECTION',
+        'periodic_service' => 'PERIODIC_SERVICE',
+        'diagnostic_inspection' => 'TECHNICAL_DIAGNOSIS',
+        'option_add' => 'OTHER_DEFINED_SERVICE',
+        'other' => 'UNKNOWN_FAULT',
+        default => (str_contains($requestType, 'diagn') || str_contains($requestType, 'troubleshoot') || str_contains($requestType, 'fault'))
+            ? 'TECHNICAL_DIAGNOSIS'
+            : (str_contains($requestType, 'inspect') ? 'DEFINED_INSPECTION' : 'OTHER_DEFINED_SERVICE'),
+    };
+}
+
+/** Map customer request_type codes to reception service_route taxonomy keys. */
+function m360_rw_map_request_type_to_service_route(string $requestType): string
+{
+    return match (strtolower(trim($requestType))) {
+        'diagnostic_inspection' => 'diag',
+        'buy_sell_inspection' => 'trade',
+        'periodic_service' => 'periodic',
+        'option_add' => 'options',
+        'other' => 'other',
+        default => '',
+    };
+}
+
+function m360_rw_request_service_policy_requires_diagnosis(string $policyGroup): bool
+{
+    return $policyGroup === 'TECHNICAL_DIAGNOSIS';
+}
+
+/**
+ * @param array<string, string> $post
+ * @param array<string, mixed> $payload
+ * @param array<string, mixed> $request
+ */
+function m360_rw_intake_resolve_customer_request_type(array $post, array $payload, array $request): string
+{
+    $fromPost = trim((string)($post['customer_request_type'] ?? ''));
+    if ($fromPost !== '') {
+        return $fromPost;
+    }
+
+    return trim((string)m360_rw_pick([$request, $payload], 'request_type'));
+}
+
+/**
+ * @param array<string, mixed> $payload
+ * @param array<string, mixed> $requestRow
+ * @param array<string, mixed>|null $erpVehicle
+ * @return array{
+ *   vehicle_type:array{value:string,source_key:string,source_label:string,missing_label:string,present:bool,partial:bool,detail:string},
+ *   vehicle_class:array{value:string,source_key:string,source_label:string,missing_label:string,present:bool,partial:bool,detail:string},
+ *   vin:array{value:string,source_key:string,source_label:string,missing_label:string,present:bool,partial:bool,detail:string},
+ *   chassis_number:array{value:string,source_key:string,source_label:string,missing_label:string,present:bool,partial:bool,detail:string}
+ * }
+ */
+/**
+ * Canonical display/prefill vehicle field with source precedence and mojibake guard.
+ *
+ * @return array{value:string,source_key:string,source_label:string,missing_label:string,present:bool,partial:bool,detail:string,warning:string,mojibake:bool}
+ */
+function m360_rw_intake_resolve_vehicle_field_display(
+    array $payload,
+    array $requestRow,
+    ?array $erpVehicle,
+    array $keys,
+    string $fieldLabelFa,
+    string $missingFa = 'در درخواست اولیه ذخیره نشده است',
+    bool $guardMojibake = true
+): array {
+    $payload = m360_rw_intake_payload_for_recovery($payload);
+    $draft = is_array($payload['reception_intake']['vehicle'] ?? null)
+        ? $payload['reception_intake']['vehicle']
+        : [];
+
+    $candidates = [];
+    foreach ($keys as $key) {
+        $candidates[] = ['value' => trim((string)($draft[$key] ?? '')), 'source_key' => 'reception_intake'];
+    }
+    foreach ($keys as $key) {
+        $candidates[] = ['value' => trim((string)($payload[$key] ?? '')), 'source_key' => 'payload'];
+    }
+    foreach ($keys as $key) {
+        $candidates[] = ['value' => trim((string)($requestRow[$key] ?? '')), 'source_key' => 'online_request'];
+    }
+    if (is_array($erpVehicle)) {
+        $erpKeyMap = [
+            'plate' => ['plate_number', 'plate', 'vehicle_plate'],
+            'vehicle_plate' => ['plate_number', 'plate', 'vehicle_plate'],
+            'plate_display' => ['plate_number', 'plate', 'vehicle_plate'],
+            'plate_number' => ['plate_number'],
+            'vin' => ['vin', 'vehicle_vin'],
+            'vehicle_vin' => ['vin', 'vehicle_vin'],
+            'brand' => ['brand', 'vehicle_brand'],
+            'vehicle_brand' => ['brand', 'vehicle_brand'],
+            'model' => ['model', 'vehicle_model'],
+            'vehicle_model' => ['model', 'vehicle_model'],
+            'vehicle_class' => ['model', 'vehicle_model', 'vehicle_class'],
+            'mileage' => ['mileage', 'odometer_km', 'odometer'],
+            'odometer_km' => ['mileage', 'odometer_km', 'odometer'],
+            'production_year' => ['model_year', 'production_year', 'year'],
+            'year' => ['model_year', 'production_year', 'year'],
+            'color' => ['color'],
+            'fuel_type' => ['fuel_type'],
+            'fuel_level' => ['fuel_level'],
+            'transmission_type' => ['transmission_type', 'transmission'],
+            'engine_number' => ['engine_number', 'engine_no'],
+            'chassis_number' => ['chassis_number', 'chassis_no'],
+        ];
+        foreach ($keys as $key) {
+            $erpKeys = $erpKeyMap[$key] ?? [$key];
+            foreach ($erpKeys as $ek) {
+                $candidates[] = [
+                    'value' => trim((string)($erpVehicle[$ek] ?? '')),
+                    'source_key' => 'erp_vehicle',
+                ];
+            }
+        }
+    }
+
+    $picked = m360_rw_pick_clean_display_text($candidates, $fieldLabelFa, $guardMojibake);
+    $result = m360_rw_field_result($picked['value'], $picked['source_key'], $missingFa);
+    $result['warning'] = (string)($picked['warning'] ?? '');
+    $result['mojibake'] = !empty($picked['mojibake']);
+    if ($result['value'] === '' && $result['warning'] !== '') {
+        $result['missing_label'] = $result['warning'];
+    }
+
+    return $result;
+}
+
+/**
+ * @param array<string, mixed> $payload
+ * @param array<string, mixed> $requestRow
+ * @param array<string, mixed>|null $erpVehicle
+ * @return array<string, array{value:string,source_key:string,source_label:string,missing_label:string,present:bool,partial:bool,detail:string,warning?:string,mojibake?:bool}>
+ */
+function m360_rw_intake_resolve_vehicle_dossier_fields(array $payload, array $requestRow = [], ?array $erpVehicle = null): array
+{
+    $missingFa = 'در درخواست اولیه ذخیره نشده است';
+
+    $plate = m360_rw_intake_resolve_vehicle_field_display(
+        $payload,
+        $requestRow,
+        $erpVehicle,
+        ['plate_display', 'plate', 'vehicle_plate', 'plate_number'],
+        'پلاک',
+        'پلاک ثبت نشده است',
+        true
+    );
+    if ($plate['value'] === '') {
+        $fromParts = m360_rw_recover_plate_from_parts(m360_rw_intake_payload_for_recovery($payload));
+        if ($fromParts !== '') {
+            $plate = m360_rw_field_result($fromParts, 'payload', 'پلاک ثبت نشده است');
+            $plate['warning'] = '';
+            $plate['mojibake'] = false;
+        } else {
+            $plate = m360_rw_intake_resolve_vehicle_field_display(
+                $payload,
+                $requestRow,
+                $erpVehicle,
+                ['plate_number'],
+                'پلاک',
+                'پلاک ثبت نشده است',
+                true
+            );
+        }
+    }
+
+    $vin = m360_rw_intake_resolve_vehicle_field_display(
+        $payload,
+        $requestRow,
+        $erpVehicle,
+        ['vin', 'vehicle_vin', 'chassis_vin'],
+        'VIN',
+        $missingFa,
+        false
+    );
+    $chassis = m360_rw_intake_resolve_vehicle_field_display(
+        $payload,
+        $requestRow,
+        $erpVehicle,
+        ['chassis_number', 'chassis_no'],
+        'شماره شاسی',
+        $missingFa,
+        false
+    );
+    if ($chassis['value'] === '') {
+        $chassisOnly = m360_rw_intake_resolve_vehicle_field_display(
+            $payload,
+            $requestRow,
+            $erpVehicle,
+            ['chassis'],
+            'شماره شاسی',
+            $missingFa,
+            false
+        );
+        if ($chassisOnly['value'] !== '' && strcasecmp($chassisOnly['value'], $vin['value']) !== 0) {
+            $chassis = $chassisOnly;
+        }
+    }
+
+    return [
+        'plate' => $plate,
+        'vin' => $vin,
+        'chassis_number' => $chassis,
+        'engine_number' => m360_rw_intake_resolve_vehicle_field_display(
+            $payload, $requestRow, $erpVehicle, ['engine_number', 'engine_no'], 'شماره موتور', $missingFa, false
+        ),
+        'brand' => m360_rw_intake_resolve_vehicle_field_display(
+            $payload, $requestRow, $erpVehicle, ['brand', 'vehicle_brand'], 'برند', $missingFa, true
+        ),
+        'model' => m360_rw_intake_resolve_vehicle_field_display(
+            $payload,
+            $requestRow,
+            $erpVehicle,
+            ['model', 'vehicle_model', 'car_model', 'vehicle_class', 'class_name', 'class_code'],
+            'مدل',
+            $missingFa,
+            true
+        ),
+        'vehicle_class' => m360_rw_intake_resolve_vehicle_field_display(
+            $payload, $requestRow, $erpVehicle, ['vehicle_class', 'class_code', 'class_name', 'vehicle_category', 'model_class', 'model', 'vehicle_model', 'car_model'], 'کلاس خودرو', $missingFa, true
+        ),
+        'vehicle_type' => m360_rw_intake_resolve_vehicle_field_display(
+            $payload, $requestRow, $erpVehicle, ['vehicle_type', 'body_type', 'vehicle_body_type', 'car_type'], 'نوع خودرو', $missingFa, true
+        ),
+        'production_year' => m360_rw_intake_resolve_vehicle_field_display(
+            $payload, $requestRow, $erpVehicle, ['production_year', 'year', 'model_year', 'vehicle_year_pair'], 'سال ساخت', $missingFa, false
+        ),
+        'color' => m360_rw_intake_resolve_vehicle_field_display(
+            $payload, $requestRow, $erpVehicle, ['color', 'vehicle_color'], 'رنگ', $missingFa, true
+        ),
+        'mileage' => m360_rw_intake_resolve_vehicle_field_display(
+            $payload, $requestRow, $erpVehicle, ['mileage', 'odometer_km', 'odometer', 'kilometer', 'km'], 'کیلومتر', $missingFa, false
+        ),
+        'fuel_type' => m360_rw_intake_resolve_vehicle_field_display(
+            $payload, $requestRow, $erpVehicle, ['fuel_type'], 'نوع سوخت', $missingFa, true
+        ),
+        'fuel_level' => m360_rw_intake_resolve_vehicle_field_display(
+            $payload, $requestRow, $erpVehicle, ['fuel_level', 'intake_fuel_level', 'fuel'], 'سطح سوخت', $missingFa, true
+        ),
+        'transmission_type' => m360_rw_intake_resolve_vehicle_field_display(
+            $payload, $requestRow, $erpVehicle, ['transmission_type', 'transmission'], 'گیربکس', $missingFa, true
+        ),
+    ];
+}
+
+/**
+ * @param array<string, mixed> $payload
+ * @return array{route:string,diagnostic_subcategories:list<string>,service_path_clear:string,service_path_note:string}
+ */
+function m360_rw_intake_service_classification_canonical(array $payload): array
+{
+    $payload = m360_rw_intake_payload_for_recovery($payload);
+    $service = is_array($payload['reception_intake']['service_classification'] ?? null)
+        ? $payload['reception_intake']['service_classification']
+        : [];
+
+    $route = trim((string)($service['route'] ?? $service['main'] ?? ''));
+    if ($route === '') {
+        $route = trim((string)m360_rw_pick([$payload], 'reception_service_primary', 'service_classification_primary'));
+    }
+
+    $diagSubs = [];
+    $diagRaw = $service['diagnostic_subcategories'] ?? $service['diagnostic_categories'] ?? null;
+    if (!is_array($diagRaw) || $diagRaw === []) {
+        $diagRaw = $payload['reception_service_diag_sub'] ?? [];
+    }
+    if (is_array($diagRaw)) {
+        foreach ($diagRaw as $item) {
+            $item = trim((string)$item);
+            if ($item !== '') {
+                $diagSubs[] = $item;
+            }
+        }
+    }
+
+    $pathClear = '';
+    if (array_key_exists('service_path_clear', $service)) {
+        $nested = $service['service_path_clear'];
+        if (is_bool($nested)) {
+            $pathClear = $nested ? '1' : '0';
+        } else {
+            $pathClear = in_array(strtolower(trim((string)$nested)), ['1', 'yes', 'true'], true) ? '1' : '0';
+        }
+    }
+    if ($pathClear === '') {
+        $pathClear = m360_rw_pick([$payload], 'fault_service_path_clear', 'service_path_clear');
+    }
+
+    return [
+        'route' => $route,
+        'diagnostic_subcategories' => $diagSubs,
+        'service_path_clear' => $pathClear,
+        'service_path_note' => trim((string)($service['service_path_note'] ?? m360_rw_pick([$payload], 'service_path_note'))),
+    ];
+}
+
+/**
+ * @param array<string, string> $formValues
+ */
+function m360_rw_intake_service_wizard_step_complete(array $formValues, string $policyGroup = ''): bool
+{
+    if ($policyGroup === '') {
+        $policyGroup = m360_rw_request_service_policy_group(
+            trim((string)($formValues['customer_request_type'] ?? ''))
+        );
+    }
+
+    $route = trim((string)($formValues['service_route'] ?? $formValues['service_primary'] ?? ''));
+    $path = (string)($formValues['service_path_clear'] ?? '');
+    $allowedPrimary = array_keys(m360_rw_service_classification_taxonomy());
+    if ($route !== '' && in_array($route, $allowedPrimary, true)) {
+        if ($route === 'diag') {
+            if ($path !== '1') {
+                return false;
+            }
+            $subs = $formValues['service_diag_sub_codes'] ?? [];
+
+            return is_array($subs) && $subs !== [];
+        }
+
+        return $path === '1' || $path === '';
+    }
+
+    if ($policyGroup === 'TECHNICAL_DIAGNOSIS') {
+        if ($route === '') {
+            return false;
+        }
+        if ($route === 'options' || $route === 'other' || $route === 'periodic' || $route === 'trade') {
+            return $path === '1';
+        }
+        if ($path !== '1') {
+            return false;
+        }
+        if ($route === 'diag') {
+            $subs = $formValues['service_diag_sub_codes'] ?? [];
+            if (!is_array($subs) || $subs === []) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    if ($policyGroup === 'UNKNOWN_FAULT') {
+        if ($path === '1' && $route !== '') {
+            return true;
+        }
+        $tempStatus = trim((string)($formValues['temporary_status'] ?? ''));
+        if ($tempStatus === 'reception_temporary_diagnosis') {
+            return true;
+        }
+
+        return trim((string)($formValues['service_path_note'] ?? '')) !== '' && $path === '0';
+    }
+
+    if (in_array($policyGroup, ['DEFINED_INSPECTION', 'PERIODIC_SERVICE', 'OTHER_DEFINED_SERVICE'], true)) {
+        if ($route === '') {
+            return false;
+        }
+
+        return $path === '1';
+    }
+
+    return false;
+}
+
+/**
+ * @param array<string, string> $post
+ * @return array{ok:bool,error:string,route:string,diag_subs:list<string>,path_clear:string,path_note:string,inspection_subs:list<string>,policy_group:string}
+ */
+function m360_rw_intake_validate_service_classification_post(array $post, string $policyGroup = ''): array
+{
+    if ($policyGroup === '') {
+        $policyGroup = m360_rw_request_service_policy_group(
+            trim((string)($post['customer_request_type'] ?? ''))
+        );
+    }
+
+    $fail = static function (
+        string $error,
+        string $route = '',
+        array $diagSubs = [],
+        string $pathClear = '',
+        string $pathNote = '',
+        array $inspectionSubs = []
+    ) use ($policyGroup): array {
+        return [
+            'ok' => false,
+            'error' => $error,
+            'route' => $route,
+            'diag_subs' => $diagSubs,
+            'path_clear' => $pathClear,
+            'path_note' => $pathNote,
+            'inspection_subs' => $inspectionSubs,
+            'policy_group' => $policyGroup,
+        ];
+    };
+
+    $pathNoteNorm = m360_rw_intake_post_scalar($post, 'service_path_note');
+    if (!$pathNoteNorm['ok']) {
+        return $fail($pathNoteNorm['error']);
+    }
+    $pathNote = $pathNoteNorm['value'];
+    $vt = m360_rw_intake_validate_text($pathNote, 2000, 'یادداشت پذیرش');
+    if (!$vt['ok']) {
+        return $fail($vt['error']);
+    }
+
+    $explicitRoute = trim((string)($post['service_route'] ?? $post['service_primary'] ?? ''));
+    $allowedPrimary = array_keys(m360_rw_service_classification_taxonomy());
+    if ($explicitRoute !== '' && in_array($explicitRoute, $allowedPrimary, true)) {
+        $route = $explicitRoute;
+        $diagSubs = [];
+        if ($route === 'diag') {
+            $rawSubs = $post['diagnostic_subcategories'] ?? $post['service_diag_sub'] ?? [];
+            if (!is_array($rawSubs)) {
+                $rawSubs = $rawSubs !== '' ? [(string)$rawSubs] : [];
+            }
+            $allowedSubs = array_keys(m360_rw_service_classification_taxonomy()['diag']['subs']);
+            foreach ($rawSubs as $sub) {
+                $sub = trim((string)$sub);
+                if ($sub !== '' && in_array($sub, $allowedSubs, true)) {
+                    $diagSubs[] = $sub;
+                }
+            }
+            if ($diagSubs === []) {
+                return $fail('حداقل یک زیردسته عیب‌یابی انتخاب کنید.', $route);
+            }
+        }
+        $pathClearRaw = trim((string)($post['service_path_clear'] ?? ''));
+        if ($route !== 'diag' && $pathClearRaw === '') {
+            $pathClearRaw = '1';
+        }
+        if (!in_array($pathClearRaw, ['0', '1'], true)) {
+            return $fail('وضعیت روشن بودن مسیر عیب/خدمت را مشخص کنید.', $route, $diagSubs);
+        }
+        $inspectionSubs = [];
+        if ($route === 'trade') {
+            $rawInspection = $post['inspection_scope'] ?? $post['trade_inspection_scope'] ?? [];
+            if (!is_array($rawInspection)) {
+                $rawInspection = $rawInspection !== '' ? [(string)$rawInspection] : [];
+            }
+            $allowedInspection = array_keys(m360_rw_service_classification_taxonomy()['trade']['subs']);
+            foreach ($rawInspection as $sub) {
+                $sub = trim((string)$sub);
+                if ($sub !== '' && in_array($sub, $allowedInspection, true)) {
+                    $inspectionSubs[] = $sub;
+                }
+            }
+        }
+
+        return [
+            'ok' => true,
+            'error' => '',
+            'route' => $route,
+            'diag_subs' => $diagSubs,
+            'path_clear' => $pathClearRaw,
+            'path_note' => $pathNote,
+            'inspection_subs' => $inspectionSubs,
+            'policy_group' => $policyGroup,
+        ];
+    }
+
+    if ($policyGroup === 'DEFINED_INSPECTION') {
+        $confirm = trim((string)($post['reception_inspection_confirm'] ?? $post['service_reception_confirmed'] ?? ''));
+        if (!in_array($confirm, ['1', 'yes', 'on'], true)) {
+            return $fail('تأیید درخواست کارشناسی الزامی است.');
+        }
+        $inspectionSubs = [];
+        $rawInspection = $post['inspection_scope'] ?? $post['trade_inspection_scope'] ?? [];
+        if (!is_array($rawInspection)) {
+            $rawInspection = $rawInspection !== '' ? [(string)$rawInspection] : [];
+        }
+        $allowedInspection = array_keys(m360_rw_service_classification_taxonomy()['trade']['subs']);
+        foreach ($rawInspection as $sub) {
+            $sub = trim((string)$sub);
+            if ($sub !== '' && in_array($sub, $allowedInspection, true)) {
+                $inspectionSubs[] = $sub;
+            }
+        }
+
+        return [
+            'ok' => true,
+            'error' => '',
+            'route' => 'trade',
+            'diag_subs' => [],
+            'path_clear' => '1',
+            'path_note' => $pathNote,
+            'inspection_subs' => $inspectionSubs,
+            'policy_group' => $policyGroup,
+        ];
+    }
+
+    if ($policyGroup === 'PERIODIC_SERVICE') {
+        $confirm = trim((string)($post['service_reception_confirmed'] ?? ''));
+        if (!in_array($confirm, ['1', 'yes', 'on'], true)) {
+            return $fail('تأیید درخواست سرویس دوره‌ای الزامی است.');
+        }
+
+        return [
+            'ok' => true,
+            'error' => '',
+            'route' => 'periodic',
+            'diag_subs' => [],
+            'path_clear' => '1',
+            'path_note' => $pathNote,
+            'inspection_subs' => [],
+            'policy_group' => $policyGroup,
+        ];
+    }
+
+    if ($policyGroup === 'OTHER_DEFINED_SERVICE') {
+        $confirm = trim((string)($post['service_reception_confirmed'] ?? ''));
+        if (!in_array($confirm, ['1', 'yes', 'on'], true)) {
+            return $fail('تأیید درخواست خدمت الزامی است.');
+        }
+        $route = trim((string)($post['service_route'] ?? ''));
+        if ($route === '') {
+            $route = 'diag';
+        }
+
+        return [
+            'ok' => true,
+            'error' => '',
+            'route' => $route,
+            'diag_subs' => $route === 'diag' ? ['options'] : [],
+            'path_clear' => '1',
+            'path_note' => $pathNote,
+            'inspection_subs' => [],
+            'policy_group' => $policyGroup,
+        ];
+    }
+
+    if ($policyGroup === 'UNKNOWN_FAULT') {
+        $pathClearRaw = trim((string)($post['service_path_clear'] ?? '0'));
+        if (!in_array($pathClearRaw, ['0', '1'], true)) {
+            $pathClearRaw = '0';
+        }
+        $symptomsNorm = m360_rw_intake_post_scalar($post, 'initial_symptoms');
+        if (!$symptomsNorm['ok']) {
+            return $fail($symptomsNorm['error']);
+        }
+        $symptoms = $symptomsNorm['value'];
+        $symVt = m360_rw_intake_validate_text($symptoms, 2000, 'علائم اولیه');
+        if (!$symVt['ok']) {
+            return $fail($symVt['error']);
+        }
+        if ($symptoms === '' && $pathClearRaw === '0') {
+            return $fail('علائم اولیه یا یادداشت پذیرش برای پذیرش موقت الزامی است.');
+        }
+        $route = trim((string)($post['service_route'] ?? ''));
+        if ($route === '') {
+            $route = 'diag';
+        }
+
+        return [
+            'ok' => true,
+            'error' => '',
+            'route' => $route,
+            'diag_subs' => [],
+            'path_clear' => $pathClearRaw,
+            'path_note' => $pathNote !== '' ? $pathNote : $symptoms,
+            'inspection_subs' => [],
+            'policy_group' => $policyGroup,
+        ];
+    }
+
+    $route = trim((string)($post['service_route'] ?? $post['service_primary'] ?? ''));
+    $allowedPrimary = array_keys(m360_rw_service_classification_taxonomy());
+    if ($route === '' || !in_array($route, $allowedPrimary, true)) {
+        return $fail('مسیر اصلی خدمات الزامی است.');
+    }
+
+    $diagSubs = [];
+    if ($route === 'diag') {
+        $rawSubs = $post['diagnostic_subcategories'] ?? $post['service_diag_sub'] ?? [];
+        if (!is_array($rawSubs)) {
+            $rawSubs = $rawSubs !== '' ? [(string)$rawSubs] : [];
+        }
+        $allowedSubs = array_keys(m360_rw_service_classification_taxonomy()['diag']['subs']);
+        foreach ($rawSubs as $sub) {
+            $sub = trim((string)$sub);
+            if ($sub !== '' && in_array($sub, $allowedSubs, true)) {
+                $diagSubs[] = $sub;
+            }
+        }
+        if ($diagSubs === []) {
+            return $fail('حداقل یک زیردسته عیب‌یابی انتخاب کنید.', $route);
+        }
+    }
+
+    $pathClearRaw = trim((string)($post['service_path_clear'] ?? ''));
+    if (!in_array($pathClearRaw, ['0', '1'], true)) {
+        return $fail('وضعیت روشن بودن مسیر عیب/خدمت را مشخص کنید.', $route, $diagSubs);
+    }
+
+    return [
+        'ok' => true,
+        'error' => '',
+        'route' => $route,
+        'diag_subs' => $diagSubs,
+        'path_clear' => $pathClearRaw,
+        'path_note' => $pathNote,
+        'inspection_subs' => [],
+        'policy_group' => $policyGroup,
+    ];
+}
+
+/**
+ * @param array<string, string> $formValues
+ * @param list<string> $diagSubCodes
+ * @param array{registered:bool,fault_path_clear:bool,primary:string,diag_sub:list<string>,periodic:string,trade:string,customer_request_type:string,customer_mismatch:bool,taxonomy:array<string,array{label:string,subs:array<string,string>}>,write_placeholder:string,selected_labels:list<string>} $serviceClass
+ * @param array<string, mixed> $payload
+ */
+function m360_rw_intake_render_service_wizard_block(
+    int $onlineRequestId,
+    array $formValues,
+    array $diagSubCodes,
+    array $serviceClass,
+    bool $canShowStepForm,
+    bool $canShowTempActions,
+    string $csrfInputHtml,
+    string $saveUrl,
+    string $customerRequestType = '',
+    array $payload = []
+): void {
+    $requestType = trim($customerRequestType);
+    if ($requestType === '') {
+        $requestType = trim((string)($serviceClass['customer_request_type'] ?? ''));
+    }
+    $policyGroup = m360_rw_request_service_policy_group($requestType);
+    $requestLabels = m360_rw_customer_request_type_labels();
+    $requestLabel = $requestLabels[$requestType] ?? $requestType;
+    $route = trim((string)($formValues['service_route'] ?? $formValues['service_primary'] ?? ''));
+    $pathClear = (string)($formValues['service_path_clear'] ?? '');
+    // Prefer request + payload customer statement (read-only context for reception).
+    $description = trim((string)m360_rw_pick(
+        [$payload],
+        'request_description',
+        'service_description',
+        'service_note',
+        'complaint_text',
+        'complaint',
+        'customer_complaint',
+        'initial_symptoms'
+    ));
+    if ($description === '' && isset($payload['reception_intake']) && is_array($payload['reception_intake'])) {
+        $description = trim((string)m360_rw_pick(
+            [$payload['reception_intake'], $payload['reception_intake']['service_classification'] ?? []],
+            'request_description',
+            'service_note',
+            'complaint_text',
+            'complaint'
+        ));
+    }
+
+    if ($pathClear === '0' && $policyGroup === 'TECHNICAL_DIAGNOSIS') {
+        echo '<p class="m360-rw-warn">مسیر انتخابی قطع است؛ پرونده در پذیرش موقت باقی می‌ماند تا مسیر عیب/خدمت روشن شود.</p>';
+    }
+    if ($pathClear === '0' && $policyGroup === 'UNKNOWN_FAULT') {
+        echo '<p class="m360-rw-warn">پذیرش موقت — عیب‌یابی: پرونده تا روشن شدن مسیر در این وضعیت باقی می‌ماند.</p>';
+    }
+
+    if (!$canShowStepForm) {
+        echo '<div class="m360-rw-field-grid">';
+        if ($description !== '') {
+            echo '<div class="m360-rw-field"><span class="m360-rw-field-lbl">اظهار مشتری</span><span class="m360-rw-field-val">' . m360_rw_h($description) . '</span></div>';
+        }
+        if ($requestLabel !== '') {
+            echo '<div class="m360-rw-field"><span class="m360-rw-field-lbl">نوع درخواست مشتری</span><span class="m360-rw-field-val">' . m360_rw_h($requestLabel) . '</span></div>';
+        }
+        if ($route !== '') {
+            $label = $serviceClass['taxonomy'][$route]['label'] ?? $route;
+            echo '<div class="m360-rw-field"><span class="m360-rw-field-lbl">مسیر خدمت</span><span class="m360-rw-field-val">' . m360_rw_h($label) . '</span></div>';
+            if ($route === 'diag' && $diagSubCodes !== []) {
+                $subLabels = [];
+                foreach ($diagSubCodes as $code) {
+                    $subLabels[] = $serviceClass['taxonomy']['diag']['subs'][$code] ?? $code;
+                }
+                echo '<div class="m360-rw-field"><span class="m360-rw-field-lbl">زیردسته‌ها</span><span class="m360-rw-field-val">' . m360_rw_h(implode('، ', $subLabels)) . '</span></div>';
+            }
+        }
+        echo '</div>';
+
+        return;
+    }
+
+    echo '<form class="m360-rw-form m360-rw-service-form" method="post" action="' . m360_rw_h($saveUrl) . '">';
+    echo $csrfInputHtml;
+    echo '<input type="hidden" name="online_request_id" value="' . $onlineRequestId . '">';
+    echo '<input type="hidden" name="action_type" value="save_service_classification">';
+    echo '<input type="hidden" name="customer_request_type" value="' . m360_rw_h($requestType) . '">';
+    m360_rw_intake_return_step_hidden('service');
+
+    echo '<div class="m360-rw-field-grid">';
+    echo '<div class="m360-rw-field"><span class="m360-rw-field-lbl">اظهار مشتری</span><span class="m360-rw-field-val">'
+        . m360_rw_h($description !== '' ? $description : '—') . '</span></div>';
+    if ($requestLabel !== '') {
+        echo '<div class="m360-rw-field"><span class="m360-rw-field-lbl">نوع درخواست ثبت‌شده</span><span class="m360-rw-field-val">' . m360_rw_h($requestLabel) . '</span></div>';
+    }
+    echo '</div>';
+
+    $primaryOpts = [];
+    foreach ($serviceClass['taxonomy'] as $code => $group) {
+        $primaryOpts[$code] = $group['label'];
+    }
+    echo '<div class="m360-rw-form-field"><label class="m360-rw-form-label" for="service_route">دسته‌بندی اصلی پذیرش <span class="m360-rw-req">*</span></label>';
+    echo '<select class="m360-rw-form-input" id="service_route" name="service_route" required>';
+    echo '<option value="">— انتخاب —</option>';
+    foreach ($primaryOpts as $optVal => $optLabel) {
+        $sel = ((string)$optVal === $route) ? ' selected' : '';
+        echo '<option value="' . m360_rw_h((string)$optVal) . '"' . $sel . '>' . m360_rw_h((string)$optLabel) . '</option>';
+    }
+    echo '</select></div>';
+
+    $showDiagSubs = ($route === 'diag' || $route === '');
+    echo '<div class="m360-rw-form-field m360-rw-service-diag-subs" data-service-diag-panel' . ($showDiagSubs ? '' : ' hidden') . '>';
+    echo '<span class="m360-rw-form-label">حوزه‌های عیب‌یابی (فهرست جاری) <span class="m360-rw-req">*</span></span>';
+    echo '<div class="m360-rw-checkbox-grid">';
+    foreach ($serviceClass['taxonomy']['diag']['subs'] as $subCode => $subLabel) {
+        $checked = in_array($subCode, $diagSubCodes, true) ? ' checked' : '';
+        echo '<label class="m360-rw-check-label"><input type="checkbox" name="diagnostic_subcategories[]" value="' . m360_rw_h($subCode) . '"' . $checked . '> ' . m360_rw_h($subLabel) . '</label>';
+    }
+    echo '</div></div>';
+
+    $showTradeSubs = ($route === 'trade');
+    echo '<div class="m360-rw-form-field m360-rw-service-trade-subs" data-service-trade-panel' . ($showTradeSubs ? '' : ' hidden') . '>';
+    echo '<span class="m360-rw-form-label">حوزه کارشناسی (اختیاری)</span>';
+    echo '<div class="m360-rw-checkbox-grid">';
+    $savedInspection = [];
+    $sc = is_array($payload['reception_intake']['service_classification'] ?? null)
+        ? $payload['reception_intake']['service_classification']
+        : [];
+    $rawInspection = $sc['inspection_scope'] ?? $sc['trade_inspection_scope'] ?? [];
+    if (is_array($rawInspection)) {
+        $savedInspection = $rawInspection;
+    }
+    foreach ($serviceClass['taxonomy']['trade']['subs'] as $subCode => $subLabel) {
+        $checked = in_array($subCode, $savedInspection, true) ? ' checked' : '';
+        echo '<label class="m360-rw-check-label"><input type="checkbox" name="inspection_scope[]" value="' . m360_rw_h($subCode) . '"' . $checked . '> ' . m360_rw_h($subLabel) . '</label>';
+    }
+    echo '</div></div>';
+
+    echo '<div class="m360-rw-form-field" data-service-path-clear-wrap>';
+    echo '<label class="m360-rw-form-label" for="service_path_clear">آیا مسیر عیب/خدمت برای ادامه پذیرش روشن است؟ <span class="m360-rw-req">*</span></label>';
+    echo '<select class="m360-rw-form-input" id="service_path_clear" name="service_path_clear" required>';
+    echo '<option value="">— انتخاب —</option>';
+    echo '<option value="1"' . ($pathClear === '1' ? ' selected' : '') . '>بله، مسیر روشن است</option>';
+    echo '<option value="0"' . ($pathClear === '0' ? ' selected' : '') . '>خیر، پذیرش موقت بماند</option>';
+    echo '</select></div>';
+
+    echo '<div class="m360-rw-form-field"><label class="m360-rw-form-label" for="service_path_note">یادداشت پذیرش</label>';
+    echo '<textarea class="m360-rw-form-input m360-rw-form-textarea" id="service_path_note" name="service_path_note" rows="3">' . m360_rw_h($formValues['service_path_note'] ?? '') . '</textarea></div>';
+
+    echo '<button type="submit" class="m360-rw-btn">ذخیره و ادامه</button>';
+    echo '</form>';
+
+    if ($canShowTempActions && $policyGroup === 'TECHNICAL_DIAGNOSIS') {
+        echo '<form class="m360-rw-form" method="post" action="' . m360_rw_h($saveUrl) . '">';
+        echo $csrfInputHtml;
+        echo '<input type="hidden" name="online_request_id" value="' . $onlineRequestId . '">';
+        echo '<input type="hidden" name="action_type" value="save_temporary_reception">';
+        m360_rw_intake_return_step_hidden('service');
+        echo '<div class="m360-rw-form-field"><label class="m360-rw-form-label" for="temporary_status">وضعیت موقت</label>';
+        echo '<select class="m360-rw-form-input" id="temporary_status" name="temporary_status">';
+        echo '<option value="">— انتخاب —</option>';
+        foreach (m360_rw_intake_temp_statuses() as $optVal => $optLabel) {
+            $sel = ((string)$optVal === ($formValues['temporary_status'] ?? '')) ? ' selected' : '';
+            echo '<option value="' . m360_rw_h((string)$optVal) . '"' . $sel . '>' . m360_rw_h((string)$optLabel) . '</option>';
+        }
+        echo '</select></div>';
+        echo '<button type="submit" class="m360-rw-btn m360-rw-btn-secondary">ذخیره وضعیت موقت</button>';
+        echo '</form>';
+    }
 }
 
 /**
@@ -474,37 +1509,14 @@ function m360_rw_service_classification_taxonomy(): array
 function m360_rw_parse_service_classification(array $payload, array $request): array
 {
     $taxonomy = m360_rw_service_classification_taxonomy();
-    $primary = m360_rw_pick([$payload], 'reception_service_primary', 'service_classification_primary', 'service_category_primary');
-    $diagRaw = $payload['reception_service_diag_sub'] ?? $payload['service_classification_diag_sub'] ?? null;
-    $diagSubs = [];
-    if (is_array($diagRaw)) {
-        foreach ($diagRaw as $item) {
-            $item = trim((string)$item);
-            if ($item !== '') {
-                $diagSubs[] = $item;
-            }
-        }
-    } elseif (is_string($diagRaw) && trim($diagRaw) !== '') {
-        foreach (explode(',', $diagRaw) as $part) {
-            $part = trim($part);
-            if ($part !== '') {
-                $diagSubs[] = $part;
-            }
-        }
-    }
+    $canonical = m360_rw_intake_service_classification_canonical($payload);
+    $primary = $canonical['route'];
+    $diagSubs = $canonical['diagnostic_subcategories'];
     $periodic = m360_rw_pick([$payload], 'reception_service_periodic', 'service_classification_periodic');
     $trade = m360_rw_pick([$payload], 'reception_service_trade', 'service_classification_trade');
-    $registered = $primary !== '' || $diagSubs !== [] || $periodic !== '' || $trade !== '';
-    $pathRaw = m360_rw_pick([$payload], 'fault_service_path_clear', 'service_fault_path_clear', 'service_path_clear');
-    if ($pathRaw === '' && isset($payload['reception_intake']['service_classification']) && is_array($payload['reception_intake']['service_classification'])) {
-        $nestedPath = $payload['reception_intake']['service_classification']['service_path_clear'] ?? null;
-        if (is_bool($nestedPath)) {
-            $pathRaw = $nestedPath ? '1' : '0';
-        } elseif ($nestedPath !== null && $nestedPath !== '') {
-            $pathRaw = in_array(strtolower((string)$nestedPath), ['1', 'yes', 'true'], true) ? '1' : '0';
-        }
-    }
-    $faultPathClear = in_array(strtolower($pathRaw), ['1', 'yes', 'true'], true);
+    $registered = $primary !== '' && ($primary !== 'diag' || $diagSubs !== []);
+    $pathRaw = $canonical['service_path_clear'];
+    $faultPathClear = $pathRaw === '1';
     $customerRequestType = m360_rw_pick([$request, $payload], 'request_type');
 
     $selectedLabels = [];
@@ -567,13 +1579,22 @@ function m360_rw_fetch_vehicle_row($conn, int $vehicleId): ?array
     if (!is_resource($conn) || $vehicleId < 1 || !m360_rw_table_exists($conn, 'erp_vehicles')) {
         return null;
     }
-    $sql = 'SELECT TOP 1 vehicle_id, brand, model, plate_number, vin, vehicle_code, model_year
-            FROM dbo.erp_vehicles WHERE vehicle_id = ?';
+    $sql = 'SELECT TOP 1 * FROM dbo.erp_vehicles WHERE vehicle_id = ?';
     $stmt = @odbc_prepare($conn, $sql);
-    if ($stmt === false || !@odbc_execute($stmt, [$vehicleId])) {
+    if ($stmt === false) {
+        return null;
+    }
+    if (!@odbc_execute($stmt, [$vehicleId])) {
+        if (is_resource($stmt)) {
+            @odbc_free_result($stmt);
+        }
+
         return null;
     }
     $row = odbc_fetch_array($stmt);
+    if (is_resource($stmt)) {
+        @odbc_free_result($stmt);
+    }
     if ($row === false) {
         return null;
     }
@@ -728,6 +1749,7 @@ function m360_rw_workbench_kpis($conn): array
         'ready_convert' => 0,
         'jobcards_today' => 0,
         'contracts_pending' => 0,
+        'prepayment_owner_pending' => 0,
         'rejected_closed' => 0,
     ];
     if (!is_resource($conn)) {
@@ -758,6 +1780,15 @@ function m360_rw_workbench_kpis($conn): array
         $jStmt = @odbc_exec($conn, $sqlRej);
         if ($jStmt !== false && ($jRow = odbc_fetch_array($jStmt))) {
             $kpi['rejected_closed'] = (int)($jRow['cnt'] ?? 0);
+        }
+
+        if (m360_online_req_has_column($conn, 'request_payload_json')) {
+            $sqlPrepay = "SELECT COUNT(*) AS cnt FROM dbo." . m360_online_req_table() . "
+                          WHERE request_payload_json LIKE N'%\"owner_decision_status\":\"" . M360_INTAKE_PREPAYMENT_GATE_OWNER_APPROVAL_REQUIRED . "\"%'";
+            $pStmt = @odbc_exec($conn, $sqlPrepay);
+            if ($pStmt !== false && ($pRow = odbc_fetch_array($pStmt))) {
+                $kpi['prepayment_owner_pending'] = (int)($pRow['cnt'] ?? 0);
+            }
         }
 
         $kpi['incomplete'] = max(0, $kpi['online_active'] - $kpi['ready_convert']);
@@ -838,7 +1869,12 @@ function m360_rw_build_intake_file($conn, int $onlineRequestId): array
         ];
     }
 
-    $payloadMeta = m360_rw_decode_payload($request['request_payload_json'] ?? null);
+    $payloadMeta = m360_rw_decode_payload($request['request_payload_json'] ?? null, [
+        'ok' => !array_key_exists('_payload_read_ok', $request) || !empty($request['_payload_read_ok']),
+        'sql_len' => (int)($request['_payload_sql_len'] ?? 0),
+        'read_len' => (int)($request['_payload_read_len'] ?? 0),
+        'error' => (string)($request['_payload_read_error'] ?? ''),
+    ]);
     $payload = m360_rw_intake_payload_for_recovery($payloadMeta['items']);
     $payloadRows = m360_rw_payload_display_rows($payloadMeta['items']);
 
@@ -979,6 +2015,10 @@ function m360_rw_build_gate(
         if (($c['id'] ?? '') === 'converted') {
             continue;
         }
+        if (in_array((string)($c['id'] ?? ''), ['contract', 'final_confirm', 'cost', 'diag'], true)
+            && !empty($c['c2c_only'])) {
+            continue;
+        }
         $msg = m360_rw_gate_missing_message($c);
         if (in_array($c['id'], ['service_classification', 'fault_path'], true)) {
             $missingService[] = $msg;
@@ -1043,7 +2083,12 @@ function m360_rw_build_gate(
         }
     }
 
-    $canShowConvert = $gateStatus === 'ready_convert';
+    if ($gateStatus === 'ready_convert' && !m360_rw_intake_hall_manager_step_complete($payload)) {
+        $gateStatus = 'pending_step8_gate';
+        $gateLabel = 'در انتظار گیت پیش‌پرداخت و ارسال Step 8';
+    }
+
+    $canShowConvert = $gateStatus === 'ready_convert' && m360_rw_intake_hall_manager_step_complete($payload);
     $canShowTempActions = !$converted && !$rejected;
 
     return [
@@ -1096,15 +2141,15 @@ function m360_rw_workbench_operational_cards(array $kpi): array
 {
     return [
         [
-            'title' => 'پذیرش خودرو حضوری',
-            'desc' => 'ورود خودرو بدون درخواست آنلاین — راهنمای کنترل‌شده',
+            'title' => 'شروع درخواست حضوری توسط پذیرش',
+            'desc' => 'کانال ورود پرسنل — همان درخواست آنلاین؛ تکمیل در پرونده پذیرش مشترک',
             'href' => 'erp-reception-workbench.php?section=walkin',
             'count' => null,
             'placeholder' => false,
             'placeholder_text' => '',
         ],
         [
-            'title' => 'درخواست‌های آنلاین مشتری',
+            'title' => 'درخواست‌های آنلاین مشتریان',
             'desc' => 'فهرست و بررسی درخواست‌های ثبت‌شده از سایت',
             'href' => 'erp-reception-online-requests.php',
             'count' => (int)($kpi['online_active'] ?? 0),
@@ -1113,7 +2158,7 @@ function m360_rw_workbench_operational_cards(array $kpi): array
         ],
         [
             'title' => 'تکمیل پرونده پذیرش',
-            'desc' => 'باز کردن پرونده تکمیلی از فهرست درخواست آنلاین',
+            'desc' => 'موتور مشترک تکمیل پرونده پذیرش برای آنلاین و حضوری',
             'href' => 'erp-reception-online-requests.php',
             'count' => null,
             'placeholder' => false,
@@ -1193,22 +2238,16 @@ function m360_rw_gate_status_chip_class(string $status): string
 /** @return list<array{title:string,desc:string,href:string,placeholder:bool,placeholder_text:string,subs?:list<array{title:string,href:string}>}> */
 function m360_rw_reception_process_hub_cards(array $kpi): array
 {
+    // Phase B.1: "پذیرش موقت" hub card hidden from UI only; temporary_reception logic unchanged.
     return [
         [
-            'title' => 'پذیرش موقت',
-            'desc' => 'پرونده‌های با عیب/خدمت نامشخص — تکمیل داده، رد، درخواست اطلاعات، ارجاع کارشناسی',
-            'href' => 'erp-reception-online-requests.php?status=' . M360_ONLINE_REQ_STATUS_UNDER_REVIEW,
-            'placeholder' => false,
-            'placeholder_text' => '',
-        ],
-        [
             'title' => 'پذیرش',
-            'desc' => 'پذیرش حضوری، آنلاین/تکمیل پرونده، پیگیری پرونده‌های در جریان',
+            'desc' => 'درخواست‌های آنلاین مشتریان، شروع درخواست حضوری توسط پذیرش، تکمیل پرونده پذیرش',
             'href' => '',
             'placeholder' => false,
             'placeholder_text' => '',
             'subs' => [
-                ['title' => 'پذیرش حضوری', 'href' => 'erp-reception-workbench.php?section=walkin'],
+                ['title' => 'شروع درخواست حضوری توسط پذیرش', 'href' => 'erp-reception-workbench.php?section=walkin'],
                 ['title' => 'پذیرش آنلاین / تکمیل پرونده', 'href' => 'erp-reception-online-requests.php'],
                 ['title' => 'پیگیری پرونده‌های در جریان', 'href' => 'erp-reception-jobcards.php'],
             ],
@@ -1230,28 +2269,529 @@ function m360_rw_reception_process_hub_cards(array $kpi): array
     ];
 }
 
+// --- PR-02A: Calendar 1405 + vehicle standards + hall manager gate ---
+
+const M360_RW_CALENDAR_1405_SOURCE_DOC = 'docs/source/calendar/iran_calendar_1405_source.xlsx';
+const M360_RW_HALL_MANAGER_STATUS_READY_FA = 'آماده بررسی مسئول سالن';
+const M360_RW_TOP_LEVEL_OTHER_BRAND = 'سایر';
+const M360_RW_MODEL_LIST_GAP_VALUE = 'سایر';
+
+/** @return list<string> */
+function m360_rw_intake_approved_vehicle_brands(): array
+{
+    return ['بنز', 'ب ام و', 'پورشه', 'ولوو', 'فولکس واگن', M360_RW_TOP_LEVEL_OTHER_BRAND];
+}
+
+/** @return list<int> PR-02A diagnostic requests — not valid for product sign-off. */
+function m360_rw_intake_diagnostic_request_ids(): array
+{
+    return [18, 20];
+}
+
+function m360_rw_intake_is_diagnostic_only_request(int $onlineRequestId): bool
+{
+    return in_array($onlineRequestId, m360_rw_intake_diagnostic_request_ids(), true);
+}
+
+/** @return list<string> Legacy test brands outside current MOGHARE360 scope — never add to approved list. */
+function m360_rw_intake_legacy_unsupported_brands(): array
+{
+    return ['Toyota', 'تویوتا', 'Lexus', 'لکسوس', 'Hyundai', 'هیوندای', 'Kia', 'کیا'];
+}
+
+function m360_rw_intake_brand_is_legacy_unsupported(string $brand): bool
+{
+    $brand = trim($brand);
+    if ($brand === '') {
+        return false;
+    }
+
+    return in_array($brand, m360_rw_intake_legacy_unsupported_brands(), true);
+}
+
+/** @return array{blocked:bool,reason_fa:string} */
+function m360_rw_intake_vehicle_signoff_status(array $payload, array $requestRow, int $onlineRequestId): array
+{
+    if (m360_rw_intake_is_diagnostic_only_request($onlineRequestId)) {
+        return [
+            'blocked' => true,
+            'reason_fa' => 'درخواست #' . $onlineRequestId . ' فقط برای عیب‌یابی PR-02A است و برای امضای محصول معتبر نیست.',
+        ];
+    }
+    $brand = trim(m360_rw_intake_vehicle_canonical($payload, $requestRow)['brand']);
+    if ($brand !== '' && m360_rw_intake_brand_is_legacy_unsupported($brand)) {
+        return [
+            'blocked' => true,
+            'reason_fa' => 'برند «' . $brand . '» خارج از محدوده فعلی پذیرش است (فقط بنز، ب ام و، پورشه، ولوو، فولکس واگن، سایر).',
+        ];
+    }
+    if ($brand !== '' && !in_array($brand, m360_rw_intake_approved_vehicle_brands(), true)) {
+        return [
+            'blocked' => true,
+            'reason_fa' => 'برند خودرو در فهرست تأییدشده فعلی نیست.',
+        ];
+    }
+
+    return ['blocked' => false, 'reason_fa' => ''];
+}
+
+/** @return list<string> */
+function m360_rw_intake_actions_requiring_vehicle_complete(): array
+{
+    return [
+        'save_condition_notes',
+        'save_service_classification',
+        'save_temporary_reception',
+        'save_camera_photo',
+        'save_documents_and_cost',
+        'save_diagnostic_pdf',
+        'save_intake_document',
+        'prepare_customer_contract_review',
+        'complete_reception_intake',
+        'save_reception_confirmation',
+        'sign_and_lock_intake',
+        'send_to_hall_manager',
+    ];
+}
+
+function m360_rw_intake_action_requires_vehicle_complete(string $actionType): bool
+{
+    return in_array($actionType, m360_rw_intake_actions_requiring_vehicle_complete(), true);
+}
+
+/**
+ * Bidirectional sync of vehicle canonical fields between top-level, nested, and form_values.
+ *
+ * @param array<string, mixed> $payload
+ * @return array<string, mixed>
+ */
+function m360_rw_intake_sync_vehicle_canonical_fields(array $payload): array
+{
+    $payload = m360_rw_intake_ensure_nested($payload);
+    $vehicle = is_array($payload['reception_intake']['vehicle'] ?? null)
+        ? $payload['reception_intake']['vehicle']
+        : [];
+
+    $pick = static function (array $sources, string ...$keys): string {
+        foreach ($sources as $src) {
+            foreach ($keys as $key) {
+                if (isset($src[$key]) && trim((string)$src[$key]) !== '') {
+                    return trim((string)$src[$key]);
+                }
+            }
+        }
+
+        return '';
+    };
+
+    $sources = [$vehicle, $payload];
+    $fv = is_array($payload['form_values'] ?? null) ? $payload['form_values'] : [];
+    if ($fv !== []) {
+        $sources[] = $fv;
+    }
+
+    $plate = $pick($sources, 'plate', 'vehicle_plate');
+    $vin = $pick($sources, 'vin', 'chassis');
+    $brand = $pick($sources, 'brand', 'vehicle_brand');
+    $model = $pick($sources, 'model', 'vehicle_model', 'vehicle_class');
+    $vehicleClass = $pick($sources, 'vehicle_class', 'model', 'vehicle_model');
+    $vehicleType = $pick($sources, 'vehicle_type', 'body_type', 'vehicle_body_type', 'car_type');
+    $mileage = $pick($sources, 'mileage', 'odometer_km');
+    $fuel = $pick($sources, 'fuel_level', 'intake_fuel_level', 'fuel');
+    $year = $pick($sources, 'vehicle_year_pair', 'vehicle_year');
+    $visitDate = $pick($sources, 'visit_date');
+
+    if ($plate !== '') {
+        $vehicle['plate'] = $plate;
+        $payload['plate'] = $plate;
+        $payload['vehicle_plate'] = $plate;
+    }
+    if ($vin !== '') {
+        $vehicle['vin'] = $vin;
+        $payload['vin'] = $vin;
+    }
+    if ($brand !== '') {
+        $vehicle['brand'] = $brand;
+        $payload['brand'] = $brand;
+        $payload['vehicle_brand'] = $brand;
+    }
+    if ($model !== '') {
+        $vehicle['model'] = $model;
+        $payload['model'] = $model;
+        $payload['vehicle_model'] = $model;
+    }
+    if ($vehicleClass !== '') {
+        $vehicle['vehicle_class'] = $vehicleClass;
+        $payload['vehicle_class'] = $vehicleClass;
+        if (trim((string)($payload['model'] ?? '')) === '') {
+            $payload['model'] = $vehicleClass;
+            $payload['vehicle_model'] = $vehicleClass;
+            $vehicle['model'] = $vehicleClass;
+        }
+    }
+    if ($vehicleType !== '') {
+        $vehicle['vehicle_type'] = $vehicleType;
+        $payload['vehicle_type'] = $vehicleType;
+    }
+    if ($mileage !== '') {
+        $vehicle['mileage'] = $mileage;
+        $payload['mileage'] = $mileage;
+        $payload['odometer_km'] = $mileage;
+    }
+    if ($fuel !== '') {
+        $vehicle['fuel_level'] = $fuel;
+        $payload['fuel_level'] = $fuel;
+        $payload['intake_fuel_level'] = $fuel;
+    }
+    if ($year !== '') {
+        $vehicle['vehicle_year_pair'] = $year;
+        $payload['vehicle_year_pair'] = $year;
+    }
+    if ($visitDate !== '') {
+        $vehicle['visit_date'] = $visitDate;
+        $payload['visit_date'] = $visitDate;
+    }
+
+    $payload['reception_intake']['vehicle'] = $vehicle;
+
+    if ($fv !== []) {
+        $fvMap = [
+            'plate' => $plate,
+            'vin' => $vin,
+            'brand' => $brand,
+            'model' => $model !== '' ? $model : $vehicleClass,
+            'vehicle_class' => $vehicleClass !== '' ? $vehicleClass : $model,
+            'vehicle_type' => $vehicleType,
+            'mileage' => $mileage,
+            'fuel_level' => $fuel,
+            'vehicle_year_pair' => $year,
+            'visit_date' => $visitDate,
+        ];
+        foreach ($fvMap as $key => $val) {
+            if ($val !== '') {
+                $payload['form_values'][$key] = $val;
+            }
+        }
+    }
+
+    return $payload;
+}
+
+function m360_rw_intake_render_diagnostic_request_notice(int $onlineRequestId): void
+{
+    if (!m360_rw_intake_is_diagnostic_only_request($onlineRequestId)) {
+        return;
+    }
+    echo '<div class="m360-rw-flash is-warn" role="status">';
+    echo m360_rw_h('درخواست #' . $onlineRequestId . ' — فقط عیب‌یابی PR-02A. برای امضای محصول از درخواست جدید با برند تأییدشده (مثلاً بنز C200 یا پورشه Macan) استفاده کنید.');
+    echo '</div>';
+}
+
+function m360_rw_intake_render_payload_invalid_notice(array $payloadMeta): void
+{
+    if (($payloadMeta['valid'] ?? true) === true) {
+        return;
+    }
+    $warning = trim((string)($payloadMeta['raw_warning'] ?? ''));
+    if ($warning === '') {
+        $warning = 'ساختار JSON پرونده نامعتبر است. ذخیره‌سازی متوقف شده تا از بازگشت ناخواسته به مرحله خودرو جلوگیری شود.';
+    }
+    echo '<div class="m360-rw-flash is-err" role="alert">' . m360_rw_h($warning) . '</div>';
+}
+
+require_once __DIR__ . DIRECTORY_SEPARATOR . 'm360-calendar-1405-helper.php';
+
+/** @return array<string, list<string>> */
+function m360_rw_intake_vehicle_brand_model_map(): array
+{
+    return [
+        'بنز' => ['C200', 'C250', 'C300', 'E200', 'E250', 'E300', 'E350', 'S350', 'S500', 'S560', 'GLC', 'GLE', 'GLS', 'G-Class', 'سایر'],
+        'ب ام و' => ['320', '325', '328', '330', '520', '523', '525', '528', '530', '730', '740', 'X1', 'X3', 'X4', 'X5', 'X6', 'سایر'],
+        'پورشه' => ['Cayenne', 'Macan', 'Panamera', '911', 'Boxster', 'Cayman', 'سایر'],
+        'ولوو' => ['XC60', 'XC90', 'S60', 'S80', 'V40', 'V60', 'سایر'],
+        'فولکس واگن' => ['Passat', 'Tiguan', 'Touareg', 'Golf', 'Beetle', 'Jetta', 'سایر'],
+        'سایر' => [],
+    ];
+}
+
+const M360_RW_RECEPTION_OTP_CUSTOMER_ONLY_MESSAGE_FA = 'تأیید OTP فقط از طریق فرم آنلاین مشتری انجام می‌شود. پذیرش مجاز به ارسال OTP برای مشتری نیست.';
+const M360_RW_RECEPTION_UNVERIFIED_ACCESS_MESSAGE_FA = 'این درخواست هنوز توسط مشتری تأیید OTP نشده و قابل مشاهده در پذیرش نیست.';
+
+function m360_rw_intake_staff_otp_action_blocked(): bool
+{
+    return true;
+}
+
+/** @param array<string, mixed> $requestRow */
+function m360_rw_intake_reception_otp_verified(array $requestRow): bool
+{
+    return m360_online_req_payload_otp_verified($requestRow) || m360_online_req_is_staff_walkin($requestRow);
+}
+
+function m360_rw_intake_vehicle_year_options(): array
+{
+    $todayGy = (int)gmdate('Y');
+    $options = [];
+    for ($i = 0; $i <= 20; $i++) {
+        $gy = $todayGy - $i;
+        $jy = $gy - 621;
+        $options[] = [
+            'value' => $jy . ' - ' . $gy,
+            'label' => $jy . ' شمسی / ' . $gy . ' میلادی',
+        ];
+    }
+
+    return $options;
+}
+
+/**
+ * @param array<string, string> $post
+ * @return array{ok:bool,error:string,brand:string,model:string,year:string,brand_status:string,model_status:string,brand_other_explanation:string,model_other_explanation:string}
+ */
+function m360_rw_intake_validate_vehicle_selection(array $post): array
+{
+    $brand = trim((string)($post['vehicle_brand'] ?? $post['brand'] ?? ''));
+    $model = trim((string)($post['vehicle_class'] ?? $post['model'] ?? ''));
+    $year = trim((string)($post['vehicle_year_pair'] ?? $post['vehicle_year'] ?? ''));
+    $brandOther = trim((string)($post['brand_other_explanation'] ?? ''));
+    $modelOther = trim((string)($post['model_other_explanation'] ?? ''));
+    if ($brand === '' || $brand === 'انتخاب برند' || !in_array($brand, m360_rw_intake_approved_vehicle_brands(), true)) {
+        return ['ok' => false, 'error' => 'برند خودرو باید از فهرست تأییدشده انتخاب شود.', 'brand' => '', 'model' => '', 'year' => '', 'brand_status' => '', 'model_status' => '', 'brand_other_explanation' => '', 'model_other_explanation' => ''];
+    }
+    if (m360_rw_intake_brand_is_legacy_unsupported($brand)) {
+        return ['ok' => false, 'error' => 'برند انتخاب‌شده خارج از محدوده فعلی پذیرش است. از برندهای تأییدشده یا «سایر» با توضیح مدیر استفاده کنید.', 'brand' => '', 'model' => '', 'year' => '', 'brand_status' => '', 'model_status' => '', 'brand_other_explanation' => '', 'model_other_explanation' => ''];
+    }
+    if ($year === '' || $year === 'انتخاب سال') {
+        return ['ok' => false, 'error' => 'سال ساخت خودرو الزامی است.', 'brand' => $brand, 'model' => '', 'year' => '', 'brand_status' => '', 'model_status' => '', 'brand_other_explanation' => '', 'model_other_explanation' => ''];
+    }
+    $brandStatus = 'approved';
+    $modelStatus = 'approved';
+    if ($brand === M360_RW_TOP_LEVEL_OTHER_BRAND) {
+        $brandStatus = 'MANAGER_EXCEPTION_REVIEW';
+        if ($brandOther === '') {
+            return ['ok' => false, 'error' => 'برای برند سایر، توضیح الزامی است.', 'brand' => $brand, 'model' => '', 'year' => $year, 'brand_status' => $brandStatus, 'model_status' => '', 'brand_other_explanation' => '', 'model_other_explanation' => ''];
+        }
+        $vt = m360_rw_intake_validate_text($brandOther, 500, 'توضیح برند سایر');
+        if (!$vt['ok']) {
+            return ['ok' => false, 'error' => $vt['error'], 'brand' => $brand, 'model' => '', 'year' => $year, 'brand_status' => $brandStatus, 'model_status' => '', 'brand_other_explanation' => '', 'model_other_explanation' => ''];
+        }
+        $brandOther = trim($brandOther);
+        $model = '';
+        $modelStatus = '';
+    } else {
+        if ($model === '') {
+            return ['ok' => false, 'error' => 'کلاس / مدل خودرو الزامی است.', 'brand' => $brand, 'model' => '', 'year' => $year, 'brand_status' => $brandStatus, 'model_status' => '', 'brand_other_explanation' => '', 'model_other_explanation' => ''];
+        }
+        if ($model === 'انتخاب کلاس / مدل') {
+            return ['ok' => false, 'error' => 'کلاس / مدل خودرو را از فهرست انتخاب کنید.', 'brand' => $brand, 'model' => '', 'year' => $year, 'brand_status' => $brandStatus, 'model_status' => '', 'brand_other_explanation' => '', 'model_other_explanation' => ''];
+        }
+        if ($model === M360_RW_MODEL_LIST_GAP_VALUE) {
+            $modelStatus = 'MODEL_LIST_GAP';
+            if ($modelOther === '') {
+                return ['ok' => false, 'error' => 'برای مدل سایر، توضیح الزامی است.', 'brand' => $brand, 'model' => $model, 'year' => $year, 'brand_status' => $brandStatus, 'model_status' => $modelStatus, 'brand_other_explanation' => '', 'model_other_explanation' => ''];
+            }
+            $vt = m360_rw_intake_validate_text($modelOther, 500, 'توضیح مدل سایر');
+            if (!$vt['ok']) {
+                return ['ok' => false, 'error' => $vt['error'], 'brand' => $brand, 'model' => $model, 'year' => $year, 'brand_status' => $brandStatus, 'model_status' => $modelStatus, 'brand_other_explanation' => '', 'model_other_explanation' => ''];
+            }
+            $modelOther = trim($modelOther);
+        }
+    }
+
+    return [
+        'ok' => true,
+        'error' => '',
+        'brand' => $brand,
+        'model' => $model,
+        'year' => $year,
+        'brand_status' => $brandStatus,
+        'model_status' => $modelStatus,
+        'brand_other_explanation' => $brandOther,
+        'model_other_explanation' => $modelOther,
+    ];
+}
+
+/**
+ * @param array<string, mixed> $payload
+ * @return array{status:string,sent_at:string,note:string}
+ */
+function m360_rw_intake_hall_manager_canonical(array $payload): array
+{
+    $payload = m360_rw_intake_ensure_nested($payload);
+    $hm = is_array($payload['reception_intake']['hall_manager'] ?? null)
+        ? $payload['reception_intake']['hall_manager']
+        : [];
+
+    return [
+        'status' => trim((string)($hm['status'] ?? '')),
+        'sent_at' => trim((string)($hm['sent_at'] ?? '')),
+        'note' => trim((string)($hm['note'] ?? '')),
+    ];
+}
+
+/** @param array<string, mixed> $payload */
+function m360_rw_intake_hall_manager_step_complete(array $payload): bool
+{
+    $hm = m360_rw_intake_hall_manager_canonical($payload);
+
+    return $hm['status'] === M360_RW_HALL_MANAGER_STATUS_READY_FA
+        && $hm['sent_at'] !== ''
+        && m360_rw_intake_operation_gate_hall_manager_allowed($payload);
+}
+
+/** @param array<string, string> $formValues */
+function m360_rw_intake_render_visit_calendar(array $formValues): void
+{
+    $days = m360_rw_calendar_next_30_day_window();
+    $selected = trim((string)($formValues['visit_date'] ?? ''));
+    $display = trim((string)($formValues['visit_date_display'] ?? ''));
+    echo '<label for="m360_rw_visit_date_display">تاریخ مراجعه <span class="m360-req">*</span></label>';
+    echo '<div class="m360-date-field">';
+    echo '<input type="text" id="m360_rw_visit_date_display" class="m360-date-display' . ($display !== '' ? ' m360-date-display--filled' : '') . '" readonly placeholder="روز مراجعه را از تقویم انتخاب کنید" value="' . m360_rw_h($display) . '" aria-describedby="m360_rw_visit_date_hint">';
+    echo '<input type="hidden" id="m360_rw_visit_date" name="visit_date" value="' . m360_rw_h($selected) . '">';
+    echo '<p id="m360_rw_visit_date_hint" class="m360-jalali-datepicker__hint">انتخاب مراجعه در بازه ۳۰ روز آینده تقویم شمسی — فقط روزهای کاری (جمعه و تعطیلات رسمی غیرفعال)</p>';
+    echo '<div class="m360-server-calendar m360-rw-server-calendar" id="m360_rw_server_calendar" role="group" aria-label="تقویم مراجعه">';
+    foreach ($days as $day) {
+        m360_rw_calendar_render_day_button($day, $selected, 'm360_rw_h');
+    }
+    echo '</div></div>';
+}
+
+/** @param array<string, string> $formValues */
+function m360_rw_intake_render_vehicle_selector(array $formValues): void
+{
+    $brand = trim((string)($formValues['brand'] ?? ''));
+    $model = trim((string)($formValues['model'] ?? ''));
+    $year = trim((string)($formValues['vehicle_year_pair'] ?? ''));
+    $brandOther = trim((string)($formValues['brand_other_explanation'] ?? ''));
+    $modelOther = trim((string)($formValues['model_other_explanation'] ?? ''));
+    echo '<div class="m360-rw-vehicle-selector">';
+    echo '<label for="m360_rw_vehicle_brand">برند <span class="m360-req">*</span></label>';
+    echo '<select id="m360_rw_vehicle_brand" name="vehicle_brand" class="m360-rw-form-input" data-required-both="1" required>';
+    echo '<option value="">انتخاب برند</option>';
+    foreach (m360_rw_intake_approved_vehicle_brands() as $brandOpt) {
+        $sel = ($brand === $brandOpt) ? ' selected' : '';
+        echo '<option value="' . m360_rw_h($brandOpt) . '"' . $sel . '>' . m360_rw_h($brandOpt) . '</option>';
+    }
+    echo '</select>';
+    echo '<label for="m360_rw_vehicle_class">کلاس / مدل <span class="m360-req">*</span></label>';
+    echo '<select id="m360_rw_vehicle_class" name="vehicle_class" class="m360-rw-form-input" data-required-both="1">';
+    echo '<option value="">انتخاب کلاس / مدل</option>';
+    $modelMap = m360_rw_intake_vehicle_brand_model_map();
+    if ($brand !== '' && isset($modelMap[$brand]) && $brand !== 'سایر') {
+        foreach ($modelMap[$brand] as $modelOpt) {
+            $sel = ($model === $modelOpt) ? ' selected' : '';
+            echo '<option value="' . m360_rw_h($modelOpt) . '"' . $sel . '>' . m360_rw_h($modelOpt) . '</option>';
+        }
+    }
+    echo '</select>';
+    echo '<div id="m360_rw_top_other_panel" class="m360-rw-other-panel" style="display:none">';
+    echo '<p class="m360-rw-warn">خارج از محدوده استاندارد — نیازمند بررسی / تأیید مدیر</p>';
+    m360_rw_intake_form_field('توضیح برند سایر', 'brand_other_explanation', $brandOther, 'textarea', true);
+    echo '</div>';
+    echo '<div id="m360_rw_model_gap_panel" class="m360-rw-other-panel" style="display:none">';
+    echo '<p class="m360-rw-muted">مدل در فهرست موجود نیست (MODEL_LIST_GAP)</p>';
+    m360_rw_intake_form_field('توضیح مدل سایر', 'model_other_explanation', $modelOther, 'textarea', true);
+    echo '</div>';
+    echo '<label for="m360_rw_vehicle_year">سال ساخت <span class="m360-req">*</span></label>';
+    echo '<select id="m360_rw_vehicle_year" name="vehicle_year_pair" class="m360-rw-form-input" required>';
+    echo '<option value="">انتخاب سال</option>';
+    foreach (m360_rw_intake_vehicle_year_options() as $opt) {
+        $sel = ($year === $opt['value']) ? ' selected' : '';
+        echo '<option value="' . m360_rw_h($opt['value']) . '"' . $sel . '>' . m360_rw_h($opt['label']) . '</option>';
+    }
+    echo '</select></div>';
+    echo '<script>window.m360RwVehicleInit=' . json_encode(['brand' => $brand, 'model' => $model], JSON_UNESCAPED_UNICODE) . ';</script>';
+}
+
 // --- P11.9-C-2C: Reception intake write actions (payload merge, no schema change) ---
 
 const M360_RW_INTAKE_HISTORY_PREFIX = 'RECEPTION_INTAKE_SAVE_';
+const M360_RW_INTAKE_LOCK_MESSAGE_FA = 'پرونده پذیرش پس از امضای مشتری قفل شده است. اصلاح فقط از مسیر اصلاحیه مجاز است.';
 
 /** @return list<string> */
 function m360_rw_intake_allowed_actions(): array
 {
     return [
         'save_mobile_correction',
-        'send_customer_otp',
         'save_vehicle_identity',
         'save_condition_notes',
         'save_service_classification',
         'save_temporary_reception',
-        'save_referral_team',
+        'send_to_hall_manager',
         'save_documents_and_cost',
         'save_camera_photo',
         'save_diagnostic_pdf',
-        'run_intake_contract',
-        'approve_intake_contract',
+        'save_intake_document',
+        'prepare_customer_contract_review',
+        'request_start_without_prepayment',
+        'approve_start_without_prepayment',
+        'reject_start_without_prepayment',
+        'return_start_without_prepayment',
         'save_reception_confirmation',
+        'complete_reception_intake',
+        'sign_and_lock_intake',
     ];
+}
+
+/**
+ * @return array<string, array{num:int,label:string}>
+ */
+function m360_rw_canonical_intake_steps(): array
+{
+    return [
+        'mobile_otp' => ['num' => 1, 'label' => 'موبایل و تأیید پیامکی'],
+        'customer_search' => ['num' => 1, 'label' => 'جستجوی مشتری'],
+        'customer' => ['num' => 2, 'label' => 'اطلاعات مشتری'],
+        'vehicle' => ['num' => 3, 'label' => 'اطلاعات خودرو'],
+        'service' => ['num' => 4, 'label' => 'خدمات و مسیر عیب'],
+        'condition' => ['num' => 5, 'label' => 'وضعیت خودرو و تصاویر'],
+        'checklist' => ['num' => 6, 'label' => 'چک‌لیست پذیرش و توافق اولیه'],
+        'contract' => ['num' => 7, 'label' => 'امضا و تأیید قرارداد توسط مشتری'],
+        'hall_jobcard' => ['num' => 8, 'label' => 'ارسال به مسئول سالن / ایجاد یا فعال‌سازی JobCard'],
+    ];
+}
+
+function m360_rw_canonical_intake_step_label(string $key): string
+{
+    $steps = m360_rw_canonical_intake_steps();
+
+    return (string)($steps[$key]['label'] ?? '');
+}
+
+function m360_rw_canonical_contract_step_text_fa(): string
+{
+    return 'پس از تکمیل اطلاعات پذیرش و تحویل خودرو به پذیرش، قرارداد برای مشاهده، امضا و تأیید پیامکی مشتری فعال می‌شود. این مرحله فقط توسط مشتری یا نماینده مجاز مشتری انجام می‌شود و کاربر پذیرش مجاز به امضا یا تأیید به‌جای مشتری نیست.';
+}
+
+function m360_rw_canonical_hall_step_text_fa(): string
+{
+    return 'پس از تأیید قرارداد و تعیین تکلیف پیش‌پرداخت، پرونده برای بررسی مسئول سالن، تخصیص تیم و ادامه عملیات فنی ارسال می‌شود.';
+}
+
+function m360_rw_canonical_walkin_otp_note_fa(): string
+{
+    return 'این مرحله فقط برای ثبت درخواست آنلاین مشتری است. در پذیرش حضوری، کاربر پذیرش احراز شده و فرم از اطلاعات مشتری شروع می‌شود.';
+}
+
+function m360_rw_online_initial_reception_later_message_fa(): string
+{
+    return 'درخواست اولیه شما ثبت شد. پس از حضور خودرو در مجموعه، پذیرش وضعیت خودرو، تصاویر و چک‌لیست پذیرش را تکمیل می‌کند و سپس لینک امضا و تأیید قرارداد برای شما ارسال می‌شود.';
+}
+
+function m360_rw_reception_contract_link_sent_message_fa(): string
+{
+    return 'اطلاعات پذیرش تکمیل شد. لینک امضا و تأیید قرارداد برای مشتری ارسال شد. مشتری باید با OTP وارد پروفایل خود شود و قرارداد را امضا و تأیید کند.';
+}
+
+function m360_rw_contract_pending_customer_message_fa(): string
+{
+    return 'در انتظار امضا و تأیید قرارداد توسط مشتری';
+}
+
+function m360_rw_contract_accepted_customer_message_fa(): string
+{
+    return 'قرارداد توسط مشتری تأیید شده است';
 }
 
 /** @return list<string> */
@@ -1268,6 +2808,7 @@ function m360_rw_intake_temp_statuses(): array
         'expert_review' => 'نیازمند بررسی کارشناسی',
         'rejected' => 'رد شده',
         'held_temporary' => 'نگهداری موقت',
+        'reception_temporary_diagnosis' => 'پذیرش موقت — عیب‌یابی',
     ];
 }
 
@@ -1294,6 +2835,8 @@ function m360_rw_intake_payload_for_recovery(array $payload): array
             'vin' => 'vin',
             'brand' => 'brand',
             'model' => 'model',
+            'vehicle_class' => 'vehicle_class',
+            'vehicle_type' => 'vehicle_type',
             'mileage' => 'odometer_km',
             'fuel_level' => 'fuel_level',
         ];
@@ -1301,6 +2844,11 @@ function m360_rw_intake_payload_for_recovery(array $payload): array
             if ((!isset($payload[$to]) || trim((string)$payload[$to]) === '') && isset($v[$from]) && trim((string)$v[$from]) !== '') {
                 $payload[$to] = $v[$from];
             }
+        }
+        if ((!isset($payload['model']) || trim((string)$payload['model']) === '')
+            && isset($payload['vehicle_class']) && trim((string)$payload['vehicle_class']) !== '') {
+            $payload['model'] = $payload['vehicle_class'];
+            $payload['vehicle_model'] = $payload['vehicle_class'];
         }
     }
     if (isset($ri['condition']) && is_array($ri['condition'])) {
@@ -1319,6 +2867,21 @@ function m360_rw_intake_payload_for_recovery(array $payload): array
             }
         }
     }
+    if (isset($ri['service_classification']) && is_array($ri['service_classification'])) {
+        $sc = $ri['service_classification'];
+        $route = trim((string)($sc['route'] ?? $sc['main'] ?? ''));
+        if ($route !== '' && (!isset($payload['reception_service_primary']) || trim((string)$payload['reception_service_primary']) === '')) {
+            $payload['reception_service_primary'] = $route;
+        }
+        $subs = $sc['diagnostic_subcategories'] ?? $sc['diagnostic_categories'] ?? null;
+        if (is_array($subs) && $subs !== [] && (!isset($payload['reception_service_diag_sub']) || $payload['reception_service_diag_sub'] === [])) {
+            $payload['reception_service_diag_sub'] = $subs;
+        }
+        if (array_key_exists('service_path_clear', $sc) && !isset($payload['fault_service_path_clear']) && !isset($payload['service_path_clear'])) {
+            $payload['fault_service_path_clear'] = !empty($sc['service_path_clear']) ? '1' : '0';
+            $payload['service_path_clear'] = $payload['fault_service_path_clear'];
+        }
+    }
     if (isset($ri['reception_confirmation']) && is_array($ri['reception_confirmation'])) {
         $rc = $ri['reception_confirmation'];
         if (!empty($rc['confirmed_by_receptionist']) && empty($payload['reception_final_confirmation'])) {
@@ -1328,6 +2891,8 @@ function m360_rw_intake_payload_for_recovery(array $payload): array
             $payload['reception_confirmation_note'] = $rc['confirmation_note'];
         }
     }
+    $canonicalPhotos = m360_rw_intake_photos_canonical($payload);
+    $payload = m360_rw_intake_photos_sync_to_payload($payload, $canonicalPhotos);
 
     return $payload;
 }
@@ -1397,6 +2962,14 @@ function m360_rw_intake_normalize_scalar_text(mixed $value): array
     return ['ok' => false, 'error' => 'مقدار واردشده معتبر نیست.', 'value' => ''];
 }
 
+/** Safe scalar-to-string for wizard/completion checks (arrays remain non-scalar). */
+function m360_rw_intake_scalar_string(mixed $value): string
+{
+    $normalized = m360_rw_intake_normalize_scalar_text($value);
+
+    return $normalized['ok'] ? $normalized['value'] : '';
+}
+
 /** @return array{ok:bool,error:string,value:string} */
 function m360_rw_intake_post_scalar(array $post, string $key): array
 {
@@ -1407,19 +2980,20 @@ function m360_rw_intake_post_scalar(array $post, string $key): array
     return m360_rw_intake_normalize_scalar_text($post[$key]);
 }
 
-/** @return array{ok:bool,error:string} */
+/** @return array{ok:bool,error:string,value:string} */
 function m360_rw_intake_validate_text(mixed $value, int $maxLen, string $label): array
 {
     $normalized = m360_rw_intake_normalize_scalar_text($value);
     if (!$normalized['ok']) {
-        return ['ok' => false, 'error' => $label . ': ' . $normalized['error']];
+        return ['ok' => false, 'error' => $label . ': ' . $normalized['error'], 'value' => ''];
     }
     $text = $normalized['value'];
     if (mb_strlen($text) > $maxLen) {
+        return ['ok' => false, 'error' => $label . ': too_long', 'value' => ''];
         return ['ok' => false, 'error' => $label . ' بیش از حد مجاز طولانی است.'];
     }
 
-    return ['ok' => true, 'error' => ''];
+    return ['ok' => true, 'error' => '', 'value' => $text];
 }
 
 /** @return array{ok:bool,error:string,value:string} */
@@ -1492,24 +3066,126 @@ function m360_rw_intake_apply_action(array $payload, string $actionType, array $
 
     switch ($actionType) {
         case 'save_vehicle_identity':
+            // Prefer server-side canonical identity; POST is authoritative only for fuel_level.
+            $requestStub = [
+                'vehicle_id' => (string)($post['_rw_request_vehicle_id'] ?? $payload['vehicle_id'] ?? ''),
+                'visit_date' => (string)($post['_rw_request_visit_date'] ?? $payload['visit_date'] ?? ''),
+                'customer_id' => (string)($post['_rw_request_customer_id'] ?? $payload['customer_id'] ?? ''),
+            ];
+            $vehicleCtx = m360_rw_intake_resolve_vehicle_step_context($payload, $requestStub, $post);
+            if (!empty($vehicleCtx['identity_ready'])) {
+                $fuelNorm = m360_rw_intake_post_scalar($post, 'fuel_level');
+                if (!$fuelNorm['ok']) {
+                    return ['ok' => false, 'error' => $fuelNorm['error'], 'payload' => $payload, 'column_updates' => []];
+                }
+                if (!array_key_exists('fuel_level', $post) && array_key_exists('fuelLevel', $post)) {
+                    $fuelNorm = m360_rw_intake_post_scalar($post, 'fuelLevel');
+                    if (!$fuelNorm['ok']) {
+                        return ['ok' => false, 'error' => $fuelNorm['error'], 'payload' => $payload, 'column_updates' => []];
+                    }
+                }
+                $fuel = trim((string)$fuelNorm['value']);
+                $vFuel = m360_rw_intake_validate_fuel($fuel);
+                if (!$vFuel['ok']) {
+                    return ['ok' => false, 'error' => $vFuel['error'], 'payload' => $payload, 'column_updates' => []];
+                }
+                if ($fuel === '') {
+                    return ['ok' => false, 'error' => 'سطح سوخت الزامی است.', 'payload' => $payload, 'column_updates' => []];
+                }
+
+                $payload['fuel_level'] = $fuel;
+                $payload['intake_fuel_level'] = $fuel;
+                if (!isset($payload['reception_intake']['vehicle']) || !is_array($payload['reception_intake']['vehicle'])) {
+                    $payload['reception_intake']['vehicle'] = [];
+                }
+                $payload['reception_intake']['vehicle']['fuel_level'] = $fuel;
+                // Preserve established identity values without mutating from POST.
+                foreach ([
+                    'brand' => $vehicleCtx['brand'],
+                    'model' => $vehicleCtx['model'],
+                    'vehicle_class' => $vehicleCtx['model'],
+                    'plate' => $vehicleCtx['plate'],
+                    'vin' => $vehicleCtx['vin'],
+                    'mileage' => $vehicleCtx['mileage'],
+                    'vehicle_year_pair' => $vehicleCtx['production_year'],
+                    'visit_date' => $vehicleCtx['visit_date'],
+                ] as $k => $v) {
+                    if ($v === '') {
+                        continue;
+                    }
+                    $payload['reception_intake']['vehicle'][$k] = $v;
+                    if ($k === 'plate') {
+                        $payload['plate'] = $v;
+                        $payload['vehicle_plate'] = $v;
+                    } elseif ($k === 'mileage') {
+                        $payload['mileage'] = $v;
+                        $payload['odometer_km'] = $v;
+                    } elseif ($k === 'vehicle_year_pair') {
+                        $payload['vehicle_year_pair'] = $v;
+                    } elseif ($k === 'visit_date') {
+                        $payload['visit_date'] = $v;
+                    } elseif ($k === 'brand') {
+                        $payload['brand'] = $v;
+                        $payload['vehicle_brand'] = $v;
+                    } elseif ($k === 'model' || $k === 'vehicle_class') {
+                        $payload['model'] = $vehicleCtx['model'];
+                        $payload['vehicle_model'] = $vehicleCtx['model'];
+                        $payload['vehicle_class'] = $vehicleCtx['model'];
+                    } elseif ($k === 'vin') {
+                        $payload['vin'] = $v;
+                    }
+                }
+                $brandOther = trim((string)($post['brand_other_explanation'] ?? ''));
+                if (
+                    defined('M360_RW_TOP_LEVEL_OTHER_BRAND')
+                    && $vehicleCtx['brand'] === M360_RW_TOP_LEVEL_OTHER_BRAND
+                    && $brandOther !== ''
+                ) {
+                    $payload['reception_intake']['vehicle']['brand_other_explanation'] = $brandOther;
+                }
+                $modelOther = trim((string)($post['model_other_explanation'] ?? ''));
+                if ($modelOther !== '') {
+                    $payload['reception_intake']['vehicle']['model_other_explanation'] = $modelOther;
+                }
+                $payload = m360_rw_intake_sync_vehicle_canonical_fields($payload);
+                m360_rw_intake_mark_section_saved($payload, 'vehicle_identity');
+                break;
+            }
+
             $plateBuilt = m360_rw_intake_build_plate_from_post($post);
             if (!$plateBuilt['ok']) {
                 return ['ok' => false, 'error' => $plateBuilt['error'], 'payload' => $payload, 'column_updates' => []];
             }
             $plate = $plateBuilt['plate'];
             $vinNorm = m360_rw_intake_post_scalar($post, 'vin');
-            $brandNorm = m360_rw_intake_post_scalar($post, 'brand');
-            $modelNorm = m360_rw_intake_post_scalar($post, 'model');
+            $vehicleSel = m360_rw_intake_validate_vehicle_selection($post);
+            if (!$vehicleSel['ok']) {
+                return ['ok' => false, 'error' => $vehicleSel['error'], 'payload' => $payload, 'column_updates' => []];
+            }
+            $visitDate = trim((string)($post['visit_date'] ?? ''));
+            $visitCheck = m360_rw_calendar_validate_visit_date($visitDate);
+            if (!$visitCheck['ok']) {
+                // Preserve an already-recorded visit date during operational amendments
+                // (e.g. fuel-only post-conversion) without inventing a new visit window.
+                $existingVisit = trim((string)(
+                    $payload['visit_date']
+                    ?? ($payload['reception_intake']['vehicle']['visit_date'] ?? '')
+                    ?? ''
+                ));
+                if ($visitDate === '' || $existingVisit === '' || $visitDate !== $existingVisit) {
+                    return ['ok' => false, 'error' => $visitCheck['error'], 'payload' => $payload, 'column_updates' => []];
+                }
+            }
             $mileageNorm = m360_rw_intake_post_scalar($post, 'mileage');
             $fuelNorm = m360_rw_intake_post_scalar($post, 'fuel_level');
-            foreach ([$vinNorm, $brandNorm, $modelNorm, $mileageNorm, $fuelNorm] as $norm) {
+            foreach ([$vinNorm, $mileageNorm, $fuelNorm] as $norm) {
                 if (!$norm['ok']) {
                     return ['ok' => false, 'error' => $norm['error'], 'payload' => $payload, 'column_updates' => []];
                 }
             }
             $vin = $vinNorm['value'];
-            $brand = $brandNorm['value'];
-            $model = $modelNorm['value'];
+            $brand = $vehicleSel['brand'];
+            $model = $vehicleSel['model'];
             $fuel = $fuelNorm['value'];
 
             $vPlate = m360_rw_intake_validate_plate($plate);
@@ -1519,13 +3195,6 @@ function m360_rw_intake_apply_action(array $payload, string $actionType, array $
             $vVin = m360_rw_intake_validate_vin($vin);
             if (!$vVin['ok']) {
                 return ['ok' => false, 'error' => $vVin['error'], 'payload' => $payload, 'column_updates' => []];
-            }
-            $vtBrandModel = m360_rw_intake_validate_text_fields([
-                ['value' => $brand, 'label' => 'برند', 'max' => 120],
-                ['value' => $model, 'label' => 'مدل', 'max' => 120],
-            ]);
-            if (!$vtBrandModel['ok']) {
-                return ['ok' => false, 'error' => $vtBrandModel['error'], 'payload' => $payload, 'column_updates' => []];
             }
             $vMileage = m360_rw_intake_validate_mileage($mileageNorm['value']);
             if (!$vMileage['ok']) {
@@ -1541,17 +3210,21 @@ function m360_rw_intake_apply_action(array $payload, string $actionType, array $
             if ($plateBuilt['parts'] !== []) {
                 $payload['plate_parts'] = $plateBuilt['parts'];
             }
+            if (($plateBuilt['display'] ?? '') !== '') {
+                $payload['plate_display'] = $plateBuilt['display'];
+            }
             if ($vin !== '') {
                 $payload['vin'] = $vin;
             }
-            if ($brand !== '') {
-                $payload['brand'] = $brand;
-                $payload['vehicle_brand'] = $brand;
-            }
+            $payload['brand'] = $brand;
+            $payload['vehicle_brand'] = $brand;
             if ($model !== '') {
                 $payload['model'] = $model;
                 $payload['vehicle_model'] = $model;
+                $payload['vehicle_class'] = $model;
             }
+            $payload['vehicle_year_pair'] = $vehicleSel['year'];
+            $payload['visit_date'] = $visitDate;
             if ($vMileage['value'] !== '') {
                 $payload['odometer_km'] = $vMileage['value'];
                 $payload['mileage'] = $vMileage['value'];
@@ -1562,13 +3235,25 @@ function m360_rw_intake_apply_action(array $payload, string $actionType, array $
             }
             $payload['reception_intake']['vehicle'] = [
                 'plate' => $plate,
+                'plate_display' => (string)($plateBuilt['display'] ?? ''),
                 'vin' => $vin,
                 'brand' => $brand,
                 'model' => $model,
+                'vehicle_class' => $model,
+                'vehicle_year_pair' => $vehicleSel['year'],
+                'visit_date' => $visitDate,
+                'brand_status' => $vehicleSel['brand_status'],
+                'model_status' => $vehicleSel['model_status'],
+                'brand_other_explanation' => $vehicleSel['brand_other_explanation'],
+                'model_other_explanation' => $vehicleSel['model_other_explanation'],
                 'mileage' => $vMileage['value'],
                 'fuel_level' => $fuel,
             ];
             $columnUpdates['vehicle_plate'] = $plate;
+            if ($visitDate !== '') {
+                $columnUpdates['visit_date'] = $visitDate;
+            }
+            $payload = m360_rw_intake_sync_vehicle_canonical_fields($payload);
             m360_rw_intake_mark_section_saved($payload, 'vehicle_identity');
             break;
 
@@ -1583,91 +3268,83 @@ function m360_rw_intake_apply_action(array $payload, string $actionType, array $
             }
             $payload['mobile'] = $mobile;
             $payload['otp_verified'] = 0;
+            unset($payload['otp_verified_at'], $payload['otp_verified_mobile']);
+            $payload['reception_intake']['otp'] = [
+                'status' => 'unverified',
+                'mobile' => $mobile,
+                'updated_at' => gmdate('Y-m-d\TH:i:s\Z'),
+            ];
+            if (m360_rw_intake_load_otp_helper()) {
+                m360_otp_clear_pending();
+                m360_otp_reset_verified();
+            }
             $payload['reception_intake']['mobile_correction'] = [
                 'mobile' => $mobile,
                 'corrected_at' => gmdate('Y-m-d\TH:i:s\Z'),
             ];
             $columnUpdates['mobile'] = $mobile;
+            $columnUpdates['otp_verified'] = 0;
             m360_rw_intake_mark_section_saved($payload, 'mobile_otp');
             break;
 
         case 'save_condition_notes':
-            $itemsNorm = m360_rw_intake_post_scalar($post, 'vehicle_items');
-            $damageNorm = m360_rw_intake_post_scalar($post, 'visible_damage');
-            $initialNorm = m360_rw_intake_post_scalar($post, 'initial_vehicle_condition');
-            foreach ([$itemsNorm, $damageNorm, $initialNorm] as $norm) {
-                if (!$norm['ok']) {
-                    return ['ok' => false, 'error' => $norm['error'], 'payload' => $payload, 'column_updates' => []];
-                }
+            $validated = m360_rw_intake_validate_condition_structured_post($post);
+            if (!$validated['ok']) {
+                return ['ok' => false, 'error' => $validated['error'], 'payload' => $payload, 'column_updates' => []];
             }
-            $items = $itemsNorm['value'];
-            $damage = $damageNorm['value'];
-            $initial = $initialNorm['value'];
-            $vt = m360_rw_intake_validate_text_fields([
-                ['value' => $items, 'label' => 'لوازم داخل خودرو', 'max' => 2000],
-                ['value' => $damage, 'label' => 'آسیب ظاهری', 'max' => 2000],
-                ['value' => $initial, 'label' => 'وضعیت اولیه', 'max' => 2000],
-            ]);
-            if (!$vt['ok']) {
-                return ['ok' => false, 'error' => $vt['error'], 'payload' => $payload, 'column_updates' => []];
+            $payload = m360_rw_intake_ensure_nested($payload);
+            $existingCondition = is_array($payload['reception_intake']['condition'] ?? null)
+                ? $payload['reception_intake']['condition']
+                : [];
+            $legacyItems = trim((string)($existingCondition['legacy_vehicle_items'] ?? ''));
+            $legacyDamage = trim((string)($existingCondition['legacy_visible_damage'] ?? ''));
+            if ($legacyItems === '') {
+                $legacyItems = trim((string)m360_rw_pick([$existingCondition, $payload], 'vehicle_items', 'belongings'));
             }
-            if ($items !== '') {
-                $payload['belongings'] = $items;
-                $payload['vehicle_items'] = $items;
+            if ($legacyDamage === '') {
+                $legacyDamage = trim((string)m360_rw_pick([$existingCondition, $payload], 'visible_damage', 'body_damage'));
             }
-            if ($damage !== '') {
-                $payload['visible_damage'] = $damage;
-                $payload['body_damage'] = $damage;
-            }
-            if ($initial !== '') {
-                $payload['initial_vehicle_condition'] = $initial;
-            }
+            $trunk = $validated['trunk'];
+            $zones = $validated['zones'];
+            $note = $validated['note'];
+            $itemsSummary = m360_rw_intake_trunk_summary_fa($trunk);
+            $damageSummary = m360_rw_intake_damage_summary_fa($zones);
+            $payload['belongings'] = $itemsSummary;
+            $payload['vehicle_items'] = $itemsSummary;
+            $payload['visible_damage'] = $damageSummary;
+            $payload['body_damage'] = $damageSummary;
+            $payload['initial_vehicle_condition'] = $note;
             $payload['reception_intake']['condition'] = [
-                'vehicle_items' => $items,
-                'visible_damage' => $damage,
-                'initial_vehicle_condition' => $initial,
+                'trunk_belongings' => $trunk,
+                'damage_zones' => $zones,
+                'damage_general_note' => $note,
+                'vehicle_items' => $itemsSummary,
+                'visible_damage' => $damageSummary,
+                'initial_vehicle_condition' => $note,
+                'legacy_vehicle_items' => $legacyItems,
+                'legacy_visible_damage' => $legacyDamage,
             ];
             m360_rw_intake_mark_section_saved($payload, 'condition_notes');
             break;
 
         case 'save_service_classification':
-            $primary = trim((string)($post['service_primary'] ?? ''));
-            $allowedPrimary = array_keys(m360_rw_service_classification_taxonomy());
-            if ($primary === '' || !in_array($primary, $allowedPrimary, true)) {
-                return ['ok' => false, 'error' => 'دسته‌بندی اصلی خدمات الزامی است.', 'payload' => $payload, 'column_updates' => []];
+            $requestType = m360_rw_intake_resolve_customer_request_type($post, $payload, []);
+            $policyGroup = m360_rw_request_service_policy_group($requestType);
+            $validated = m360_rw_intake_validate_service_classification_post($post, $policyGroup);
+            if (!$validated['ok']) {
+                return ['ok' => false, 'error' => $validated['error'], 'payload' => $payload, 'column_updates' => []];
             }
-            $diagSubs = [];
-            if ($primary === 'diag') {
-                $rawSubs = $post['service_diag_sub'] ?? [];
-                if (!is_array($rawSubs)) {
-                    $rawSubs = $rawSubs !== '' ? [(string)$rawSubs] : [];
-                }
-                $allowedSubs = array_keys(m360_rw_service_classification_taxonomy()['diag']['subs']);
-                foreach ($rawSubs as $sub) {
-                    $sub = trim((string)$sub);
-                    if ($sub !== '' && in_array($sub, $allowedSubs, true)) {
-                        $diagSubs[] = $sub;
-                    }
-                }
-                if ($diagSubs === []) {
-                    return ['ok' => false, 'error' => 'حداقل یک زیردسته عیب‌یابی انتخاب کنید.', 'payload' => $payload, 'column_updates' => []];
-                }
-            }
-            $pathClearRaw = trim((string)($post['service_path_clear'] ?? ''));
-            if (!in_array($pathClearRaw, ['0', '1'], true)) {
-                return ['ok' => false, 'error' => 'وضعیت روشن بودن مسیر عیب/خدمت را مشخص کنید.', 'payload' => $payload, 'column_updates' => []];
-            }
-            $pathNoteNorm = m360_rw_intake_post_scalar($post, 'service_path_note');
-            if (!$pathNoteNorm['ok']) {
-                return ['ok' => false, 'error' => $pathNoteNorm['error'], 'payload' => $payload, 'column_updates' => []];
-            }
-            $pathNote = $pathNoteNorm['value'];
-            $vt = m360_rw_intake_validate_text($pathNote, 2000, 'یادداشت مسیر خدمت');
-            if (!$vt['ok']) {
-                return ['ok' => false, 'error' => $vt['error'], 'payload' => $payload, 'column_updates' => []];
-            }
+            $primary = $validated['route'];
+            $diagSubs = $validated['diag_subs'];
+            $pathClearRaw = $validated['path_clear'];
+            $pathNote = $validated['path_note'];
+            $inspectionSubs = $validated['inspection_subs'] ?? [];
+            $userId = erp_auth_current_user_id() ?? ERP_PHASE1_PLATFORM_OWNER_ID;
+            $now = gmdate('Y-m-d\TH:i:s\Z');
 
             $payload['reception_service_primary'] = $primary;
+            $payload['customer_request_type'] = $requestType;
+            $payload['service_policy_group'] = $policyGroup;
             unset($payload['reception_service_periodic'], $payload['reception_service_trade']);
             if ($primary === 'diag') {
                 $payload['reception_service_diag_sub'] = $diagSubs;
@@ -1684,12 +3361,34 @@ function m360_rw_intake_apply_action(array $payload, string $actionType, array $
             if ($pathNote !== '') {
                 $payload['service_path_note'] = $pathNote;
             }
+            if ($inspectionSubs !== []) {
+                $payload['inspection_scope'] = $inspectionSubs;
+            }
             $payload['reception_intake']['service_classification'] = [
-                'main' => $primary,
-                'diagnostic_categories' => $diagSubs,
+                'route' => $primary,
+                'diagnostic_subcategories' => $diagSubs,
+                'inspection_scope' => $inspectionSubs,
                 'service_path_clear' => $pathClearRaw === '1',
                 'service_path_note' => $pathNote,
+                'policy_group' => $policyGroup,
+                'customer_request_type' => $requestType,
+                'saved_at' => $now,
+                'saved_by' => (string)$userId,
             ];
+            if ($policyGroup === 'UNKNOWN_FAULT') {
+                $tempStatus = trim((string)($post['temporary_status'] ?? 'reception_temporary_diagnosis'));
+                $symptoms = trim((string)($post['initial_symptoms'] ?? ''));
+                $payload['reception_intake']['temporary_reception'] = [
+                    'status' => $tempStatus !== '' ? $tempStatus : 'reception_temporary_diagnosis',
+                    'reason' => $symptoms !== '' ? $symptoms : $pathNote,
+                    'request_more_info_note' => '',
+                    'expert_review_required' => false,
+                    'expert_review_note' => '',
+                    'saved_at' => $now,
+                    'saved_by' => (string)$userId,
+                ];
+                $payload['temporary_reception_status'] = $payload['reception_intake']['temporary_reception']['status'];
+            }
             m360_rw_intake_mark_section_saved($payload, 'service_classification');
             break;
 
@@ -1738,80 +3437,59 @@ function m360_rw_intake_apply_action(array $payload, string $actionType, array $
             m360_rw_intake_mark_section_saved($payload, 'temporary_reception');
             break;
 
-        case 'save_referral_team':
-            $teamId = trim((string)($post['referral_team_id'] ?? ''));
-            $teams = m360_rw_intake_referral_teams();
-            if ($teamId === '' || !isset($teams[$teamId])) {
-                return ['ok' => false, 'error' => 'تیم ارجاع انتخاب نشده است.', 'payload' => $payload, 'column_updates' => []];
+        case 'send_to_hall_manager':
+            if (!m360_rw_intake_operation_gate_hall_manager_allowed($payload)) {
+                return [
+                    'ok' => false,
+                    'error' => m360_rw_intake_operation_gate_message_fa($payload),
+                    'payload' => $payload,
+                    'column_updates' => [],
+                ];
             }
-            $refType = trim((string)($post['referral_type'] ?? 'service_team'));
-            $noteNorm = m360_rw_intake_post_scalar($post, 'referral_note');
+            $noteNorm = m360_rw_intake_post_scalar($post, 'hall_manager_note');
             if (!$noteNorm['ok']) {
                 return ['ok' => false, 'error' => $noteNorm['error'], 'payload' => $payload, 'column_updates' => []];
             }
-            $vt = m360_rw_intake_validate_text($noteNorm['value'], 2000, 'یادداشت ارجاع');
+            $vt = m360_rw_intake_validate_text($noteNorm['value'], 2000, 'یادداشت ارسال به مسئول سالن');
             if (!$vt['ok']) {
                 return ['ok' => false, 'error' => $vt['error'], 'payload' => $payload, 'column_updates' => []];
             }
+            $userId = erp_auth_current_user_id() ?? ERP_PHASE1_PLATFORM_OWNER_ID;
+            $now = gmdate('Y-m-d\TH:i:s\Z');
+            $payload['reception_intake']['hall_manager'] = [
+                'status' => M360_RW_HALL_MANAGER_STATUS_READY_FA,
+                'status_code' => 'ready_for_hall_manager_review',
+                'sent_at' => $now,
+                'sent_by' => (string)$userId,
+                'note' => $vt['value'],
+            ];
             $payload['reception_intake']['referral'] = [
-                'referral_team_id' => $teamId,
-                'referral_team_label' => $teams[$teamId],
-                'referral_type' => $refType,
-                'referral_note' => $noteNorm['value'],
-                'referred_at' => gmdate('Y-m-d\TH:i:s\Z'),
+                'hall_manager_gate' => true,
+                'legacy_referral_team_removed_pr02a' => true,
             ];
             m360_rw_intake_mark_section_saved($payload, 'referral');
             break;
 
         case 'save_documents_and_cost':
-            $photoNorm = m360_rw_intake_post_scalar($post, 'photo_status');
-            $diagNorm = m360_rw_intake_post_scalar($post, 'diagnostic_status');
-            $contractNorm = m360_rw_intake_post_scalar($post, 'contract_status');
-            $costNorm = m360_rw_intake_post_scalar($post, 'cost_agreement');
-            $costNoteNorm = m360_rw_intake_post_scalar($post, 'cost_agreement_note');
-            foreach ([$photoNorm, $diagNorm, $contractNorm, $costNorm, $costNoteNorm] as $norm) {
-                if (!$norm['ok']) {
-                    return ['ok' => false, 'error' => $norm['error'], 'payload' => $payload, 'column_updates' => []];
-                }
+            $payload = m360_rw_intake_ensure_nested($payload);
+            if (!isset($payload['reception_intake']['documents']) || !is_array($payload['reception_intake']['documents'])) {
+                $payload['reception_intake']['documents'] = [];
             }
-            $photoStatus = $photoNorm['value'];
-            $diagStatus = $diagNorm['value'];
-            $contractStatus = $contractNorm['value'];
-            $costAgreement = $costNorm['value'];
-            $costNote = $costNoteNorm['value'];
-            $vt = m360_rw_intake_validate_text_fields([
-                ['value' => $photoStatus, 'label' => 'وضعیت عکس', 'max' => 500],
-                ['value' => $diagStatus, 'label' => 'وضعیت دیاگ', 'max' => 500],
-                ['value' => $contractStatus, 'label' => 'وضعیت قرارداد', 'max' => 500],
-                ['value' => $costAgreement, 'label' => 'توافق هزینه', 'max' => 500],
-                ['value' => $costNote, 'label' => 'یادداشت هزینه', 'max' => 500],
-            ]);
-            if (!$vt['ok']) {
-                return ['ok' => false, 'error' => $vt['error'], 'payload' => $payload, 'column_updates' => []];
+            $agreementsSave = m360_rw_intake_agreements_from_post($post);
+            if (!$agreementsSave['ok']) {
+                return ['ok' => false, 'error' => $agreementsSave['error'], 'payload' => $payload, 'column_updates' => []];
             }
-            if ($photoStatus !== '') {
-                $payload['photo_status'] = $photoStatus;
-            }
-            if ($diagStatus !== '') {
-                $payload['diagnostic_status'] = $diagStatus;
-                $payload['diag_status'] = $diagStatus;
-            }
-            if ($contractStatus !== '') {
-                $payload['contract_status'] = $contractStatus;
-            }
-            if ($costAgreement !== '') {
-                $payload['cost_agreement'] = $costAgreement;
-            }
-            if ($costNote !== '') {
-                $payload['cost_agreement_note'] = $costNote;
-            }
-            $payload['reception_intake']['documents'] = [
-                'photo_status' => $photoStatus,
-                'diagnostic_status' => $diagStatus,
-                'contract_status' => $contractStatus,
-                'cost_agreement' => $costAgreement,
-                'cost_agreement_note' => $costNote,
-            ];
+            $payload['reception_intake']['agreements'] = $agreementsSave['agreements'];
+            // Legacy bridge for older readers/gates.
+            $payload['reception_intake']['documents']['cost_agreement'] = (string)($agreementsSave['agreements']['service_cost_range_fa'] ?? '');
+            $payload['cost_agreement'] = (string)($agreementsSave['agreements']['service_cost_range_fa'] ?? '');
+            $payload['reception_intake']['documents']['cost_agreement_note'] = (string)($agreementsSave['agreements']['other_agreements_note'] ?? '');
+            $payload['cost_agreement_note'] = (string)($agreementsSave['agreements']['other_agreements_note'] ?? '');
+            $payload['purchase_limit'] = (string)($agreementsSave['agreements']['part_purchase_authorization'] ?? '');
+            $payload['test_drive_allowed'] = (string)($agreementsSave['agreements']['test_drive_permission_fa'] ?? '');
+            $payload['body_insurance_status'] = (string)($agreementsSave['agreements']['body_insurance_fa'] ?? '');
+            $canonicalPhotos = m360_rw_intake_photos_canonical($payload);
+            $payload = m360_rw_intake_photos_sync_to_payload($payload, $canonicalPhotos);
             m360_rw_intake_mark_section_saved($payload, 'documents_cost');
             break;
 
@@ -1827,54 +3505,164 @@ function m360_rw_intake_apply_action(array $payload, string $actionType, array $
             if (!$saved['ok']) {
                 return ['ok' => false, 'error' => $saved['error'], 'payload' => $payload, 'column_updates' => []];
             }
-            if (!isset($payload['reception_intake']['documents']) || !is_array($payload['reception_intake']['documents'])) {
-                $payload['reception_intake']['documents'] = [];
-            }
-            if (!isset($payload['reception_intake']['documents']['reception_photos']) || !is_array($payload['reception_intake']['documents']['reception_photos'])) {
-                $payload['reception_intake']['documents']['reception_photos'] = [];
-            }
-            $payload['reception_intake']['documents']['reception_photos'][$slot] = [
+            $payload = m360_rw_intake_ensure_nested($payload);
+            $userId = erp_auth_current_user_id() ?? ERP_PHASE1_PLATFORM_OWNER_ID;
+            $canonical = m360_rw_intake_photos_canonical($payload);
+            $now = gmdate('Y-m-d\TH:i:s\Z');
+            $canonical['slots'][$slot] = [
                 'label' => $slotDefs[$slot],
-                'file' => $saved['relative_path'],
-                'saved_at' => gmdate('Y-m-d\TH:i:s\Z'),
+                'status' => 'captured',
+                'captured_at' => $now,
+                'captured_by' => (string)$userId,
+                'data_key' => $saved['relative_path'],
             ];
-            $photoStatus = m360_rw_intake_reception_photo_status($payload);
-            $payload['reception_intake']['documents']['photo_count'] = $photoStatus['count'];
-            $payload['reception_intake']['documents']['photo_min_required'] = M360_RW_INTAKE_PHOTO_MIN_REQUIRED;
-            $payload['reception_intake']['documents']['photo_status'] = $photoStatus['complete']
-                ? 'ثبت شد'
-                : ($photoStatus['count'] . '/' . $photoStatus['min_required']);
-            $payload['photo_status'] = $payload['reception_intake']['documents']['photo_status'];
-            if ($photoStatus['complete']) {
+            $canonical = m360_rw_intake_photos_recalculate($canonical);
+            $payload = m360_rw_intake_photos_sync_to_payload($payload, $canonical);
+            if (!empty($canonical['is_complete'])) {
                 m360_rw_intake_mark_section_saved($payload, 'camera_photo');
             }
             break;
 
-        case 'run_intake_contract':
-            $payload['reception_intake']['contract'] = [
-                'status' => 'DRAFT',
-                'contract_text' => m360_rw_intake_contract_template_text([], $payload),
-                'run_at' => gmdate('Y-m-d\TH:i:s\Z'),
-                'customer_approved' => false,
+        case 'prepare_customer_contract_review':
+            $requestId = (int)($post['online_request_id'] ?? 0);
+            if ($requestId < 1) {
+                return ['ok' => false, 'error' => 'شناسه درخواست نامعتبر است.', 'payload' => $payload, 'column_updates' => []];
+            }
+            $requestRow = [
+                'online_request_id' => (string)$requestId,
+                'customer_id' => (string)($post['_rw_request_customer_id'] ?? ''),
+                'vehicle_id' => (string)($post['_rw_request_vehicle_id'] ?? ''),
+                'customer_name' => trim((string)($post['_rw_request_customer_name'] ?? '')),
+                'vehicle_plate' => trim((string)($post['_rw_request_vehicle_plate'] ?? '')),
+                'visit_date' => trim((string)($post['_rw_request_visit_date'] ?? '')),
+                'mobile' => trim((string)($post['_rw_request_mobile'] ?? '')) !== ''
+                    ? trim((string)$post['_rw_request_mobile'])
+                    : m360_rw_intake_resolve_mobile_for_otp([], $payload),
+                'otp_verified' => (string)($post['_rw_request_otp_verified'] ?? ($payload['otp_verified'] ?? '0')),
+                'request_payload_json' => json_encode($payload),
             ];
-            $payload['contract_status'] = 'DRAFT';
-            m360_rw_intake_mark_section_saved($payload, 'contract');
+            $prereq = m360_rw_intake_contract_cartable_prerequisites($payload, $requestRow);
+            if (!$prereq['ready']) {
+                return [
+                    'ok' => false,
+                    'error' => 'پرونده هنوز آماده ارسال به کارتابل مشتری نیست.',
+                    'payload' => $payload,
+                    'column_updates' => [],
+                ];
+            }
+            $conn = customer_core_db();
+            $userId = erp_auth_current_user_id() ?? ERP_PHASE1_PLATFORM_OWNER_ID;
+            $boot = m360_rw_intake_bootstrap_contract_cartable_task(
+                $conn !== false ? $conn : null,
+                $requestId,
+                $requestRow,
+                $payload,
+                (int)$userId
+            );
+            if (!$boot['ok']) {
+                return ['ok' => false, 'error' => $boot['error'], 'payload' => $payload, 'column_updates' => []];
+            }
+            $payload = $boot['payload'];
+            // Clear prior customer correction flag so staff can resend after revision.
+            if (isset($payload['reception_intake']['contract']) && is_array($payload['reception_intake']['contract'])) {
+                unset(
+                    $payload['reception_intake']['contract']['customer_correction_requested'],
+                    $payload['reception_intake']['contract']['customer_correction_status'],
+                    $payload['reception_intake']['contract']['customer_correction_at'],
+                    $payload['reception_intake']['contract']['customer_correction_note']
+                );
+                if (($payload['reception_intake']['contract']['status'] ?? '') === 'RETURNED_FOR_CORRECTION') {
+                    $payload['reception_intake']['contract']['status'] = M360_RW_INTAKE_CONTRACT_STATUS_PENDING_CUSTOMER_REVIEW;
+                    $payload['contract_status'] = M360_RW_INTAKE_CONTRACT_STATUS_PENDING_CUSTOMER_REVIEW;
+                }
+            }
             break;
 
-        case 'approve_intake_contract':
-            $approved = isset($post['customer_contract_approved']) && (string)$post['customer_contract_approved'] === '1';
-            if (!$approved) {
-                return ['ok' => false, 'error' => 'تأیید صریح مشتری برای قرارداد الزامی است.', 'payload' => $payload, 'column_updates' => []];
+        case 'complete_reception_intake':
+            $requestRow = [
+                'mobile' => trim((string)($post['_rw_request_mobile'] ?? '')) !== ''
+                    ? trim((string)$post['_rw_request_mobile'])
+                    : m360_rw_intake_resolve_mobile_for_otp([], $payload),
+                'otp_verified' => (string)($post['_rw_request_otp_verified'] ?? ($payload['otp_verified'] ?? '0')),
+                'request_payload_json' => json_encode($payload),
+            ];
+            $wizard = m360_rw_intake_get_wizard_step_state($payload, $requestRow);
+            foreach (m360_rw_intake_reception_completion_keys() as $stepKey) {
+                if (empty($wizard['steps'][$stepKey]['complete'])) {
+                    return [
+                        'ok' => false,
+                        'error' => 'تکمیل پذیرش هنوز کامل نیست: ' . m360_rw_intake_cartable_blocker_label_fa($stepKey, 'item'),
+                        'payload' => $payload,
+                        'column_updates' => [],
+                    ];
+                }
             }
-            if (empty($payload['reception_intake']['contract']['run_at'])) {
-                return ['ok' => false, 'error' => 'ابتدا قرارداد پذیرش را اجرا کنید.', 'payload' => $payload, 'column_updates' => []];
+            if (m360_rw_intake_reception_is_completed($payload)) {
+                return [
+                    'ok' => false,
+                    'error' => 'پذیرش این پرونده قبلاً تکمیل شده است.',
+                    'payload' => $payload,
+                    'column_updates' => [],
+                ];
             }
-            $payload['reception_intake']['contract']['customer_approved'] = true;
-            $payload['reception_intake']['contract']['approved_at'] = gmdate('Y-m-d\TH:i:s\Z');
-            $payload['reception_intake']['contract']['status'] = 'CUSTOMER_APPROVED_PAYLOAD';
-            $payload['contract_status'] = 'CUSTOMER_APPROVED_PAYLOAD';
-            m360_rw_intake_mark_section_saved($payload, 'contract');
+            $requestId = (int)($post['online_request_id'] ?? 0);
+            $now = gmdate('Y-m-d\TH:i:s\Z');
+            $userId = erp_auth_current_user_id() ?? ERP_PHASE1_PLATFORM_OWNER_ID;
+            $payload = m360_rw_intake_ensure_nested($payload);
+            $payload['reception_intake']['reception_completed'] = [
+                'status' => 'completed',
+                'completed_at' => $now,
+                'completed_by' => (string)$userId,
+            ];
+            $payload['reception_intake']['operation_gate'] = [
+                'status' => 'pending_contract_and_financial',
+                'message_fa' => m360_rw_reception_contract_link_sent_message_fa(),
+                'hall_manager_allowed' => false,
+                'contract_pending_customer_review' => true,
+                'prepayment_gate' => m360_rw_intake_prepayment_state($payload),
+            ];
+            m360_rw_intake_mark_section_saved($payload, 'reception_completed');
+
+            if (!m360_rw_intake_contract_customer_accepted($payload) && !m360_rw_intake_contract_cartable_pending($payload)) {
+                $prereq = m360_rw_intake_contract_cartable_prerequisites($payload, $requestRow);
+                if ($prereq['ready'] && $requestId > 0) {
+                    $connBoot = customer_core_db();
+                    $boot = m360_rw_intake_bootstrap_contract_cartable_task(
+                        $connBoot !== false ? $connBoot : null,
+                        $requestId,
+                        array_merge($requestRow, [
+                            'online_request_id' => (string)$requestId,
+                            'customer_id' => (string)($post['_rw_request_customer_id'] ?? ''),
+                            'vehicle_id' => (string)($post['_rw_request_vehicle_id'] ?? ''),
+                            'customer_name' => trim((string)($post['_rw_request_customer_name'] ?? '')),
+                            'vehicle_plate' => trim((string)($post['_rw_request_vehicle_plate'] ?? '')),
+                            'visit_date' => trim((string)($post['_rw_request_visit_date'] ?? '')),
+                        ]),
+                        $payload,
+                        (int)$userId
+                    );
+                    if ($boot['ok']) {
+                        $payload = $boot['payload'];
+                    } else {
+                        if (!isset($payload['reception_intake']['contract']) || !is_array($payload['reception_intake']['contract'])) {
+                            $payload['reception_intake']['contract'] = [];
+                        }
+                        $payload['reception_intake']['contract']['status'] = M360_RW_INTAKE_CONTRACT_STATUS_PENDING_CUSTOMER_REVIEW;
+                        $payload['contract_status'] = M360_RW_INTAKE_CONTRACT_STATUS_PENDING_CUSTOMER_REVIEW;
+                    }
+                } else {
+                    if (!isset($payload['reception_intake']['contract']) || !is_array($payload['reception_intake']['contract'])) {
+                        $payload['reception_intake']['contract'] = [];
+                    }
+                    $payload['reception_intake']['contract']['status'] = M360_RW_INTAKE_CONTRACT_STATUS_PENDING_CUSTOMER_REVIEW;
+                    $payload['contract_status'] = M360_RW_INTAKE_CONTRACT_STATUS_PENDING_CUSTOMER_REVIEW;
+                }
+            }
             break;
+
+        case 'run_intake_contract':
+        case 'approve_intake_contract':
+            return ['ok' => false, 'error' => 'تأیید قرارداد فقط از طریق صفحه مطالعه مشتری امکان‌پذیر است.', 'payload' => $payload, 'column_updates' => []];
 
         case 'save_reception_confirmation':
             $confirmed = isset($post['confirmed_by_receptionist']) && (string)$post['confirmed_by_receptionist'] === '1';
@@ -1934,9 +3722,17 @@ function m360_rw_intake_persist_payload($conn, int $requestId, array $payload, a
         $sets[] = 'vehicle_plate = ?';
         $params[] = $columnUpdates['vehicle_plate'];
     }
+    if (isset($columnUpdates['visit_date']) && m360_online_req_has_column($conn, 'visit_date')) {
+        $sets[] = 'visit_date = ?';
+        $params[] = $columnUpdates['visit_date'];
+    }
     if (isset($columnUpdates['mobile']) && m360_online_req_has_column($conn, 'mobile')) {
         $sets[] = 'mobile = ?';
         $params[] = $columnUpdates['mobile'];
+    }
+    if (array_key_exists('otp_verified', $columnUpdates) && m360_online_req_has_column($conn, 'otp_verified')) {
+        $sets[] = 'otp_verified = ?';
+        $params[] = (int)$columnUpdates['otp_verified'];
     }
 
     $params[] = $requestId;
@@ -1977,27 +3773,95 @@ function m360_rw_intake_process_save_inner($conn, int $requestId, string $action
     if ($request === null) {
         return ['ok' => false, 'message' => 'درخواست یافت نشد.', 'history_written' => false];
     }
-    if (m360_online_req_is_converted($request)) {
-        return ['ok' => false, 'message' => 'این درخواست قبلاً تبدیل شده و قابل ویرایش نیست.', 'history_written' => false];
-    }
     if (strtoupper(trim((string)($request['request_status'] ?? ''))) === M360_ONLINE_REQ_STATUS_REJECTED) {
         return ['ok' => false, 'message' => 'درخواست رد شده و قابل ویرایش نیست.', 'history_written' => false];
     }
 
-    if ($actionType === 'send_customer_otp') {
-        return m360_rw_intake_process_send_otp($conn, $requestId, $request);
+    if (in_array($actionType, ['send_customer_otp', 'verify_customer_otp'], true)) {
+        return ['ok' => false, 'message' => M360_RW_RECEPTION_OTP_CUSTOMER_ONLY_MESSAGE_FA, 'history_written' => false];
     }
 
-    $existing = m360_online_req_parse_payload($request['request_payload_json'] ?? null);
+    if (!m360_rw_intake_reception_otp_verified($request)) {
+        return ['ok' => false, 'message' => M360_RW_RECEPTION_UNVERIFIED_ACCESS_MESSAGE_FA, 'history_written' => false];
+    }
+
+    $rawPayloadJson = (string)($request['request_payload_json'] ?? '');
+    $payloadMeta = m360_rw_decode_payload($rawPayloadJson !== '' ? $rawPayloadJson : null);
+    if ($rawPayloadJson !== '' && ($payloadMeta['valid'] ?? true) !== true) {
+        return [
+            'ok' => false,
+            'message' => trim((string)($payloadMeta['raw_warning'] ?? '')) !== ''
+                ? (string)$payloadMeta['raw_warning']
+                : 'ساختار JSON پرونده نامعتبر است. لطفاً پشتیبانی فنی را مطلع کنید.',
+            'history_written' => false,
+        ];
+    }
+
+    $existingForLock = m360_rw_intake_payload_for_recovery($payloadMeta['items']);
+    if (m360_online_req_is_converted($request)) {
+        $allowOperational = m360_rw_intake_allows_post_conversion_operational_edit($request, $existingForLock)
+            && in_array($actionType, m360_rw_intake_post_conversion_operational_actions(), true);
+        if (!$allowOperational) {
+            return ['ok' => false, 'message' => 'این درخواست قبلاً تبدیل شده و قابل ویرایش نیست.', 'history_written' => false];
+        }
+    }
+
+    if ($actionType === 'sign_and_lock_intake') {
+        return [
+            'ok' => false,
+            'message' => 'امضا و تأیید قرارداد فقط از مسیر مشتری، امضای مستقیم و OTP قرارداد مجاز است.',
+            'history_written' => false,
+        ];
+    }
+
+    $lockGuard = m360_rw_intake_assert_not_locked($existingForLock, $actionType);
+    if (!$lockGuard['ok']) {
+        $userId = erp_auth_current_user_id() ?? ERP_PHASE1_PLATFORM_OWNER_ID;
+        m360_online_req_write_history(
+            $conn,
+            $requestId,
+            M360_RW_INTAKE_HISTORY_PREFIX . 'LOCK_BLOCKED',
+            (string)($request['request_status'] ?? ''),
+            (string)($request['request_status'] ?? ''),
+            'Blocked intake save after lock: ' . $actionType,
+            $userId
+        );
+
+        return ['ok' => false, 'message' => $lockGuard['message'], 'history_written' => true];
+    }
+
+    $existing = m360_rw_intake_payload_for_recovery($payloadMeta['items']);
+    $existing = m360_rw_intake_sync_vehicle_canonical_fields($existing);
     $otpPreserved = $existing['otp_verified'] ?? null;
     $resetOtp = ($actionType === 'save_mobile_correction');
 
-    if ($actionType === 'save_diagnostic_pdf') {
-        $pdfFile = $files['diagnostic_pdf'] ?? null;
+    if (m360_rw_intake_is_prepayment_gate_action($actionType)) {
+        return m360_rw_intake_process_prepayment_gate_action($conn, $requestId, $request, $existing, $actionType, $post);
+    }
+
+    if (m360_rw_intake_action_requires_vehicle_complete($actionType)
+        && !m360_rw_intake_vehicle_step_complete($existing, $request)) {
+        return [
+            'ok' => false,
+            'message' => 'ابتدا مرحله خودرو و پلاک را با برند، مدل، کیلومتر و سوخت تکمیل و ذخیره کنید.',
+            'history_written' => false,
+        ];
+    }
+
+    if ($actionType === 'save_intake_document' || $actionType === 'save_diagnostic_pdf') {
+        $pdfFile = $files['intake_document'] ?? $files['diagnostic_pdf'] ?? null;
         if (!is_array($pdfFile)) {
             return ['ok' => false, 'message' => 'فایل PDF دریافت نشد.', 'history_written' => false];
         }
-        $saved = m360_rw_intake_save_pdf_upload($requestId, $pdfFile);
+        $docType = m360_rw_intake_normalize_document_type((string)($post['document_type'] ?? ''));
+        if ($actionType === 'save_diagnostic_pdf' && trim((string)($post['document_type'] ?? '')) === '') {
+            $docType = 'diagnostic_report';
+        }
+        $note = trim((string)($post['document_note'] ?? ''));
+        if (mb_strlen($note) > 500) {
+            $note = mb_substr($note, 0, 500);
+        }
+        $saved = m360_rw_intake_save_document_upload($requestId, $pdfFile, $docType);
         if (!$saved['ok']) {
             return ['ok' => false, 'message' => $saved['error'], 'history_written' => false];
         }
@@ -2005,35 +3869,144 @@ function m360_rw_intake_process_save_inner($conn, int $requestId, string $action
         if (!isset($existing['reception_intake']['documents']) || !is_array($existing['reception_intake']['documents'])) {
             $existing['reception_intake']['documents'] = [];
         }
-        $existing['reception_intake']['documents']['diagnostic_pdf'] = $saved['relative_path'];
-        $existing['reception_intake']['documents']['diagnostic_status'] = 'ثبت شد';
-        $existing['diagnostic_status'] = 'ثبت شد';
+        $userId = erp_auth_current_user_id() ?? ERP_PHASE1_PLATFORM_OWNER_ID;
+        $userName = '';
+        if (function_exists('erp_auth_current_user')) {
+            $userRow = erp_auth_current_user();
+            if (is_array($userRow)) {
+                $userName = trim((string)($userRow['full_name'] ?? $userRow['display_name'] ?? $userRow['username'] ?? ''));
+            }
+        }
+        $now = gmdate('Y-m-d\TH:i:s\Z');
+        $typeLabel = m360_rw_intake_document_type_label($docType);
+        $filesList = is_array($existing['reception_intake']['documents']['files'] ?? null)
+            ? $existing['reception_intake']['documents']['files']
+            : [];
+        // APPEND ONLY — never overwrite/remove prior document cards.
+        $filesList[] = [
+            'document_id' => 'doc_' . bin2hex(random_bytes(8)),
+            'document_type' => $docType,
+            'document_type_label' => $typeLabel,
+            'type' => $docType,
+            'type_label_fa' => $typeLabel,
+            'original_filename' => (string)($saved['original_name'] ?? ''),
+            'original_name' => (string)($saved['original_name'] ?? ''),
+            'stored_filename' => (string)($saved['stored_name'] ?? ''),
+            'stored_name' => (string)($saved['stored_name'] ?? ''),
+            'relative_path' => (string)$saved['relative_path'],
+            'relative_url' => 'storage/' . ltrim(str_replace('\\', '/', (string)$saved['relative_path']), '/'),
+            'mime_type' => (string)($saved['mime_type'] ?? 'application/pdf'),
+            'file_size' => (int)($saved['file_size'] ?? 0),
+            'uploaded_at' => $now,
+            'uploaded_by_user_id' => (string)$userId,
+            'uploaded_by' => (string)$userId,
+            'uploaded_by_name' => $userName,
+            'status' => 'ACTIVE',
+            'note' => $note,
+            'description' => $note,
+        ];
+        $existing['reception_intake']['documents']['files'] = $filesList;
+        // Legacy pointer = latest diagnostic/scanner only (does not remove older files[] entries).
+        if (in_array($docType, ['diagnostic_report', 'scanner_report'], true)) {
+            $existing['reception_intake']['documents']['diagnostic_pdf'] = $saved['relative_path'];
+            $existing['reception_intake']['documents']['diagnostic_status'] = 'ثبت شد';
+            $existing['reception_intake']['documents']['diagnostic_pdf_uploaded_at'] = $now;
+            $existing['reception_intake']['documents']['diagnostic_pdf_uploaded_by'] = (string)$userId;
+            $existing['diagnostic_status'] = 'ثبت شد';
+        }
         m360_rw_intake_mark_section_saved($existing, 'diagnostic_pdf');
+        m360_rw_intake_mark_section_saved($existing, 'documents_cost');
         $persist = m360_rw_intake_persist_payload($conn, $requestId, $existing, []);
         if (!$persist['ok']) {
             return ['ok' => false, 'message' => $persist['message'], 'history_written' => false];
         }
-        $userId = erp_auth_current_user_id() ?? ERP_PHASE1_PLATFORM_OWNER_ID;
-        $historyWritten = m360_online_req_write_history($conn, $requestId, M360_RW_INTAKE_HISTORY_PREFIX . 'SAVE_DIAGNOSTIC_PDF', (string)($request['request_status'] ?? ''), (string)($request['request_status'] ?? ''), 'Diagnostic PDF saved', $userId);
+        $historyWritten = m360_online_req_write_history(
+            $conn,
+            $requestId,
+            M360_RW_INTAKE_HISTORY_PREFIX . 'SAVE_INTAKE_DOCUMENT',
+            (string)($request['request_status'] ?? ''),
+            (string)($request['request_status'] ?? ''),
+            'Intake document appended: ' . $docType,
+            $userId
+        );
 
-        return ['ok' => true, 'message' => 'فایل دیاگ ذخیره شد.', 'history_written' => $historyWritten];
+        return ['ok' => true, 'message' => 'فایل ذخیره شد.', 'history_written' => $historyWritten];
     }
 
     $post['online_request_id'] = (string)$requestId;
+    $post['_rw_request_mobile'] = trim((string)($request['mobile'] ?? ''));
+    $post['_rw_request_otp_verified'] = (string)($request['otp_verified'] ?? '');
+    $post['_rw_request_vehicle_id'] = (string)($request['vehicle_id'] ?? '');
+    $post['_rw_request_customer_id'] = (string)($request['customer_id'] ?? '');
+    $post['_rw_request_customer_name'] = trim((string)($request['customer_name'] ?? ''));
+    $post['_rw_request_vehicle_plate'] = trim((string)($request['vehicle_plate'] ?? ''));
+    $post['_rw_request_visit_date'] = trim((string)($request['visit_date'] ?? ''));
+    if ($actionType === 'save_vehicle_identity') {
+        // Seed request/ERP-resolved identity into payload so apply_action can
+        // validate from canonical data without trusting POST identity fields.
+        $seedCtx = m360_rw_intake_resolve_vehicle_step_context($existing, $request, []);
+        foreach ([
+            'brand' => ['brand', 'vehicle_brand'],
+            'model' => ['model', 'vehicle_model', 'vehicle_class'],
+            'plate' => ['plate', 'vehicle_plate'],
+            'vin' => ['vin'],
+            'mileage' => ['mileage', 'odometer_km'],
+            'production_year' => ['vehicle_year_pair'],
+            'visit_date' => ['visit_date'],
+        ] as $ctxKey => $payloadKeys) {
+            $val = trim((string)($seedCtx[$ctxKey] ?? ''));
+            if ($val === '') {
+                continue;
+            }
+            foreach ($payloadKeys as $pk) {
+                if (trim((string)($existing[$pk] ?? '')) === '') {
+                    $existing[$pk] = $val;
+                }
+            }
+            if (!isset($existing['reception_intake']['vehicle']) || !is_array($existing['reception_intake']['vehicle'])) {
+                $existing['reception_intake']['vehicle'] = [];
+            }
+            $riKey = $ctxKey === 'production_year' ? 'vehicle_year_pair' : $ctxKey;
+            if (trim((string)($existing['reception_intake']['vehicle'][$riKey] ?? '')) === '') {
+                $existing['reception_intake']['vehicle'][$riKey] = $val;
+            }
+        }
+    }
+    if ($actionType === 'send_to_hall_manager') {
+        $existing = m360_rw_intake_sync_prepayment_gate_for_context($conn, $request, $existing);
+    }
     $applied = m360_rw_intake_apply_action($existing, $actionType, $post);
     if (!$applied['ok']) {
         return ['ok' => false, 'message' => $applied['error'], 'history_written' => false];
     }
 
     $newPayload = $applied['payload'];
+    $onceContractToken = trim((string)($newPayload['_contract_review_token_once'] ?? ''));
+    unset($newPayload['_contract_review_token_once']);
     if ($resetOtp) {
         $newPayload['otp_verified'] = 0;
+        unset($newPayload['otp_verified_at'], $newPayload['otp_verified_mobile']);
     } elseif ($otpPreserved !== null) {
         $newPayload['otp_verified'] = $otpPreserved;
     }
 
-    if ($actionType === 'run_intake_contract') {
+    if ($actionType === 'prepare_customer_contract_review') {
         $newPayload['reception_intake']['contract']['contract_text'] = m360_rw_intake_contract_template_text($request, $newPayload);
+        if ($onceContractToken !== '') {
+            m360_rw_intake_store_contract_review_token_once($requestId, $onceContractToken);
+        }
+    }
+
+    $contractSmsAfterSave = !empty($newPayload['_contract_sms_after_save']);
+    unset($newPayload['_contract_sms_after_save']);
+
+    if ($actionType === 'complete_reception_intake' && $onceContractToken !== '') {
+        m360_rw_intake_store_contract_review_token_once($requestId, $onceContractToken);
+    }
+
+    $newPayload = m360_rw_intake_sync_vehicle_canonical_fields($newPayload);
+    if (in_array($actionType, ['complete_reception_intake', 'send_to_hall_manager'], true)) {
+        $newPayload = m360_rw_intake_sync_prepayment_gate_for_context($conn, $request, $newPayload);
     }
 
     $persist = m360_rw_intake_persist_payload($conn, $requestId, $newPayload, $applied['column_updates']);
@@ -2081,16 +4054,97 @@ function m360_rw_intake_process_save_inner($conn, int $requestId, string $action
         'save_temporary_reception' => 'وضعیت پذیرش موقت ذخیره شد.',
         'save_mobile_correction' => 'شماره موبایل اصلاح شد. OTP همچنان نیازمند تأیید مشتری است.',
         'save_referral_team' => 'ارجاع تیم ذخیره شد.',
+        'send_to_hall_manager' => 'پرونده به مسئول سالن ارسال شد.',
         'save_camera_photo' => 'عکس پذیرش ذخیره شد.',
-        'run_intake_contract' => 'قرارداد پذیرش آماده نمایش شد.',
-        'approve_intake_contract' => 'تأیید مشتری برای قرارداد ثبت شد.',
-        'save_documents_and_cost' => 'مستندات و توافق هزینه ذخیره شد.',
+        'prepare_customer_contract_review' => 'مأموریت قرارداد در کارتابل مشتری ایجاد شد.',
+        'complete_reception_intake' => 'پذیرش ثبت شد. قرارداد در انتظار تأیید مشتری است. عملیات هنوز مجاز نیست.',
+        'save_documents_and_cost' => 'توافقات و مجوزها ذخیره شد.',
         'save_reception_confirmation' => 'تأیید نهایی پذیرشگر ثبت شد.',
     ];
+    $message = $messages[$actionType] ?? 'ذخیره انجام شد.';
+    if ($actionType === 'send_to_hall_manager') {
+        $conversion = m360_reception_convert_to_jobcard($requestId);
+        if (empty($conversion['ok']) || (int)($conversion['jobcard_id'] ?? 0) < 1) {
+            return [
+                'ok' => false,
+                'message' => (string)($conversion['message'] ?? 'JobCard handoff failed.'),
+                'history_written' => $historyWritten,
+            ];
+        }
+        $jobcardId = (int)$conversion['jobcard_id'];
+        $hall = m360_fulljob_ensure_hall_cartable($conn, $jobcardId, (int)$userId);
+        if (empty($hall['ok'])) {
+            return [
+                'ok' => false,
+                'message' => 'JobCard created, but hall cartable handoff failed.',
+                'history_written' => $historyWritten,
+            ];
+        }
+        $newPayload['jobcard_id'] = (string)$jobcardId;
+        $newPayload['converted_jobcard_id'] = (string)$jobcardId;
+        if (!isset($newPayload['reception_intake']) || !is_array($newPayload['reception_intake'])) {
+            $newPayload['reception_intake'] = [];
+        }
+        if (!isset($newPayload['reception_intake']['hall_manager']) || !is_array($newPayload['reception_intake']['hall_manager'])) {
+            $newPayload['reception_intake']['hall_manager'] = [];
+        }
+        $newPayload['reception_intake']['hall_manager']['jobcard_id'] = (string)$jobcardId;
+        $newPayload['reception_intake']['hall_manager']['assignment_id'] = (string)((int)($hall['assignment_id'] ?? 0));
+        $newPayload['reception_intake']['hall_manager']['assignment_created'] = !empty($hall['created']);
+        $newPayload = m360_rw_intake_sync_prepayment_gate_for_context(
+            $conn,
+            array_merge($request, ['converted_jobcard_id' => (string)$jobcardId]),
+            $newPayload,
+            ['jobcard_id' => (string)$jobcardId, 'customer_id' => (string)($request['customer_id'] ?? '')]
+        );
+        $persistHall = m360_rw_intake_persist_payload($conn, $requestId, $newPayload, []);
+        if (!$persistHall['ok']) {
+            return ['ok' => false, 'message' => $persistHall['message'], 'history_written' => $historyWritten];
+        }
+        $message .= ' JobCard #' . $jobcardId;
+        if (!empty($conversion['already_converted'])) {
+            $message .= ' already existed.';
+        }
+    }
+    if ($actionType === 'save_service_classification') {
+        $canonical = m360_rw_intake_service_classification_canonical($newPayload);
+        if ($canonical['service_path_clear'] !== '1') {
+            $message = 'مسیر انتخابی قطع است؛ پرونده در پذیرش موقت باقی می‌ماند تا مسیر عیب/خدمت روشن شود.';
+        }
+    }
+    if ($contractSmsAfterSave) {
+        $mobile = m360_rw_intake_resolve_mobile_for_otp($request, $newPayload);
+        $reviewPath = '';
+        $task = m360_rw_intake_contract_cartable_task($newPayload);
+        if (trim((string)($task['review_url_path'] ?? '')) !== '') {
+            $reviewPath = (string)$task['review_url_path'];
+        } elseif (trim((string)($newPayload['_contract_review_token_once'] ?? '')) !== '') {
+            $reviewPath = m360_rw_intake_contract_review_url((string)$newPayload['_contract_review_token_once']);
+        }
+        $sms = m360_rw_intake_send_contract_notification_sms($mobile, true, $reviewPath);
+        if (!isset($newPayload['reception_intake']['operation_gate']) || !is_array($newPayload['reception_intake']['operation_gate'])) {
+            $newPayload['reception_intake']['operation_gate'] = [];
+        }
+        $newPayload['reception_intake']['operation_gate']['contract_sms'] = [
+            'sent' => !empty($sms['sent']),
+            'message' => (string)($sms['message'] ?? ''),
+            'skipped_reason' => (string)($sms['skipped_reason'] ?? ''),
+            'at' => gmdate('Y-m-d\TH:i:s\Z'),
+        ];
+        if (!empty($sms['sent'])) {
+            $message .= ' ' . (string)$sms['message'];
+        } elseif ($actionType === 'complete_reception_intake' && ($sms['skipped_reason'] ?? '') === 'sms_not_configured') {
+            $message .= ' ارسال پیامک قرارداد در این محیط پیکربندی نشده است.';
+        }
+        $persistSms = m360_rw_intake_persist_payload($conn, $requestId, $newPayload, []);
+        if (!$persistSms['ok']) {
+            return ['ok' => false, 'message' => $persistSms['message'], 'history_written' => $historyWritten];
+        }
+    }
 
     return [
         'ok' => true,
-        'message' => $messages[$actionType] ?? 'ذخیره انجام شد.',
+        'message' => $message,
         'history_written' => $historyWritten,
     ];
 }
@@ -2105,21 +4159,23 @@ function m360_rw_intake_form_values(array $payload, array $request): array
     $vehicle = is_array($ri['vehicle'] ?? null) ? $ri['vehicle'] : [];
     $condition = is_array($ri['condition'] ?? null) ? $ri['condition'] : [];
     $service = is_array($ri['service_classification'] ?? null) ? $ri['service_classification'] : [];
+    $canonical = m360_rw_intake_service_classification_canonical($payload);
+
+    $pathClear = $canonical['service_path_clear'];
+    $diagSubs = $canonical['diagnostic_subcategories'];
+    $serviceRoute = $canonical['route'];
+
     $temp = is_array($ri['temporary_reception'] ?? null) ? $ri['temporary_reception'] : [];
     $docs = is_array($ri['documents'] ?? null) ? $ri['documents'] : [];
-    $confirm = is_array($ri['reception_confirmation'] ?? null) ? $ri['reception_confirmation'] : [];
+    $agreements = m360_rw_intake_agreements_from_payload($payload);
+    $confirm = is_array($ri['reception_confirmation'] ?? null)
+        ? $ri['reception_confirmation']
+        : (is_array($ri['confirmation'] ?? null) ? $ri['confirmation'] : []);
 
-    $pathClear = m360_rw_pick([$payload], 'fault_service_path_clear', 'service_path_clear');
-    if ($pathClear === '' && isset($service['service_path_clear'])) {
-        $pathClear = !empty($service['service_path_clear']) ? '1' : '0';
+    $plate = m360_rw_pick([$vehicle, $payload, $request], 'plate', 'vehicle_plate', 'plate_display');
+    if ($plate === '') {
+        $plate = m360_rw_recover_plate_from_parts($payload);
     }
-
-    $diagSubs = $payload['reception_service_diag_sub'] ?? ($service['diagnostic_categories'] ?? []);
-    if (!is_array($diagSubs)) {
-        $diagSubs = $diagSubs !== '' ? explode(',', (string)$diagSubs) : [];
-    }
-
-    $plate = m360_rw_pick([$vehicle, $payload, $request], 'plate', 'vehicle_plate');
     $plateLeft = (string)($payload['plate_parts']['left_2'] ?? '');
     $plateLetter = (string)($payload['plate_parts']['letter'] ?? '');
     $plateMid = (string)($payload['plate_parts']['middle_3'] ?? '');
@@ -2133,19 +4189,37 @@ function m360_rw_intake_form_values(array $payload, array $request): array
         }
     }
 
+    $vehicleMeta = is_array($ri['vehicle'] ?? null) ? $ri['vehicle'] : [];
+    $visitDate = m360_rw_pick([$vehicleMeta, $payload, $request], 'visit_date');
+    $visitDisplay = '';
+    if ($visitDate !== '') {
+        foreach (m360_rw_calendar_next_30_day_window() as $day) {
+            if ($day['gregorian'] === $visitDate) {
+                $visitDisplay = $day['label'];
+                break;
+            }
+        }
+        if ($visitDisplay === '') {
+            $visitDisplay = $visitDate;
+        }
+    }
+
     return [
         'plate' => $plate,
-        'vin' => m360_rw_pick([$vehicle, $payload], 'vin', 'chassis'),
+        'vin' => m360_rw_pick([$vehicle, $payload], 'vin', 'vehicle_vin', 'chassis_vin'),
         'brand' => m360_rw_pick([$vehicle, $payload], 'brand', 'vehicle_brand'),
-        'model' => m360_rw_pick([$vehicle, $payload], 'model', 'vehicle_model'),
+        'model' => m360_rw_pick([$vehicle, $payload], 'model', 'vehicle_model', 'vehicle_class'),
+        'vehicle_class' => m360_rw_pick([$vehicle, $payload], 'vehicle_class', 'model', 'vehicle_model'),
+        'vehicle_type' => m360_rw_pick([$vehicle, $payload], 'vehicle_type', 'body_type', 'vehicle_body_type', 'car_type'),
         'mileage' => m360_rw_pick([$vehicle, $payload], 'mileage', 'odometer_km', 'mileage'),
         'fuel_level' => m360_rw_pick([$vehicle, $payload], 'fuel_level', 'intake_fuel_level', 'fuel'),
         'vehicle_items' => m360_rw_pick([$condition, $payload], 'vehicle_items', 'belongings'),
         'visible_damage' => m360_rw_pick([$condition, $payload], 'visible_damage', 'body_damage'),
         'initial_vehicle_condition' => m360_rw_pick([$condition, $payload], 'initial_vehicle_condition'),
-        'service_primary' => m360_rw_pick([$payload, $service], 'reception_service_primary', 'main'),
+        'service_route' => $serviceRoute,
+        'service_primary' => $serviceRoute,
         'service_path_clear' => $pathClear,
-        'service_path_note' => m360_rw_pick([$payload, $service], 'service_path_note'),
+        'service_path_note' => $canonical['service_path_note'],
         'temporary_status' => m360_rw_pick([$temp, $payload], 'status', 'temporary_reception_status'),
         'temporary_reason' => m360_rw_pick([$temp, $payload], 'reason', 'temporary_reception_reason'),
         'request_more_info_note' => m360_rw_pick([$temp, $payload], 'request_more_info_note'),
@@ -2155,13 +4229,33 @@ function m360_rw_intake_form_values(array $payload, array $request): array
         'contract_status' => m360_rw_pick([$docs, $payload], 'contract_status'),
         'cost_agreement' => m360_rw_pick([$docs, $payload], 'cost_agreement'),
         'cost_agreement_note' => m360_rw_pick([$docs, $payload], 'cost_agreement_note'),
+        'third_party_insurance' => (string)($agreements['third_party_insurance'] ?? ''),
+        'body_insurance' => (string)($agreements['body_insurance'] ?? ''),
+        'test_drive_permission' => (string)($agreements['test_drive_permission'] ?? ''),
+        'part_purchase_authorization' => (string)($agreements['part_purchase_authorization'] ?? ''),
+        'other_agreements_note' => (string)($agreements['other_agreements_note'] ?? ''),
+        'service_cost_min' => (string)($agreements['service_cost_min'] ?? ''),
+        'service_cost_max' => (string)($agreements['service_cost_max'] ?? ''),
         'confirmation_note' => m360_rw_pick([$confirm, $payload], 'confirmation_note', 'reception_confirmation_note'),
         'confirmed_by_receptionist' => m360_rw_pick([$payload, $confirm], 'reception_final_confirmation') === '1' || !empty($confirm['confirmed_by_receptionist']) ? '1' : '0',
+        'customer_request_type' => trim((string)m360_rw_pick([$request, $payload], 'request_type', 'customer_request_type')),
+        'initial_symptoms' => trim((string)m360_rw_pick([$payload], 'initial_symptoms', 'service_path_note')),
+        'service_reception_confirmed' => !empty($service['policy_group']) || $serviceRoute !== '' ? '1' : '',
         'service_diag_sub_codes' => $diagSubs,
         'plate_left_2_digits' => $plateLeft,
         'plate_letter' => $plateLetter,
         'plate_middle_3_digits' => $plateMid,
         'plate_iran_2_digits' => $plateIran,
+        'plate_region_2_digits' => $plateIran,
+        'vehicle_year_pair' => m360_rw_pick([$vehicleMeta, $payload], 'vehicle_year_pair'),
+        'visit_date' => $visitDate,
+        'visit_date_display' => $visitDisplay,
+        'brand_other_explanation' => (string)($vehicleMeta['brand_other_explanation'] ?? ''),
+        'model_other_explanation' => (string)($vehicleMeta['model_other_explanation'] ?? ''),
+        'brand_status' => (string)($vehicleMeta['brand_status'] ?? ''),
+        'model_status' => (string)($vehicleMeta['model_status'] ?? ''),
+        'hall_manager_status' => (string)($payload['reception_intake']['hall_manager']['status'] ?? ''),
+        'hall_manager_note' => (string)($payload['reception_intake']['hall_manager']['note'] ?? ''),
         'mobile_corrected' => m360_rw_pick([$payload, $request], 'mobile'),
         'referral_team_id' => (string)($payload['reception_intake']['referral']['referral_team_id'] ?? ''),
         'referral_type' => (string)($payload['reception_intake']['referral']['referral_type'] ?? 'service_team'),
@@ -2178,27 +4272,4749 @@ function m360_rw_intake_form_values(array $payload, array $request): array
     ];
 }
 
-function m360_rw_intake_save_redirect_url(int $requestId, string $message, bool $ok, array $post = []): string
+function m360_rw_intake_save_redirect_url(int $requestId, string $message, bool $ok, array $post = [], $conn = false): string
 {
-    $returnSection = trim((string)($post['return_section'] ?? ''));
-    if ($returnSection === '') {
-        $returnSection = m360_rw_intake_action_default_anchor(trim((string)($post['action_type'] ?? '')));
-    }
-    $sectionKey = m360_rw_intake_anchor_to_section_key($returnSection);
+    $redirect = m360_rw_intake_redirect_active_step(is_resource($conn) ? $conn : false, $requestId, trim((string)($post['action_type'] ?? '')), $ok, $post);
+    $activeStep = (string)($redirect['active_step'] ?? 'otp');
+    $hash = (string)($redirect['hash'] ?? m360_rw_intake_step_hash($activeStep));
+    $extra = is_array($redirect['extra'] ?? null) ? $redirect['extra'] : [];
 
     $url = 'erp-reception-intake-file.php?online_request_id=' . $requestId
+        . '&active_step=' . rawurlencode($activeStep)
         . '&msg=' . rawurlencode($message)
         . '&ok=' . ($ok ? '1' : '0');
 
-    if (!$ok && $sectionKey !== '') {
-        $url .= '&edit_section=' . rawurlencode($sectionKey);
+    foreach ($extra as $key => $val) {
+        if ($val === '' || $val === null) {
+            continue;
+        }
+        $url .= '&' . rawurlencode((string)$key) . '=' . rawurlencode((string)$val);
     }
 
-    if ($returnSection !== '') {
-        $url .= '#' . $returnSection;
+    if (!$ok && !isset($extra['edit_section'])) {
+        $sectionKey = m360_rw_intake_step_primary_section($activeStep);
+        if ($sectionKey !== '') {
+            $url .= '&edit_section=' . rawurlencode($sectionKey);
+        }
+    }
+
+    if ($hash !== '') {
+        $url .= '#' . $hash;
     }
 
     return $url;
+}
+
+/**
+ * @param array<string, mixed> $payload
+ */
+function m360_rw_intake_is_locked(array $payload): bool
+{
+    $lock = $payload['reception_intake']['intake_lock'] ?? null;
+
+    return is_array($lock) && strtolower(trim((string)($lock['status'] ?? ''))) === 'locked';
+}
+
+/**
+ * Operational intake edits after JobCard conversion (incomplete reception only).
+ *
+ * @param array<string, mixed> $request
+ * @param array<string, mixed> $payload
+ */
+function m360_rw_intake_allows_post_conversion_operational_edit(array $request, array $payload): bool
+{
+    $status = strtoupper(trim((string)($request['request_status'] ?? '')));
+    if ($status === M360_ONLINE_REQ_STATUS_REJECTED) {
+        return false;
+    }
+    if (m360_rw_intake_is_locked($payload)) {
+        return false;
+    }
+    // Hall handoff remains the hard stop. Reception completion alone must not block
+    // structured C7 condition/service amendments while hall is still incomplete.
+    if (m360_rw_intake_hall_manager_step_complete($payload)) {
+        return false;
+    }
+
+    return true;
+}
+
+/** @return list<string> */
+function m360_rw_intake_post_conversion_operational_actions(): array
+{
+    return [
+        'save_vehicle_identity',
+        'save_condition_notes',
+        'save_service_classification',
+        'save_temporary_reception',
+        'save_camera_photo',
+        'save_documents_and_cost',
+        'save_diagnostic_pdf',
+        'save_intake_document',
+        'complete_reception_intake',
+        'request_start_without_prepayment',
+        'approve_start_without_prepayment',
+        'reject_start_without_prepayment',
+        'return_start_without_prepayment',
+        'send_to_hall_manager',
+    ];
+}
+
+/**
+ * Staff may edit incomplete operational intake sections even after JobCard conversion.
+ *
+ * @param array<string, mixed>|null $request
+ * @param array<string, mixed> $payload
+ */
+function m360_rw_intake_can_show_operational_step_forms(?array $request, array $payload): bool
+{
+    if ($request === null) {
+        return false;
+    }
+    $status = strtoupper(trim((string)($request['request_status'] ?? '')));
+    if ($status === M360_ONLINE_REQ_STATUS_REJECTED) {
+        return false;
+    }
+    if (m360_rw_intake_is_locked($payload)) {
+        return false;
+    }
+    if (!m360_online_req_is_converted($request)) {
+        return true;
+    }
+
+    return m360_rw_intake_allows_post_conversion_operational_edit($request, $payload);
+}
+
+/**
+ * @param array<string, mixed> $payload
+ * @return array{ok:bool,message:string}
+ */
+function m360_rw_intake_assert_not_locked(array $payload, string $actionType): array
+{
+    if (!m360_rw_intake_is_locked($payload)) {
+        return ['ok' => true, 'message' => ''];
+    }
+
+    return ['ok' => false, 'message' => M360_RW_INTAKE_LOCK_MESSAGE_FA];
+}
+
+/**
+ * @param array<string, mixed> $payload
+ * @param array<string, mixed> $request
+ * @param array<string, string> $formValues
+ * @return array<string, mixed>
+ */
+function m360_rw_intake_build_locked_snapshot(array $payload, array $request, array $formValues): array
+{
+    return [
+        'customer' => [
+            'name' => trim((string)($request['customer_name'] ?? m360_rw_pick([$payload], 'customer_name'))),
+            'request_type' => trim((string)($request['request_type'] ?? '')),
+        ],
+        'mobile' => m360_rw_intake_resolve_mobile_for_otp($request, $payload),
+        'vehicle' => [
+            'plate' => (string)($formValues['plate'] ?? ''),
+            'brand' => (string)($formValues['brand'] ?? ''),
+            'model' => (string)($formValues['model'] ?? ''),
+            'mileage' => (string)($formValues['mileage'] ?? ''),
+            'fuel_level' => (string)($formValues['fuel_level'] ?? ''),
+            'vin' => (string)($formValues['vin'] ?? ''),
+        ],
+        'condition' => [
+            'belongings' => (string)($formValues['vehicle_items'] ?? ''),
+            'visible_damage' => (string)($formValues['visible_damage'] ?? ''),
+            'initial_condition' => (string)($formValues['initial_vehicle_condition'] ?? ''),
+        ],
+        'service_classification' => [
+            'primary' => (string)($formValues['service_primary'] ?? ''),
+            'service_path_clear' => (string)($formValues['service_path_clear'] ?? ''),
+            'service_path_note' => (string)($formValues['service_path_note'] ?? ''),
+        ],
+        'referral' => [
+            'team_id' => (string)($formValues['referral_team_id'] ?? ''),
+            'referral_type' => (string)($formValues['referral_type'] ?? ''),
+            'note' => (string)($formValues['referral_note'] ?? ''),
+        ],
+        'documents' => [
+            'diagnostic_pdf' => !empty($payload['reception_intake']['documents']['diagnostic_pdf']),
+            'contract_status' => (string)($formValues['contract_status'] ?? ''),
+            'cost_agreement' => (string)($formValues['cost_agreement'] ?? ''),
+        ],
+        'photos' => m360_rw_intake_photos_canonical($payload),
+        'signature' => $payload['reception_intake']['customer_signature'] ?? [],
+    ];
+}
+
+/**
+ * @param array<string, string> $post
+ * @return array{ok:bool,message:string,history_written:bool}
+ */
+function m360_rw_intake_process_sign_and_lock($conn, int $requestId, array $request, array $post): array
+{
+    if (!is_resource($conn) || $requestId < 1) {
+        return ['ok' => false, 'message' => 'درخواست نامعتبر است.', 'history_written' => false];
+    }
+
+    $existing = m360_online_req_parse_payload($request['request_payload_json'] ?? null);
+    $existing = m360_rw_intake_ensure_nested($existing);
+    if (m360_rw_intake_is_locked($existing)) {
+        return ['ok' => false, 'message' => M360_RW_INTAKE_LOCK_MESSAGE_FA, 'history_written' => false];
+    }
+
+    $formValues = m360_rw_intake_form_values($existing, $request);
+    $customerApproved = isset($post['customer_intake_approved']) && (string)$post['customer_intake_approved'] === '1';
+    $receptionConfirmed = isset($post['confirmed_by_receptionist']) && (string)$post['confirmed_by_receptionist'] === '1';
+    if (!$customerApproved) {
+        return ['ok' => false, 'message' => 'تأیید صریح مشتری برای اطلاعات پذیرش الزامی است.', 'history_written' => false];
+    }
+    if (!$receptionConfirmed) {
+        return ['ok' => false, 'message' => 'تأیید نهایی پذیرشگر الزامی است.', 'history_written' => false];
+    }
+
+    foreach (m360_rw_intake_reception_completion_keys() as $stepKey) {
+        if (!m360_rw_intake_wizard_step_is_complete($stepKey, $existing, $request, $formValues)) {
+            return ['ok' => false, 'message' => 'تکمیل مراحل پذیرش قبل از امضا و قفل الزامی است.', 'history_written' => false];
+        }
+    }
+
+    if (($formValues['service_path_clear'] ?? '') !== '1') {
+        return [
+            'ok' => false,
+            'message' => 'پرونده در پذیرش موقت باقی می‌ماند تا مسیر عیب/خدمت روشن شود.',
+            'history_written' => false,
+        ];
+    }
+
+    $now = gmdate('Y-m-d\TH:i:s\Z');
+    $userId = erp_auth_current_user_id() ?? ERP_PHASE1_PLATFORM_OWNER_ID;
+    $customerName = trim((string)($post['customer_signature_name'] ?? ''));
+    if ($customerName === '') {
+        $customerName = trim((string)($request['customer_name'] ?? ''));
+    }
+
+    $existing['reception_intake']['customer_signature'] = [
+        'status' => 'signed',
+        'signed_at' => $now,
+        'customer_name' => $customerName,
+        'mobile' => m360_rw_intake_resolve_mobile_for_otp($request, $existing),
+        'approved_intake_summary' => true,
+    ];
+    $existing['reception_intake']['receptionist_final_confirmation'] = [
+        'confirmed' => true,
+        'confirmed_at' => $now,
+        'confirmed_by' => (string)$userId,
+    ];
+    $existing['reception_final_confirmation'] = '1';
+    $existing['reception_intake']['reception_confirmation'] = [
+        'confirmed_by_receptionist' => true,
+        'confirmation_note' => trim((string)($post['confirmation_note'] ?? '')),
+        'confirmed_at' => $now,
+    ];
+    m360_rw_intake_mark_section_saved($existing, 'reception_confirmation');
+
+    $existing['reception_intake']['intake_lock'] = [
+        'status' => 'locked',
+        'locked_at' => $now,
+        'locked_by' => (string)$userId,
+        'reason' => 'customer_signed_and_reception_confirmed',
+    ];
+    $existing['reception_intake']['locked_snapshot'] = m360_rw_intake_build_locked_snapshot($existing, $request, $formValues);
+
+    $persist = m360_rw_intake_persist_payload($conn, $requestId, $existing, []);
+    if (!$persist['ok']) {
+        return ['ok' => false, 'message' => $persist['message'], 'history_written' => false];
+    }
+
+    $historyWritten = m360_online_req_write_history(
+        $conn,
+        $requestId,
+        M360_RW_INTAKE_HISTORY_PREFIX . 'SIGN_AND_LOCK',
+        (string)($request['request_status'] ?? ''),
+        (string)($request['request_status'] ?? ''),
+        'Reception intake signed and locked',
+        $userId
+    );
+
+    return ['ok' => true, 'message' => 'پرونده پذیرش با امضای مشتری قفل شد.', 'history_written' => $historyWritten];
+}
+
+/** @return list<string> */
+function m360_rw_intake_reception_completion_keys(): array
+{
+    return ['otp', 'customer', 'vehicle', 'service', 'condition', 'documents'];
+}
+
+/** @return list<string> */
+function m360_rw_intake_post_reception_operation_keys(): array
+{
+    return ['documents', 'signature', 'referral'];
+}
+
+/** @return list<string> */
+function m360_rw_intake_wizard_operational_keys(): array
+{
+    return array_merge(
+        m360_rw_intake_reception_completion_keys(),
+        m360_rw_intake_post_reception_operation_keys()
+    );
+}
+
+const M360_RW_INTAKE_CONTRACT_SMS_TEXT_FA = 'لطفاً قرارداد خودروی خود را در سامانه مقاره موتورز امضا فرمایید.';
+const M360_RW_INTAKE_CARTABLE_TASK_TITLE_FA = 'قرارداد نیازمند امضا';
+const M360_RW_INTAKE_CARTABLE_TASK_MESSAGE_FA = 'قرارداد پذیرش خودروی شما آماده بررسی و امضا است.';
+const M360_RW_INTAKE_CARTABLE_TASK_STATUS_ACTION_FA = 'نیازمند اقدام';
+const M360_RW_INTAKE_CARTABLE_TASK_STATUS_COMPLETED_FA = 'امضاشده';
+const M360_RW_INTAKE_CARTABLE_TASK_ACTION_LABEL_FA = 'بررسی و امضای قرارداد';
+
+const M360_RW_CUSTOMER_PROFILE_CONTRACT_CLASS_SIGNED_CANONICAL = 'SIGNED_CANONICAL';
+const M360_RW_CUSTOMER_PROFILE_CONTRACT_CLASS_PENDING_SIGNATURE = 'PENDING_SIGNATURE';
+const M360_RW_CUSTOMER_PROFILE_CONTRACT_CLASS_LEGACY_ACCEPTED_UNVERIFIED = 'LEGACY_ACCEPTED_UNVERIFIED';
+const M360_RW_CUSTOMER_PROFILE_CONTRACT_CLASS_NO_CONTRACT = 'NO_CONTRACT';
+
+const M360_RW_CUSTOMER_PROFILE_CONTRACT_HISTORY_TITLE_FA = 'سوابق قرارداد پذیرش';
+const M360_RW_CUSTOMER_PROFILE_CONTRACT_LEGACY_STATUS_FA = 'تأیید قدیمی فاقد امضای دیجیتال';
+const M360_RW_CUSTOMER_PROFILE_CONTRACT_LEGACY_MESSAGE_FA = 'این تأیید از مسیر قدیمی ثبت شده و دارای قرارداد قفل‌شده، امضای دیجیتال و OTP قرارداد نیست.';
+const M360_RW_CUSTOMER_PROFILE_CONTRACT_SIGNED_STATUS_FA = 'امضاشده و قفل‌شده';
+const M360_RW_CUSTOMER_PROFILE_CONTRACT_SIGNED_MESSAGE_FA = 'قرارداد با امضای دیجیتال و تأیید OTP ثبت و قفل شده است.';
+
+/** @var array<string, int> */
+$GLOBALS['m360_rw_customer_dashboard_perf'] = [];
+
+function m360_rw_customer_dashboard_perf_reset(): void
+{
+    $GLOBALS['m360_rw_customer_dashboard_perf'] = [
+        'sql_statements' => 0,
+        'payload_hydrations' => 0,
+        'task_queries' => 0,
+        'request_fetches' => 0,
+        'vehicle_queries' => 0,
+    ];
+}
+
+function m360_rw_customer_dashboard_perf_inc(string $key, int $amount = 1): void
+{
+    if (!isset($GLOBALS['m360_rw_customer_dashboard_perf'][$key])) {
+        $GLOBALS['m360_rw_customer_dashboard_perf'][$key] = 0;
+    }
+    $GLOBALS['m360_rw_customer_dashboard_perf'][$key] += $amount;
+}
+
+/** @return array<string, int|float> */
+function m360_rw_customer_dashboard_perf_snapshot(float $startedAt): array
+{
+    $perf = is_array($GLOBALS['m360_rw_customer_dashboard_perf'] ?? null)
+        ? $GLOBALS['m360_rw_customer_dashboard_perf']
+        : [];
+
+    return array_merge($perf, [
+        'duration_ms' => round((microtime(true) - $startedAt) * 1000, 2),
+    ]);
+}
+
+function m360_rw_customer_portal_app_root_web_path(): string
+{
+    $script = str_replace('\\', '/', (string)($_SERVER['SCRIPT_NAME'] ?? ''));
+    if (str_contains($script, '/api/customer/')) {
+        $root = dirname($script, 3);
+    } else {
+        $root = dirname($script);
+    }
+    if ($root === '/' || $root === '.' || $root === '') {
+        return '';
+    }
+
+    return rtrim($root, '/');
+}
+
+function m360_rw_customer_portal_app_root_url(string $pathAndQuery): string
+{
+    $path = str_starts_with($pathAndQuery, '/') ? $pathAndQuery : '/' . ltrim($pathAndQuery, '/');
+    $root = m360_rw_customer_portal_app_root_web_path();
+
+    return $root . $path;
+}
+
+/** @return list<string> */
+function m360_rw_customer_dashboard_terminal_statuses(): array
+{
+    return ['DELIVERED', 'CLOSED', 'DONE', 'CANCELLED', 'REJECTED'];
+}
+
+function m360_rw_customer_dashboard_safe_text(string $value, string $fallback = '—'): string
+{
+    $value = trim($value);
+    if ($value === '') {
+        return $fallback;
+    }
+    if (str_contains($value, 'Ã') || str_contains($value, 'Ø') || str_contains($value, 'Ù') || str_contains($value, 'â')) {
+        return $fallback;
+    }
+
+    return $value;
+}
+
+/**
+ * @param array<string, mixed> $requestRow
+ * @param array<string, mixed> $payload
+ * @return array{display_name:string,plate:string,service_type:string}
+ */
+function m360_rw_customer_dashboard_extract_vehicle_summary(array $requestRow, array $payload): array
+{
+    $payload = m360_rw_intake_payload_for_recovery($payload);
+    $vehicle = is_array($payload['reception_intake']['vehicle'] ?? null) ? $payload['reception_intake']['vehicle'] : [];
+    $brand = m360_rw_customer_dashboard_safe_text((string)($vehicle['brand'] ?? $payload['vehicle_brand'] ?? $payload['brand'] ?? ''), '');
+    $model = m360_rw_customer_dashboard_safe_text((string)($vehicle['model'] ?? $vehicle['class'] ?? $payload['vehicle_class'] ?? $payload['model'] ?? ''), '');
+    $plate = m360_rw_customer_dashboard_safe_text((string)($vehicle['plate'] ?? $payload['vehicle_plate'] ?? $payload['plate_display'] ?? $requestRow['vehicle_plate'] ?? ''), '');
+    $display = trim($brand . ' ' . $model);
+    if ($display === '') {
+        $display = 'خودرو';
+    }
+    $requestType = trim((string)($payload['request_type'] ?? ''));
+    $serviceMap = [
+        'diagnostic_inspection' => 'کارشناسی و عیب‌یابی',
+        'buy_sell_inspection' => 'کارشناسی خرید/فروش',
+        'periodic_service' => 'سرویس دوره‌ای',
+        'option_add' => 'افزودن آپشن',
+        'other' => 'سایر',
+    ];
+
+    return [
+        'display_name' => $display,
+        'plate' => $plate !== '—' ? $plate : '',
+        'service_type' => $serviceMap[$requestType] ?? m360_rw_customer_dashboard_safe_text((string)($payload['service_description'] ?? ''), 'درخواست خدمت'),
+    ];
+}
+
+/**
+ * @param array<string, mixed> $requestRow
+ * @param array<string, mixed> $payload
+ * @return array{stage:string,stage_label:string,status_label:string,next_actor:string,next_action:string}
+ */
+function m360_rw_customer_dashboard_resolve_stage($conn, array $requestRow, array $payload, string $customerMobile): array
+{
+    $requestId = (int)($requestRow['online_request_id'] ?? 0);
+    $status = strtoupper(trim((string)($requestRow['request_status'] ?? 'NEW')));
+    $normalized = m360_rw_customer_profile_normalize_mobile($customerMobile);
+    $dbContract = is_resource($conn) && $requestId > 0
+        ? m360_intake_contract_find_active_for_online_request($conn, $requestId)
+        : null;
+
+    if (is_resource($conn) && m360_rw_customer_profile_contract_is_pending_signature($conn, $requestRow, $payload, $dbContract, $normalized)) {
+        return [
+            'stage' => 'CONTRACT_PENDING',
+            'stage_label' => 'در انتظار بررسی و امضای قرارداد',
+            'status_label' => 'نیازمند امضای قرارداد',
+            'next_actor' => 'شما',
+            'next_action' => 'بررسی و امضای قرارداد',
+        ];
+    }
+
+    if (is_resource($conn) && m360_rw_customer_profile_contract_is_canonically_signed($conn, $requestRow, $dbContract, $normalized)) {
+        return [
+            'stage' => 'IN_SERVICE',
+            'stage_label' => 'در حال انجام خدمات',
+            'status_label' => 'قرارداد امضاشده — ادامه فرایند',
+            'next_actor' => 'واحد پذیرش',
+            'next_action' => 'پیگیری پرونده',
+        ];
+    }
+
+    $map = [
+        'NEW' => ['stage' => 'NEW', 'stage_label' => 'در انتظار بررسی پذیرش', 'status_label' => 'در انتظار بررسی پذیرش', 'next_actor' => 'واحد پذیرش', 'next_action' => 'بررسی درخواست'],
+        'PENDING' => ['stage' => 'NEW', 'stage_label' => 'در انتظار بررسی پذیرش', 'status_label' => 'در انتظار بررسی پذیرش', 'next_actor' => 'واحد پذیرش', 'next_action' => 'بررسی درخواست'],
+        'UNDER_REVIEW' => ['stage' => 'UNDER_REVIEW', 'stage_label' => 'در حال بررسی پذیرش', 'status_label' => 'در حال بررسی پذیرش', 'next_actor' => 'واحد پذیرش', 'next_action' => 'تکمیل بررسی'],
+        'ACCEPTED' => ['stage' => 'RECEPTION_IN_PROGRESS', 'stage_label' => 'در حال تکمیل پذیرش', 'status_label' => 'پذیرفته‌شده', 'next_actor' => 'واحد پذیرش', 'next_action' => 'تکمیل پذیرش'],
+        'CONVERTED_TO_JOBCARD' => ['stage' => 'IN_SERVICE', 'stage_label' => 'در حال انجام خدمات', 'status_label' => 'تبدیل به کارت کار', 'next_actor' => 'واحد فنی', 'next_action' => 'پیگیری خدمات'],
+    ];
+    if (isset($map[$status])) {
+        return $map[$status];
+    }
+
+    return [
+        'stage' => 'UNKNOWN',
+        'stage_label' => 'در حال بررسی',
+        'status_label' => m360_online_req_status_label_fa($status !== '' ? $status : 'NEW'),
+        'next_actor' => 'واحد پذیرش',
+        'next_action' => 'پیگیری پرونده',
+    ];
+}
+
+/**
+ * @param array<string, mixed> $requestRow
+ * @return array<string, mixed>
+ */
+function m360_rw_customer_dashboard_format_request_card($conn, array $requestRow, string $customerMobile): array
+{
+    m360_rw_customer_dashboard_perf_inc('payload_hydrations');
+    $requestId = (int)($requestRow['online_request_id'] ?? 0);
+    $requestMobile = m360_rw_customer_profile_normalize_mobile((string)($requestRow['mobile'] ?? ''));
+    $normalized = m360_rw_customer_profile_normalize_mobile($customerMobile);
+    if ($requestId < 1 || $normalized === '' || $requestMobile !== $normalized) {
+        return [];
+    }
+
+    $payload = m360_online_req_parse_payload($requestRow['request_payload_json'] ?? null);
+    $payload = m360_rw_intake_payload_for_recovery($payload);
+    $vehicle = m360_rw_customer_dashboard_extract_vehicle_summary($requestRow, $payload);
+    $stage = m360_rw_customer_dashboard_resolve_stage($conn, $requestRow, $payload, $customerMobile);
+    $status = strtoupper(trim((string)($requestRow['request_status'] ?? 'NEW')));
+    $terminal = m360_rw_customer_dashboard_terminal_statuses();
+    $contractClass = m360_rw_customer_profile_classify_contract_request($conn, $requestRow, $customerMobile);
+    $updatedAt = trim((string)($requestRow['updated_at'] ?? $requestRow['created_at'] ?? ''));
+
+    $actionUrl = '';
+    $actionLabel = '';
+    if ($contractClass['classification'] === M360_RW_CUSTOMER_PROFILE_CONTRACT_CLASS_PENDING_SIGNATURE) {
+        $readonlyUrl = m360_rw_customer_profile_contract_review_url_readonly($payload);
+        if ($readonlyUrl !== '') {
+            $actionUrl = $readonlyUrl;
+            $actionLabel = M360_RW_INTAKE_CARTABLE_TASK_ACTION_LABEL_FA;
+        }
+    }
+
+    $legacyLabel = '';
+    if ($contractClass['classification'] === M360_RW_CUSTOMER_PROFILE_CONTRACT_CLASS_LEGACY_ACCEPTED_UNVERIFIED) {
+        $legacyLabel = M360_RW_CUSTOMER_PROFILE_CONTRACT_LEGACY_STATUS_FA;
+    } elseif ($contractClass['classification'] === M360_RW_CUSTOMER_PROFILE_CONTRACT_CLASS_SIGNED_CANONICAL) {
+        $legacyLabel = M360_RW_CUSTOMER_PROFILE_CONTRACT_SIGNED_STATUS_FA;
+    }
+
+    return [
+        'online_request_id' => $requestId,
+        'reference' => m360_rw_customer_profile_contract_jobcard_code($requestId),
+        'vehicle_display' => $vehicle['display_name'],
+        'vehicle_plate' => $vehicle['plate'],
+        'service_type' => $vehicle['service_type'],
+        'stage' => $stage['stage'],
+        'stage_label' => $stage['stage_label'],
+        'status_label' => $stage['status_label'],
+        'next_actor' => $stage['next_actor'],
+        'next_action' => $stage['next_action'],
+        'last_update' => $updatedAt !== '' ? $updatedAt : '—',
+        'is_terminal' => in_array($status, $terminal, true) || $status === M360_ONLINE_REQ_STATUS_REJECTED,
+        'terminal_status' => in_array($status, $terminal, true) ? $status : '',
+        'contract_legacy_label' => $legacyLabel,
+        'contract_classification' => $contractClass['classification'],
+        'action_url' => $actionUrl,
+        'action_label' => $actionLabel,
+    ];
+}
+
+/**
+ * @param list<array<string, mixed>> $activeCases
+ * @return list<array<string, mixed>>
+ */
+function m360_rw_customer_dashboard_list_vehicles_enriched($conn, int $customerId, string $customerMobile, array $activeCases): array
+{
+    m360_rw_customer_dashboard_perf_inc('vehicle_queries');
+    $vehicles = $customerId > 0 ? m360_rw_customer_profile_list_vehicles($conn, $customerId) : [];
+    $counts = [];
+    foreach ($activeCases as $case) {
+        $plate = trim((string)($case['vehicle_plate'] ?? ''));
+        $key = $plate !== '' ? $plate : (string)($case['vehicle_display'] ?? 'unknown');
+        $counts[$key] = ($counts[$key] ?? 0) + 1;
+    }
+    $out = [];
+    foreach ($vehicles as $vehicle) {
+        $label = m360_rw_customer_dashboard_safe_text((string)($vehicle['label'] ?? ''), 'خودرو');
+        $plate = m360_rw_customer_dashboard_safe_text((string)($vehicle['plate'] ?? ''), '');
+        $key = $plate !== '' && $plate !== '—' ? $plate : $label;
+        $out[] = [
+            'label' => $label,
+            'plate' => $plate !== '—' ? $plate : '',
+            'active_case_count' => (int)($counts[$key] ?? 0),
+            'last_service' => '—',
+            'status_label' => ((int)($counts[$key] ?? 0)) > 0 ? 'دارای پرونده فعال' : 'بدون پرونده فعال',
+        ];
+    }
+    if ($out === [] && $activeCases !== []) {
+        foreach ($activeCases as $case) {
+            $out[] = [
+                'label' => (string)($case['vehicle_display'] ?? 'خودرو'),
+                'plate' => (string)($case['vehicle_plate'] ?? ''),
+                'active_case_count' => 1,
+                'last_service' => (string)($case['service_type'] ?? '—'),
+                'status_label' => (string)($case['stage_label'] ?? 'در حال بررسی'),
+            ];
+        }
+    }
+
+    return $out;
+}
+
+/**
+ * @param array<string, string> $query
+ * @return array<string, mixed>
+ */
+function m360_rw_customer_dashboard_build($conn, string $verifiedMobile, array $query = []): array
+{
+    $started = microtime(true);
+    m360_rw_customer_dashboard_perf_reset();
+    m360_rw_customer_dashboard_perf_inc('sql_statements');
+
+    $identity = m360_rw_customer_profile_resolve_display_identity($conn, $verifiedMobile);
+    $customerId = (int)($identity['customer_id'] ?? 0);
+    $customerRow = m360_rw_customer_profile_fetch_customer_row($conn, $verifiedMobile);
+    $customer = m360_rw_customer_profile_normalize_customer_row($customerRow);
+
+    m360_rw_customer_dashboard_perf_inc('request_fetches');
+    $requests = m360_rw_customer_profile_fetch_online_requests_by_mobile($conn, $verifiedMobile);
+    $activeCases = [];
+    $historyCases = [];
+    foreach ($requests as $row) {
+        $card = m360_rw_customer_dashboard_format_request_card($conn, $row, $verifiedMobile);
+        if ($card === []) {
+            continue;
+        }
+        if (!empty($card['is_terminal'])) {
+            $historyCases[] = $card;
+        } else {
+            $activeCases[] = $card;
+        }
+    }
+
+    m360_rw_customer_dashboard_perf_inc('task_queries');
+    $inbox = [];
+    if (function_exists('m360_cartable_list_dashboard_inbox')) {
+        $inbox = m360_cartable_list_dashboard_inbox($conn, $customerId, $verifiedMobile);
+    } else {
+        $tasks = m360_rw_customer_profile_canonical_active_contract_tasks($conn, $customerId, $verifiedMobile);
+        foreach ($tasks as $taskRow) {
+            $formatted = m360_rw_customer_profile_format_canonical_active_contract_task($conn, $customerId, $verifiedMobile, $taskRow);
+            if ($formatted === null) {
+                continue;
+            }
+            $inbox[] = [
+                'task_id' => (int)($taskRow['task_id'] ?? 0),
+                'title' => (string)($formatted['title'] ?? ''),
+                'message' => (string)($formatted['message'] ?? ''),
+                'priority' => (int)($taskRow['priority'] ?? 50),
+                'status_label' => (string)($formatted['status_label'] ?? ''),
+                'context' => (string)($formatted['jobcard_code'] ?? ''),
+                'action_label' => (string)($formatted['action_label'] ?? ''),
+                'action_url' => (string)($formatted['review_url'] ?? ''),
+            ];
+        }
+    }
+
+    $historyPage = max(1, (int)($query['history_page'] ?? 1));
+    $perPage = 20;
+    $historyTotal = count($historyCases);
+    $historyPages = max(1, (int)ceil($historyTotal / $perPage));
+    if ($historyPage > $historyPages) {
+        $historyPage = $historyPages;
+    }
+    $historySlice = array_slice($historyCases, ($historyPage - 1) * $perPage, $perPage);
+
+    $vehicles = m360_rw_customer_dashboard_list_vehicles_enriched($conn, $customerId, $verifiedMobile, $activeCases);
+
+    $banners = [];
+    if ((string)($query['contract_signed'] ?? '') === '1') {
+        $banners[] = [
+            'id' => 'contract_signed',
+            'title' => 'قرارداد با موفقیت امضا و تأیید شد.',
+            'message' => 'پرونده شما برای ادامه فرایند پذیرش ارسال شده است.',
+        ];
+    }
+    if ((string)($query['request_created'] ?? '') === '1') {
+        $banners[] = [
+            'id' => 'request_created',
+            'title' => 'درخواست خدمت با موفقیت ثبت شد.',
+            'message' => 'پرونده جدید شما در بخش پرونده‌های در جریان قابل پیگیری است.',
+        ];
+    }
+
+    return [
+        'identity' => $identity,
+        'customer' => $customer,
+        'banners' => $banners,
+        'inbox' => $inbox,
+        'active_task_count' => count($inbox),
+        'active_cases' => $activeCases,
+        'history_cases' => $historySlice,
+        'history_page' => $historyPage,
+        'history_total' => $historyTotal,
+        'history_pages' => $historyPages,
+        'vehicles' => $vehicles,
+        'financial' => [
+            'available' => false,
+            'open_invoice_count' => 0,
+            'outstanding_balance' => null,
+            'message' => 'صورتحساب باز یا پرداخت معوقی برای شما ثبت نشده است.',
+        ],
+        'notifications' => [
+            'available' => false,
+            'message' => 'پیام یا اعلان جدیدی ثبت نشده است.',
+        ],
+        'metrics' => m360_rw_customer_dashboard_perf_snapshot($started),
+    ];
+}
+
+function m360_rw_customer_profile_contract_jobcard_code(int $requestId): string
+{
+    return 'REQ-' . (string)$requestId;
+}
+
+function m360_rw_customer_profile_contract_has_signature_proof($conn, int $contractId): bool
+{
+    if (!is_resource($conn) || $contractId < 1) {
+        return false;
+    }
+    if (!m360_rw_table_exists($conn, M360_CONTRACT_SIG_TABLE)) {
+        return false;
+    }
+    $sql = 'SELECT TOP 1 contract_id FROM dbo.' . M360_CONTRACT_SIG_TABLE . ' WHERE contract_id = ?';
+    $stmt = @odbc_prepare($conn, $sql);
+    if ($stmt === false || !@odbc_execute($stmt, [$contractId])) {
+        return false;
+    }
+
+    return odbc_fetch_array($stmt) !== false;
+}
+
+/**
+ * @param array<string, mixed> $requestRow
+ * @param array<string, mixed>|null $dbContract
+ */
+function m360_rw_customer_profile_contract_binding_valid(array $requestRow, ?array $dbContract, string $normalizedMobile): bool
+{
+    if ($dbContract === null) {
+        return false;
+    }
+    $requestId = (int)($requestRow['online_request_id'] ?? 0);
+    $contractRequestId = (int)($dbContract['online_request_id'] ?? 0);
+    if ($requestId < 1 || $contractRequestId !== $requestId) {
+        return false;
+    }
+    $requestMobile = m360_rw_customer_profile_normalize_mobile((string)($requestRow['mobile'] ?? ''));
+    if ($requestMobile !== $normalizedMobile) {
+        return false;
+    }
+    $contractMobile = m360_rw_customer_profile_normalize_mobile((string)($dbContract['mobile'] ?? ''));
+    if ($contractMobile !== '' && $contractMobile !== $normalizedMobile) {
+        return false;
+    }
+
+    return true;
+}
+
+/**
+ * @param array<string, mixed> $requestRow
+ * @param array<string, mixed>|null $dbContract
+ */
+function m360_rw_customer_profile_contract_is_canonically_signed($conn, array $requestRow, ?array $dbContract, string $normalizedMobile): bool
+{
+    if ($dbContract === null) {
+        return false;
+    }
+    $contractId = (int)($dbContract['contract_id'] ?? 0);
+    if ($contractId < 1) {
+        return false;
+    }
+    if (!m360_rw_customer_profile_contract_binding_valid($requestRow, $dbContract, $normalizedMobile)) {
+        return false;
+    }
+    if (!m360_intake_contract_is_signed($dbContract)) {
+        return false;
+    }
+
+    return m360_rw_customer_profile_contract_has_signature_proof($conn, $contractId);
+}
+
+/**
+ * @param array<string, mixed> $payload
+ */
+function m360_rw_customer_profile_contract_review_url_readonly(array $payload): string
+{
+    $task = m360_rw_intake_contract_cartable_task($payload);
+    $reviewPath = trim((string)($task['review_url_path'] ?? ''));
+    if ($reviewPath !== '' && str_contains($reviewPath, 'customer-intake-contract-review.php')) {
+        return $reviewPath;
+    }
+
+    return '';
+}
+
+/**
+ * @param array<string, mixed> $requestRow
+ * @param array<string, mixed> $payload
+ * @param array<string, mixed>|null $dbContract
+ */
+function m360_rw_customer_profile_contract_is_pending_signature($conn, array $requestRow, array $payload, ?array $dbContract, string $normalizedMobile): bool
+{
+    if ($dbContract === null) {
+        return false;
+    }
+    if ((int)($dbContract['contract_id'] ?? 0) < 1 || m360_intake_contract_is_signed($dbContract)) {
+        return false;
+    }
+    if (!m360_rw_customer_profile_contract_binding_valid($requestRow, $dbContract, $normalizedMobile)) {
+        return false;
+    }
+    $task = m360_rw_intake_contract_cartable_task($payload);
+    $taskMobile = m360_rw_customer_profile_normalize_mobile((string)($task['customer_mobile'] ?? ''));
+    if ($taskMobile !== '' && $taskMobile !== $normalizedMobile) {
+        return false;
+    }
+    if (m360_rw_intake_contract_customer_accepted($payload)) {
+        return false;
+    }
+    if (!m360_rw_intake_contract_cartable_pending($payload)) {
+        $taskStatus = trim((string)($task['status'] ?? ''));
+        if ($taskStatus !== M360_RW_INTAKE_CARTABLE_STATUS_PENDING) {
+            return false;
+        }
+    }
+
+    return m360_rw_customer_profile_contract_review_url_readonly($payload) !== '';
+}
+
+/**
+ * @param array<string, mixed> $requestRow
+ * @return array{
+ *   classification:string,
+ *   online_request_id:int,
+ *   jobcard_code:string,
+ *   title:string,
+ *   message:string,
+ *   status_label:string,
+ *   action_label:string,
+ *   review_url:string,
+ *   is_active:bool,
+ *   is_completed:bool,
+ *   is_legacy:bool,
+ *   counts_toward_badge:bool
+ * }
+ */
+function m360_rw_customer_profile_classify_contract_request($conn, array $requestRow, string $customerMobile): array
+{
+    $empty = [
+        'classification' => M360_RW_CUSTOMER_PROFILE_CONTRACT_CLASS_NO_CONTRACT,
+        'online_request_id' => 0,
+        'jobcard_code' => '',
+        'title' => '',
+        'message' => '',
+        'status_label' => '',
+        'action_label' => '',
+        'review_url' => '',
+        'is_active' => false,
+        'is_completed' => false,
+        'is_legacy' => false,
+        'counts_toward_badge' => false,
+    ];
+    $requestId = (int)($requestRow['online_request_id'] ?? 0);
+    if ($requestId < 1) {
+        return $empty;
+    }
+    $normalizedCustomer = m360_rw_customer_profile_normalize_mobile($customerMobile);
+    $requestMobile = m360_rw_customer_profile_normalize_mobile((string)($requestRow['mobile'] ?? ''));
+    if ($normalizedCustomer === '' || $requestMobile !== $normalizedCustomer) {
+        return $empty;
+    }
+
+    $payload = m360_online_req_parse_payload($requestRow['request_payload_json'] ?? null);
+    $payload = m360_rw_intake_payload_for_recovery($payload);
+    $dbContract = is_resource($conn) ? m360_intake_contract_find_active_for_online_request($conn, $requestId) : null;
+    $jobcardCode = m360_rw_customer_profile_contract_jobcard_code($requestId);
+
+    if (is_resource($conn) && m360_rw_customer_profile_contract_is_canonically_signed($conn, $requestRow, $dbContract, $normalizedCustomer)) {
+        return [
+            'classification' => M360_RW_CUSTOMER_PROFILE_CONTRACT_CLASS_SIGNED_CANONICAL,
+            'online_request_id' => $requestId,
+            'jobcard_code' => $jobcardCode,
+            'title' => M360_RW_CUSTOMER_PROFILE_CONTRACT_HISTORY_TITLE_FA,
+            'message' => M360_RW_CUSTOMER_PROFILE_CONTRACT_SIGNED_MESSAGE_FA,
+            'status_label' => M360_RW_CUSTOMER_PROFILE_CONTRACT_SIGNED_STATUS_FA,
+            'action_label' => '',
+            'review_url' => '',
+            'is_active' => false,
+            'is_completed' => true,
+            'is_legacy' => false,
+            'counts_toward_badge' => false,
+        ];
+    }
+
+    if (m360_rw_intake_contract_customer_accepted($payload)) {
+        return [
+            'classification' => M360_RW_CUSTOMER_PROFILE_CONTRACT_CLASS_LEGACY_ACCEPTED_UNVERIFIED,
+            'online_request_id' => $requestId,
+            'jobcard_code' => $jobcardCode,
+            'title' => M360_RW_CUSTOMER_PROFILE_CONTRACT_HISTORY_TITLE_FA,
+            'message' => M360_RW_CUSTOMER_PROFILE_CONTRACT_LEGACY_MESSAGE_FA,
+            'status_label' => M360_RW_CUSTOMER_PROFILE_CONTRACT_LEGACY_STATUS_FA,
+            'action_label' => '',
+            'review_url' => '',
+            'is_active' => false,
+            'is_completed' => true,
+            'is_legacy' => true,
+            'counts_toward_badge' => false,
+        ];
+    }
+
+    if (is_resource($conn) && m360_rw_customer_profile_contract_is_pending_signature($conn, $requestRow, $payload, $dbContract, $normalizedCustomer)) {
+        $task = m360_rw_intake_contract_cartable_task($payload);
+
+        return [
+            'classification' => M360_RW_CUSTOMER_PROFILE_CONTRACT_CLASS_PENDING_SIGNATURE,
+            'online_request_id' => $requestId,
+            'jobcard_code' => $jobcardCode,
+            'title' => trim((string)($task['title'] ?? '')) !== '' ? (string)$task['title'] : M360_RW_INTAKE_CARTABLE_TASK_TITLE_FA,
+            'message' => trim((string)($task['message'] ?? '')) !== '' ? (string)$task['message'] : M360_RW_INTAKE_CARTABLE_TASK_MESSAGE_FA,
+            'status_label' => M360_RW_INTAKE_CARTABLE_TASK_STATUS_ACTION_FA,
+            'action_label' => M360_RW_INTAKE_CARTABLE_TASK_ACTION_LABEL_FA,
+            'review_url' => m360_rw_customer_profile_contract_review_url_readonly($payload),
+            'is_active' => true,
+            'is_completed' => false,
+            'is_legacy' => false,
+            'counts_toward_badge' => true,
+        ];
+    }
+
+    return array_merge($empty, [
+        'online_request_id' => $requestId,
+        'jobcard_code' => $jobcardCode,
+    ]);
+}
+
+function m360_rw_customer_profile_normalize_mobile(string $mobile): string
+{
+    $mobile = trim($mobile);
+    if ($mobile === '') {
+        return '';
+    }
+    $otpHelper = __DIR__ . DIRECTORY_SEPARATOR . 'm360-otp-helper.php';
+    if (is_file($otpHelper)) {
+        require_once $otpHelper;
+        if (function_exists('m360_otp_normalize_phone')) {
+            $normalized = m360_otp_normalize_phone($mobile);
+            if ($normalized !== null && $normalized !== '') {
+                return $normalized;
+            }
+        }
+    }
+
+    return preg_replace('/\D+/', '', $mobile) ?? '';
+}
+
+/**
+ * @return list<array<string, mixed>>
+ */
+function m360_rw_customer_profile_fetch_online_requests_by_mobile($conn, string $customerMobile): array
+{
+    if (!is_resource($conn) || $customerMobile === '') {
+        return [];
+    }
+    if (!m360_rw_table_exists($conn, m360_online_req_table())) {
+        return [];
+    }
+    $normalized = m360_rw_customer_profile_normalize_mobile($customerMobile);
+    if ($normalized === '') {
+        return [];
+    }
+    $sql = 'SELECT online_request_id, mobile
+            FROM dbo.' . m360_online_req_table() . '
+            WHERE mobile IS NOT NULL AND LTRIM(RTRIM(mobile)) <> \'\'
+            ORDER BY online_request_id DESC';
+    $stmt = @odbc_prepare($conn, $sql);
+    if ($stmt === false || !@odbc_execute($stmt)) {
+        return [];
+    }
+    $rows = [];
+    while (($row = odbc_fetch_array($stmt)) !== false) {
+        $rowMobile = m360_rw_customer_profile_normalize_mobile((string)($row['mobile'] ?? $row['MOBILE'] ?? ''));
+        if ($rowMobile === '' || $rowMobile !== $normalized) {
+            continue;
+        }
+        $requestId = (int)($row['online_request_id'] ?? $row['ONLINE_REQUEST_ID'] ?? 0);
+        if ($requestId < 1) {
+            continue;
+        }
+        $fullRow = m360_online_req_fetch_by_id($conn, $requestId);
+        if ($fullRow === null) {
+            continue;
+        }
+        $fullMobile = m360_rw_customer_profile_normalize_mobile((string)($fullRow['mobile'] ?? ''));
+        if ($fullMobile !== $normalized) {
+            continue;
+        }
+        $rows[] = $fullRow;
+    }
+    if (is_resource($stmt)) {
+        @odbc_free_result($stmt);
+    }
+
+    return $rows;
+}
+
+/**
+ * @param array<string, mixed> $requestRow
+ * @param array<string, mixed> $payload
+ * @return array{ok:bool,payload:array<string,mixed>,review_url_path:string,error:string}
+ */
+function m360_rw_customer_profile_refresh_task_review_access($conn, int $requestId, array $requestRow, array $payload): array
+{
+    if (!is_resource($conn) || $requestId < 1) {
+        return ['ok' => false, 'payload' => $payload, 'review_url_path' => '', 'error' => 'invalid_request'];
+    }
+    if (m360_rw_intake_contract_customer_accepted($payload)) {
+        return ['ok' => false, 'payload' => $payload, 'review_url_path' => '', 'error' => 'already_accepted'];
+    }
+    $task = m360_rw_intake_contract_cartable_task($payload);
+    $existingPath = trim((string)($task['review_url_path'] ?? ''));
+    if ($existingPath !== '' && str_contains($existingPath, 'customer-intake-contract-review.php')) {
+        return ['ok' => true, 'payload' => $payload, 'review_url_path' => $existingPath, 'error' => ''];
+    }
+
+    $rawToken = m360_rw_intake_contract_generate_review_token($requestId);
+    $tokenHash = m360_rw_intake_contract_token_hash($rawToken);
+    $now = gmdate('Y-m-d\TH:i:s\Z');
+    $expires = gmdate('Y-m-d\TH:i:s\Z', time() + M360_RW_INTAKE_CONTRACT_REVIEW_TTL_SECONDS);
+    $payload = m360_rw_intake_ensure_nested($payload);
+    if (!isset($payload['reception_intake']['customer_cartable']) || !is_array($payload['reception_intake']['customer_cartable'])) {
+        $payload['reception_intake']['customer_cartable'] = [];
+    }
+    $mobile = m360_rw_intake_resolve_mobile_for_otp($requestRow, $payload);
+    $payload['reception_intake']['customer_cartable']['contract_task'] = array_merge($task, [
+        'status' => M360_RW_INTAKE_CARTABLE_STATUS_PENDING,
+        'title' => M360_RW_INTAKE_CARTABLE_TASK_TITLE_FA,
+        'message' => M360_RW_INTAKE_CARTABLE_TASK_MESSAGE_FA,
+        'customer_mobile' => $mobile,
+        'access_token_hash' => $tokenHash,
+        'access_token_created_at' => $now,
+        'access_token_expires_at' => $expires,
+        'review_url_path' => m360_rw_intake_contract_review_url($rawToken),
+    ]);
+    if (!isset($payload['reception_intake']['contract']) || !is_array($payload['reception_intake']['contract'])) {
+        $payload['reception_intake']['contract'] = [];
+    }
+    $payload['reception_intake']['contract'] = array_merge($payload['reception_intake']['contract'], [
+        'status' => M360_RW_INTAKE_CONTRACT_STATUS_PENDING_CUSTOMER_REVIEW,
+        'review_token_hash' => $tokenHash,
+        'review_token_created_at' => $now,
+        'review_token_expires_at' => $expires,
+    ]);
+    $persistToken = m360_rw_intake_persist_payload($conn, $requestId, $payload, []);
+    if (!$persistToken['ok']) {
+        return ['ok' => false, 'payload' => $payload, 'review_url_path' => '', 'error' => 'persist_failed'];
+    }
+    m360_rw_intake_ensure_db_contract_for_cartable($conn, $requestId, $requestRow, $payload, $rawToken);
+    $requestFresh = m360_online_req_fetch_by_id($conn, $requestId);
+    if ($requestFresh !== null) {
+        $payload = m360_rw_intake_payload_for_recovery(m360_online_req_parse_payload($requestFresh['request_payload_json'] ?? null));
+        $taskFresh = m360_rw_intake_contract_cartable_task($payload);
+        if (trim((string)($taskFresh['review_url_path'] ?? '')) === '') {
+            $payload['reception_intake']['customer_cartable']['contract_task']['review_url_path'] = m360_rw_intake_contract_review_url($rawToken);
+            m360_rw_intake_persist_payload($conn, $requestId, $payload, []);
+        }
+    }
+    $task = m360_rw_intake_contract_cartable_task($payload);
+    $reviewPath = trim((string)($task['review_url_path'] ?? ''));
+
+    return [
+        'ok' => $reviewPath !== '',
+        'payload' => $payload,
+        'review_url_path' => $reviewPath,
+        'error' => $reviewPath !== '' ? '' : 'missing_review_path',
+    ];
+}
+
+/**
+ * @return list<array{
+ *   classification:string,
+ *   online_request_id:int,
+ *   jobcard_code:string,
+ *   title:string,
+ *   message:string,
+ *   status_label:string,
+ *   action_label:string,
+ *   review_url:string,
+ *   is_active:bool,
+ *   is_completed:bool,
+ *   is_legacy:bool,
+ *   counts_toward_badge:bool
+ * }>
+ */
+/**
+ * @return list<array<string, mixed>>
+ */
+function m360_rw_customer_profile_canonical_active_contract_tasks($conn, int $customerId, string $customerMobile): array
+{
+    if (!is_resource($conn) || !m360_cartable_tables_available($conn)) {
+        return [];
+    }
+
+    return m360_cartable_list_active_for_customer(
+        $conn,
+        $customerId > 0 ? $customerId : null,
+        $customerMobile,
+        M360_CARTABLE_TASK_TYPE_CONTRACT_SIGNATURE
+    );
+}
+
+function m360_rw_customer_profile_canonical_contract_badge_count($conn, int $customerId, string $customerMobile): int
+{
+    if (!is_resource($conn) || !m360_cartable_tables_available($conn)) {
+        return 0;
+    }
+
+    return m360_cartable_count_active_for_customer(
+        $conn,
+        $customerId > 0 ? $customerId : null,
+        $customerMobile
+    );
+}
+
+/**
+ * @param array<string, string>|null $cartableTask
+ * @return ?array<string, mixed>
+ */
+function m360_rw_customer_profile_format_canonical_active_contract_task(
+    $conn,
+    int $customerId,
+    string $customerMobile,
+    ?array $cartableTask
+): ?array {
+    if (!is_resource($conn) || $cartableTask === null || $cartableTask === []) {
+        return null;
+    }
+    if (!m360_cartable_task_belongs_to_customer($cartableTask, $customerId > 0 ? $customerId : null, $customerMobile)) {
+        return null;
+    }
+
+    $requestId = (int)($cartableTask['online_request_id'] ?? 0);
+    $requestRow = $requestId > 0 ? m360_online_req_fetch_by_id($conn, $requestId) : null;
+    $payload = $requestRow !== null
+        ? m360_rw_intake_payload_for_recovery(m360_online_req_parse_payload($requestRow['request_payload_json'] ?? null))
+        : [];
+
+    $action = m360_cartable_resolve_task_action($conn, $cartableTask, $requestRow, $payload);
+    if (!$action['ok'] || trim((string)$action['review_url']) === '') {
+        return null;
+    }
+
+    return [
+        'classification' => M360_RW_CUSTOMER_PROFILE_CONTRACT_CLASS_PENDING_SIGNATURE,
+        'online_request_id' => $requestId,
+        'jobcard_code' => m360_rw_customer_profile_contract_jobcard_code($requestId),
+        'title' => trim((string)($cartableTask['title'] ?? '')) !== ''
+            ? (string)$cartableTask['title']
+            : M360_RW_INTAKE_CARTABLE_TASK_TITLE_FA,
+        'message' => trim((string)($cartableTask['message'] ?? '')) !== ''
+            ? (string)$cartableTask['message']
+            : M360_RW_INTAKE_CARTABLE_TASK_MESSAGE_FA,
+        'status_label' => M360_RW_INTAKE_CARTABLE_TASK_STATUS_ACTION_FA,
+        'action_label' => M360_RW_INTAKE_CARTABLE_TASK_ACTION_LABEL_FA,
+        'review_url' => (string)$action['review_url'],
+        'is_active' => true,
+        'is_completed' => false,
+        'is_legacy' => false,
+        'counts_toward_badge' => true,
+        'canonical_task_id' => (int)($cartableTask['task_id'] ?? 0),
+    ];
+}
+
+/**
+ * Historical contract cards only (signed canonical + legacy accepted). Active inbox uses canonical table.
+ *
+ * @return list<array<string, mixed>>
+ */
+function m360_rw_customer_profile_contract_cartable_tasks($conn, string $customerMobile): array
+{
+    if (!is_resource($conn)) {
+        return [];
+    }
+    $normalizedCustomer = m360_rw_customer_profile_normalize_mobile($customerMobile);
+    if ($normalizedCustomer === '') {
+        return [];
+    }
+
+    $requests = m360_rw_customer_profile_fetch_online_requests_by_mobile($conn, $customerMobile);
+    $historical = [];
+
+    foreach ($requests as $requestRow) {
+        $classified = m360_rw_customer_profile_classify_contract_request($conn, $requestRow, $customerMobile);
+        $classification = (string)($classified['classification'] ?? '');
+        if ($classification === M360_RW_CUSTOMER_PROFILE_CONTRACT_CLASS_NO_CONTRACT) {
+            continue;
+        }
+        if ($classification === M360_RW_CUSTOMER_PROFILE_CONTRACT_CLASS_PENDING_SIGNATURE) {
+            continue;
+        }
+        $historical[] = $classified;
+    }
+
+    usort($historical, static function (array $a, array $b): int {
+        return (int)($b['online_request_id'] ?? 0) <=> (int)($a['online_request_id'] ?? 0);
+    });
+
+    return $historical;
+}
+
+/**
+ * @param list<array<string, mixed>> $tasks
+ */
+function m360_rw_customer_profile_contract_badge_count(array $tasks): int
+{
+    $count = 0;
+    foreach ($tasks as $task) {
+        if (!empty($task['counts_toward_badge'])) {
+            $count++;
+        }
+    }
+
+    return $count;
+}
+
+/**
+ * @param list<array<string, mixed>> $tasks
+ * @return ?array<string, mixed>
+ */
+function m360_rw_customer_profile_active_contract_task(array $tasks): ?array
+{
+    foreach ($tasks as $task) {
+        if (!empty($task['is_active'])) {
+            return $task;
+        }
+    }
+
+    return null;
+}
+
+function m360_rw_customer_profile_unauthenticated_redirect_url(): string
+{
+    return 'customer-request.php';
+}
+
+/**
+ * @return array{ok:bool,mobile:string,error:string}
+ */
+function m360_rw_customer_profile_resolve_verified_session_mobile(): array
+{
+    $otpHelper = __DIR__ . DIRECTORY_SEPARATOR . 'm360-otp-helper.php';
+    if (!is_file($otpHelper)) {
+        return ['ok' => false, 'mobile' => '', 'error' => 'otp_helper_missing'];
+    }
+    require_once $otpHelper;
+    m360_otp_session_start();
+    $verified = trim((string)($_SESSION['otp_verified_phone'] ?? ''));
+    if ($verified === '') {
+        return ['ok' => false, 'mobile' => '', 'error' => 'not_verified'];
+    }
+    if (!function_exists('m360_otp_normalize_phone')) {
+        return ['ok' => false, 'mobile' => '', 'error' => 'otp_helper_incomplete'];
+    }
+    $normalized = m360_otp_normalize_phone($verified);
+    if ($normalized === null || $normalized === '') {
+        return ['ok' => false, 'mobile' => '', 'error' => 'invalid_mobile'];
+    }
+    if (!m360_otp_is_verified($normalized)) {
+        return ['ok' => false, 'mobile' => '', 'error' => 'session_expired'];
+    }
+
+    return ['ok' => true, 'mobile' => $normalized, 'error' => ''];
+}
+
+function m360_rw_customer_profile_require_verified_session(): string
+{
+    $resolved = m360_rw_customer_profile_resolve_verified_session_mobile();
+    if (!$resolved['ok']) {
+        header('Location: ' . m360_rw_customer_profile_unauthenticated_redirect_url(), true, 302);
+        exit;
+    }
+
+    return $resolved['mobile'];
+}
+
+function m360_rw_customer_profile_render_error_page(string $message, int $status = 500): never
+{
+    if (!headers_sent()) {
+        http_response_code($status);
+        header('Content-Type: text/html; charset=UTF-8');
+        header('X-Robots-Tag: noindex, nofollow');
+        header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+    }
+    $layout = __DIR__ . DIRECTORY_SEPARATOR . 'mirror-layout.php';
+    if (is_file($layout)) {
+        require_once $layout;
+        mirror_render_head('خطا — پروفایل مشتری', 'customer');
+        echo '<section class="m360-card"><h2 class="m360-step-title">خطا</h2>';
+        echo '<p class="m360-alert m360-alert-error">' . m360_rw_h($message) . '</p>';
+        echo '<p class="m360-action-row"><a class="m360-btn m360-btn-primary" href="customer-request.php">بازگشت</a></p></section>';
+        mirror_render_foot();
+        exit;
+    }
+    echo '<!DOCTYPE html><html lang="fa" dir="rtl"><head><meta charset="UTF-8"><title>خطا</title></head><body><p>';
+    echo htmlspecialchars($message, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+    echo '</p></body></html>';
+    exit;
+}
+
+function m360_rw_customer_profile_initial_letter(string $value): string
+{
+    $value = trim($value);
+    if ($value === '') {
+        return '؟';
+    }
+    if (function_exists('mb_substr')) {
+        return (string)mb_substr($value, 0, 1);
+    }
+
+    return substr($value, 0, 1) ?: '؟';
+}
+
+/**
+ * @param ?array<string, mixed> $row
+ * @return array<string, string>
+ */
+function m360_rw_customer_profile_normalize_customer_row(?array $row): array
+{
+    if ($row === null) {
+        return [
+            'full_name' => '',
+            'first_name' => '',
+            'last_name' => '',
+            'national_id' => '',
+            'primary_mobile' => '',
+            'address' => '',
+            'city' => '',
+            'customer_id' => '',
+        ];
+    }
+    $fullName = trim((string)($row['full_name'] ?? ''));
+    $parts = preg_split('/\s+/u', $fullName, 2) ?: [];
+
+    return [
+        'full_name' => $fullName,
+        'first_name' => trim((string)($parts[0] ?? '')),
+        'last_name' => trim((string)($parts[1] ?? '')),
+        'national_id' => trim((string)($row['national_id'] ?? '')),
+        'primary_mobile' => trim((string)($row['primary_mobile'] ?? '')),
+        'address' => trim((string)($row['address'] ?? '')),
+        'city' => trim((string)($row['city'] ?? '')),
+        'customer_id' => trim((string)($row['customer_id'] ?? '')),
+    ];
+}
+
+/**
+ * @return array{
+ *   full_name:string,
+ *   display_name:string,
+ *   primary_mobile:string,
+ *   address:string,
+ *   city:string,
+ *   customer_id:int,
+ *   source:string,
+ *   profile_complete:bool,
+ *   needs_completion:bool
+ * }
+ */
+function m360_rw_customer_profile_resolve_display_identity($conn, string $verifiedMobile): array
+{
+    $normalizedMobile = m360_rw_customer_profile_normalize_mobile($verifiedMobile);
+    $empty = [
+        'full_name' => '',
+        'display_name' => '',
+        'primary_mobile' => $normalizedMobile,
+        'address' => '',
+        'city' => '',
+        'customer_id' => 0,
+        'source' => 'verified_mobile_only',
+        'profile_complete' => false,
+        'needs_completion' => true,
+    ];
+    if (!is_resource($conn) || $normalizedMobile === '') {
+        return $empty;
+    }
+
+    $customerRow = m360_rw_customer_profile_fetch_customer_row($conn, $normalizedMobile);
+    $customer = m360_rw_customer_profile_normalize_customer_row($customerRow);
+    $customerId = (int)($customer['customer_id'] ?? 0);
+    $fullName = trim((string)($customer['full_name'] ?? ''));
+    $address = trim((string)($customer['address'] ?? ''));
+    $city = trim((string)($customer['city'] ?? ''));
+    $nationalId = trim((string)($customer['national_id'] ?? ''));
+    $source = 'canonical_customer';
+
+    if ($fullName === '') {
+        $requests = m360_rw_customer_profile_fetch_online_requests_by_mobile($conn, $normalizedMobile);
+        foreach ($requests as $requestRow) {
+            $requestMobile = m360_rw_customer_profile_normalize_mobile((string)($requestRow['mobile'] ?? ''));
+            if ($requestMobile !== $normalizedMobile) {
+                continue;
+            }
+            $name = trim((string)($requestRow['customer_name'] ?? ''));
+            if ($name === '') {
+                $payload = m360_online_req_parse_payload($requestRow['request_payload_json'] ?? null);
+                $payload = m360_rw_intake_payload_for_recovery($payload);
+                $summary = m360_rw_intake_contract_review_summary($payload, $requestRow);
+                $name = trim((string)($summary['customer_name'] ?? ''));
+            }
+            if ($name !== '') {
+                $fullName = $name;
+                $source = 'request_snapshot';
+                break;
+            }
+        }
+    }
+
+    if ($fullName === '' && m360_cartable_tables_available($conn)) {
+        $tasks = m360_cartable_list_active_for_customer($conn, $customerId > 0 ? $customerId : null, $normalizedMobile);
+        foreach ($tasks as $taskRow) {
+            $requestId = (int)($taskRow['online_request_id'] ?? 0);
+            if ($requestId < 1) {
+                continue;
+            }
+            $requestRow = m360_online_req_fetch_by_id($conn, $requestId);
+            if ($requestRow === null) {
+                continue;
+            }
+            $requestMobile = m360_rw_customer_profile_normalize_mobile((string)($requestRow['mobile'] ?? ''));
+            if ($requestMobile !== $normalizedMobile) {
+                continue;
+            }
+            $name = trim((string)($requestRow['customer_name'] ?? ''));
+            if ($name !== '') {
+                $fullName = $name;
+                $source = 'contract_task_snapshot';
+                break;
+            }
+        }
+    }
+
+    $profileComplete = $fullName !== ''
+        && preg_match('/^[0-9]{10}$/', $nationalId) === 1
+        && $address !== '';
+
+    return [
+        'full_name' => $fullName,
+        'display_name' => $fullName !== '' ? $fullName : 'مشتری',
+        'primary_mobile' => $normalizedMobile,
+        'address' => $address,
+        'city' => $city,
+        'customer_id' => $customerId,
+        'source' => $source,
+        'profile_complete' => $profileComplete,
+        'needs_completion' => !$profileComplete,
+    ];
+}
+
+/**
+ * @return ?array<string, mixed>
+ */
+function m360_rw_customer_profile_fetch_customer_row($conn, string $mobile): ?array
+{
+    if (!is_resource($conn) || $mobile === '') {
+        return null;
+    }
+    $submitHelper = __DIR__ . DIRECTORY_SEPARATOR . 'm360-customer-online-submit-helper.php';
+    if (!is_file($submitHelper)) {
+        return null;
+    }
+    require_once $submitHelper;
+    if (!function_exists('m360_pr02b_fetch_customer_row') || !function_exists('m360_reception_default_company_id')) {
+        return null;
+    }
+    $companyId = m360_reception_default_company_id($conn);
+    if ($companyId < 1) {
+        return null;
+    }
+
+    return m360_pr02b_fetch_customer_row($conn, $companyId, $mobile);
+}
+
+/**
+ * @return list<array<string, mixed>>
+ */
+function m360_rw_customer_profile_list_vehicles($conn, int $customerId): array
+{
+    if (!is_resource($conn) || $customerId < 1) {
+        return [];
+    }
+    $submitHelper = __DIR__ . DIRECTORY_SEPARATOR . 'm360-customer-online-submit-helper.php';
+    if (!is_file($submitHelper)) {
+        return [];
+    }
+    require_once $submitHelper;
+    if (!function_exists('m360_pr02b_list_customer_vehicles')) {
+        return [];
+    }
+
+    return m360_pr02b_list_customer_vehicles($conn, $customerId);
+}
+
+/**
+ * @return ?array<string, mixed>
+ */
+function m360_rw_customer_profile_detect_active_online_request($conn, string $mobile): ?array
+{
+    $requests = m360_rw_customer_profile_fetch_online_requests_by_mobile($conn, $mobile);
+    $terminal = ['DELIVERED', 'CANCELLED', 'CLOSED', 'DONE', 'REJECTED'];
+    foreach ($requests as $row) {
+        $status = strtoupper(trim((string)($row['request_status'] ?? '')));
+        if ($status !== '' && in_array($status, $terminal, true)) {
+            continue;
+        }
+        $requestId = (int)($row['online_request_id'] ?? 0);
+        if ($requestId < 1) {
+            continue;
+        }
+        $payload = m360_online_req_parse_payload($row['request_payload_json'] ?? null);
+        $vehiclePlate = '';
+        if (is_array($payload)) {
+            $vehicle = $payload['reception_intake']['vehicle'] ?? null;
+            if (is_array($vehicle)) {
+                $vehiclePlate = trim((string)($vehicle['plate'] ?? ''));
+            }
+            if ($vehiclePlate === '') {
+                $vehiclePlate = trim((string)($payload['vehicle_plate'] ?? ''));
+            }
+        }
+        $statusLabel = function_exists('m360_online_req_status_label_fa')
+            ? m360_online_req_status_label_fa($status !== '' ? $status : 'NEW')
+            : 'در حال بررسی';
+
+        return [
+            'online_request_id' => $requestId,
+            'request_status' => $status !== '' ? $status : 'NEW',
+            'request_status_label' => $statusLabel,
+            'vehicle_plate' => $vehiclePlate,
+            'jobcard_code' => 'REQ-' . (string)$requestId,
+        ];
+    }
+
+    return null;
+}
+
+/**
+ * @param array<string, mixed> $payload
+ */
+function m360_rw_intake_reception_is_completed(array $payload): bool
+{
+    $payload = m360_rw_intake_ensure_nested($payload);
+    $rc = is_array($payload['reception_intake']['reception_completed'] ?? null)
+        ? $payload['reception_intake']['reception_completed']
+        : [];
+
+    return trim((string)($rc['status'] ?? '')) === 'completed';
+}
+
+function m360_rw_intake_truthy_gate_value($value): bool
+{
+    return m360_intake_prepayment_truthy_gate_value($value);
+}
+
+/**
+ * @param array<string, mixed> $payload
+ * @return array<string, mixed>
+ */
+function m360_rw_intake_prepayment_payload(array $payload): array
+{
+    return m360_intake_prepayment_payload($payload);
+}
+
+/**
+ * @param array<string, mixed> $payload
+ * @return array{code:string,label:string,message:string,allow_handoff:bool,backend_ready:bool,owner_decision_required:bool}
+ */
+function m360_rw_intake_prepayment_state(array $payload): array
+{
+    return m360_intake_prepayment_gate_evaluate(
+        $payload,
+        m360_rw_intake_contract_customer_accepted($payload),
+        []
+    );
+}
+
+/**
+ * @param array<string, mixed> $request
+ * @param array<string, mixed> $payload
+ * @param array<string, mixed>|null $jobcard
+ */
+function m360_rw_intake_prepayment_context_jobcard_id(array $request, array $payload, ?array $jobcard = null): int
+{
+    $candidates = [
+        $jobcard['jobcard_id'] ?? null,
+        $request['converted_jobcard_id'] ?? null,
+        $payload['jobcard_id'] ?? null,
+        $payload['converted_jobcard_id'] ?? null,
+        $payload['reception_intake']['hall_manager']['jobcard_id'] ?? null,
+        $payload['reception_intake']['prepayment_gate']['jobcard_id'] ?? null,
+    ];
+    if (function_exists('m360_online_req_converted_jobcard_id')) {
+        $candidates[] = m360_online_req_converted_jobcard_id($request);
+    }
+    foreach ($candidates as $candidate) {
+        $id = (int)$candidate;
+        if ($id > 0) {
+            return $id;
+        }
+    }
+
+    return 0;
+}
+
+/**
+ * @param array<string, mixed> $request
+ * @param array<string, mixed> $payload
+ * @param array<string, mixed>|null $jobcard
+ */
+function m360_rw_intake_prepayment_context_customer_id(array $request, array $payload, ?array $jobcard = null): int
+{
+    foreach ([
+        $jobcard['customer_id'] ?? null,
+        $request['customer_id'] ?? null,
+        $payload['customer_id'] ?? null,
+        $payload['reception_intake']['customer']['customer_id'] ?? null,
+        $payload['reception_intake']['prepayment_gate']['customer_id'] ?? null,
+    ] as $candidate) {
+        $id = (int)$candidate;
+        if ($id > 0) {
+            return $id;
+        }
+    }
+
+    return 0;
+}
+
+/**
+ * @param resource|false $conn
+ * @param array<string, mixed> $request
+ * @param array<string, mixed> $payload
+ * @param array<string, mixed>|null $jobcard
+ * @return array<string, mixed>
+ */
+function m360_rw_intake_prepayment_state_for_context($conn, array $request, array $payload, ?array $jobcard = null): array
+{
+    $jobcardId = m360_rw_intake_prepayment_context_jobcard_id($request, $payload, $jobcard);
+    $customerId = m360_rw_intake_prepayment_context_customer_id($request, $payload, $jobcard);
+    $backend = is_resource($conn)
+        ? m360_intake_prepayment_fetch_backend_summary($conn, $jobcardId, $customerId)
+        : [];
+
+    return m360_intake_prepayment_gate_evaluate(
+        $payload,
+        m360_rw_intake_contract_customer_accepted($payload),
+        $backend
+    );
+}
+
+/**
+ * @param resource|false $conn
+ * @param array<string, mixed> $request
+ * @param array<string, mixed> $payload
+ * @param array<string, mixed>|null $jobcard
+ * @return array<string, mixed>
+ */
+function m360_rw_intake_sync_prepayment_gate_for_context($conn, array $request, array $payload, ?array $jobcard = null): array
+{
+    $payload = m360_rw_intake_ensure_nested($payload);
+    $existingGate = is_array($payload['reception_intake']['prepayment_gate'] ?? null)
+        ? $payload['reception_intake']['prepayment_gate']
+        : [];
+    $state = m360_rw_intake_prepayment_state_for_context($conn, $request, $payload, $jobcard);
+    $syncedGate = array_merge($existingGate, [
+        'jobcard_id' => m360_rw_intake_prepayment_context_jobcard_id($request, $payload, $jobcard),
+        'customer_id' => m360_rw_intake_prepayment_context_customer_id($request, $payload, $jobcard),
+        'required_amount' => $state['required_amount'],
+        'paid_amount' => $state['paid_amount'],
+        'confirmed_amount' => $state['confirmed_amount'],
+        'prepayment_required' => $state['prepayment_required'],
+        'payment_registered' => $state['payment_registered'],
+        'payment_confirmed' => $state['payment_confirmed'],
+        'payment_backend_available' => $state['payment_backend_available'],
+        'payment_backend_source' => $state['payment_backend_source'],
+        'owner_decision_status' => $state['owner_decision_status'],
+        'gate_status' => $state['gate_status'],
+        'next_actor' => $state['next_actor'],
+        'updated_at' => gmdate('Y-m-d\TH:i:s\Z'),
+    ]);
+    if (isset($state['events']) && is_array($state['events'])) {
+        $syncedGate['events'] = $state['events'];
+    }
+    $payload['reception_intake']['prepayment_gate'] = $syncedGate;
+    if (!isset($payload['reception_intake']['operation_gate']) || !is_array($payload['reception_intake']['operation_gate'])) {
+        $payload['reception_intake']['operation_gate'] = [];
+    }
+    $payload['reception_intake']['operation_gate']['prepayment_gate'] = $state;
+    $payload['reception_intake']['operation_gate']['hall_manager_allowed'] = !empty($state['allow_handoff']);
+    $payload['reception_intake']['operation_gate']['message_fa'] = !empty($state['allow_handoff']) ? '' : (string)$state['message'];
+
+    return $payload;
+}
+
+/** @return list<string> */
+function m360_rw_intake_prepayment_gate_actions(): array
+{
+    return [
+        'request_start_without_prepayment',
+        'approve_start_without_prepayment',
+        'reject_start_without_prepayment',
+        'return_start_without_prepayment',
+    ];
+}
+
+function m360_rw_intake_is_prepayment_gate_action(string $actionType): bool
+{
+    return in_array($actionType, m360_rw_intake_prepayment_gate_actions(), true);
+}
+
+/**
+ * @param resource $conn
+ * @param array<string, mixed> $request
+ * @param array<string, mixed> $payload
+ * @return array{ok:bool,message:string,history_written:bool}
+ */
+function m360_rw_intake_process_prepayment_gate_action($conn, int $requestId, array $request, array $payload, string $actionType, array $post): array
+{
+    $payload = m360_rw_intake_sync_prepayment_gate_for_context($conn, $request, $payload);
+    $state = m360_rw_intake_prepayment_state_for_context($conn, $request, $payload);
+    if (!m360_rw_intake_reception_is_completed($payload)) {
+        return ['ok' => false, 'message' => 'ابتدا Step 5 و Step 6 پذیرش باید تکمیل شود.', 'history_written' => false];
+    }
+    if (!m360_rw_intake_contract_customer_accepted($payload)) {
+        return ['ok' => false, 'message' => 'قرارداد مشتری هنوز با امضا و OTP تأیید نشده است.', 'history_written' => false];
+    }
+    if (!empty($state['allow_handoff']) && $actionType === 'request_start_without_prepayment') {
+        return ['ok' => true, 'message' => 'گیت Step 8 قبلاً مجاز شده است.', 'history_written' => false];
+    }
+
+    $actor = m360_intake_prepayment_actor_context($conn);
+    $actorUserId = (int)($actor['user_id'] ?? 0);
+    if ($actorUserId < 1) {
+        return ['ok' => false, 'message' => 'ورود کاربر معتبر نیست.', 'history_written' => false];
+    }
+
+    $reason = trim((string)($post['prepayment_gate_reason'] ?? $post['gate_reason'] ?? ''));
+    if ($reason === '') {
+        $reason = trim((string)($post['reason'] ?? ''));
+    }
+    $reasonCheck = m360_rw_intake_validate_text($reason, 2000, 'دلیل تصمیم گیت پیش‌پرداخت');
+    if (!$reasonCheck['ok']) {
+        return ['ok' => false, 'message' => $reasonCheck['error'], 'history_written' => false];
+    }
+    $reason = trim((string)$reasonCheck['value']);
+
+    $gate = is_array($payload['reception_intake']['prepayment_gate'] ?? null)
+        ? $payload['reception_intake']['prepayment_gate']
+        : [];
+    $beforeStatus = (string)($state['gate_status'] ?? M360_INTAKE_PREPAYMENT_GATE_PREPAYMENT_REQUIRED);
+    $previousStatus = (string)($request['request_status'] ?? '');
+    $eventType = '';
+    $message = '';
+    $now = gmdate('Y-m-d\TH:i:s\Z');
+
+    if ($actionType === 'request_start_without_prepayment') {
+        if (trim((string)($gate['owner_decision_status'] ?? '')) === M360_INTAKE_PREPAYMENT_GATE_OWNER_APPROVAL_REQUIRED) {
+            return ['ok' => true, 'message' => 'درخواست شروع بدون پیش‌پرداخت قبلاً برای مالک/مدیر مجاز ارسال شده است.', 'history_written' => false];
+        }
+        if ($reason === '') {
+            return ['ok' => false, 'message' => 'ثبت دلیل درخواست شروع بدون پیش‌پرداخت الزامی است.', 'history_written' => false];
+        }
+        $gate['owner_decision_status'] = M360_INTAKE_PREPAYMENT_GATE_OWNER_APPROVAL_REQUIRED;
+        $gate['requested_by_user_id'] = (string)$actorUserId;
+        $gate['requested_at'] = $now;
+        $gate['request_reason'] = $reason;
+        $gate['updated_at'] = $now;
+        $eventType = 'PREPAYMENT_GATE_START_WITHOUT_PREPAYMENT_REQUESTED';
+        $message = 'درخواست شروع بدون پیش‌پرداخت برای مالک/مدیر مجاز ثبت شد.';
+    } else {
+        if (empty($actor['can_approve'])) {
+            return ['ok' => false, 'message' => 'فقط مالک/سیستم ادمین یا مدیر دارای مجوز می‌تواند درباره شروع بدون پیش‌پرداخت تصمیم بگیرد.', 'history_written' => false];
+        }
+        $requestedBy = (int)($gate['requested_by_user_id'] ?? 0);
+        if ($requestedBy > 0 && $requestedBy === $actorUserId) {
+            return ['ok' => false, 'message' => 'درخواست‌کننده نمی‌تواند درخواست شروع بدون پیش‌پرداخت خودش را تأیید یا رد کند.', 'history_written' => false];
+        }
+        if (trim((string)($gate['owner_decision_status'] ?? '')) !== M360_INTAKE_PREPAYMENT_GATE_OWNER_APPROVAL_REQUIRED) {
+            return ['ok' => false, 'message' => 'درخواست فعالی برای تصمیم مالک/مدیر مجاز وجود ندارد.', 'history_written' => false];
+        }
+        if ($reason === '') {
+            return ['ok' => false, 'message' => 'ثبت دلیل تصمیم مالک/مدیر مجاز الزامی است.', 'history_written' => false];
+        }
+        if ($actionType === 'approve_start_without_prepayment') {
+            $gate['owner_decision_status'] = M360_INTAKE_PREPAYMENT_GATE_OWNER_APPROVED;
+            $gate['approved_by_user_id'] = (string)$actorUserId;
+            $gate['approved_at'] = $now;
+            $eventType = 'PREPAYMENT_GATE_START_WITHOUT_PREPAYMENT_APPROVED';
+            $message = 'شروع بدون پیش‌پرداخت توسط مالک/مدیر مجاز تأیید شد.';
+        } elseif ($actionType === 'reject_start_without_prepayment') {
+            $gate['owner_decision_status'] = M360_INTAKE_PREPAYMENT_GATE_OWNER_REJECTED;
+            $gate['approved_by_user_id'] = (string)$actorUserId;
+            $gate['approved_at'] = $now;
+            $eventType = 'PREPAYMENT_GATE_START_WITHOUT_PREPAYMENT_REJECTED';
+            $message = 'شروع بدون پیش‌پرداخت رد شد.';
+        } else {
+            $gate['owner_decision_status'] = 'RETURNED_FOR_CORRECTION';
+            $gate['returned_by_user_id'] = (string)$actorUserId;
+            $gate['returned_at'] = $now;
+            $eventType = 'PREPAYMENT_GATE_START_WITHOUT_PREPAYMENT_RETURNED';
+            $message = 'درخواست شروع بدون پیش‌پرداخت برای اصلاح برگشت داده شد.';
+        }
+        $gate['decision_reason'] = $reason;
+        $gate['updated_at'] = $now;
+    }
+
+    $gate = m360_intake_prepayment_append_event(
+        $gate,
+        $eventType,
+        $actorUserId,
+        $beforeStatus,
+        (string)$gate['owner_decision_status'],
+        $reason,
+        ['online_request_id' => (string)$requestId]
+    );
+    $payload['reception_intake']['prepayment_gate'] = $gate;
+    $payload = m360_rw_intake_sync_prepayment_gate_for_context($conn, $request, $payload);
+    $afterState = m360_rw_intake_prepayment_state_for_context($conn, $request, $payload);
+    $persist = m360_rw_intake_persist_payload($conn, $requestId, $payload, []);
+    if (!$persist['ok']) {
+        return ['ok' => false, 'message' => $persist['message'], 'history_written' => false];
+    }
+    $historyWritten = m360_online_req_write_history(
+        $conn,
+        $requestId,
+        $eventType,
+        $previousStatus,
+        $previousStatus,
+        'before=' . $beforeStatus . '; after=' . (string)($afterState['gate_status'] ?? ''),
+        $actorUserId
+    );
+
+    return ['ok' => true, 'message' => $message, 'history_written' => $historyWritten];
+}
+
+function m360_rw_intake_prepayment_amount_label($amount): string
+{
+    $value = m360_intake_prepayment_amount($amount);
+    if ($value <= 0) {
+        return '—';
+    }
+
+    return number_format($value, 0, '.', ',') . ' IRR';
+}
+
+function m360_rw_intake_yes_no_fa(bool $value): string
+{
+    return $value ? 'بله' : 'خیر';
+}
+
+/**
+ * @param resource|false $conn
+ * @param array<string, mixed> $request
+ * @param array<string, mixed> $payload
+ * @param array<string, mixed>|null $jobcard
+ */
+function m360_rw_intake_render_prepayment_gate_card(
+    $conn,
+    int $onlineRequestId,
+    array $request,
+    array $payload,
+    ?array $jobcard,
+    string $csrfInputHtml,
+    string $saveUrl,
+    bool $canAct
+): void {
+    $state = m360_rw_intake_prepayment_state_for_context($conn, $request, $payload, $jobcard);
+    $actor = m360_intake_prepayment_actor_context($conn);
+    $ownerStatus = (string)($state['owner_decision_status'] ?? 'NONE');
+    $contractSigned = !empty($state['contract_signed']);
+    $allow = !empty($state['allow_handoff']);
+    $ownerRequestPending = $ownerStatus === M360_INTAKE_PREPAYMENT_GATE_OWNER_APPROVAL_REQUIRED;
+    $ownerRejected = $ownerStatus === M360_INTAKE_PREPAYMENT_GATE_OWNER_REJECTED;
+
+    echo '<section class="m360-rw-card m360-rw-prepayment-gate-card">';
+    echo '<h3>گیت پیش‌پرداخت قبل از Step 8</h3>';
+    echo '<p class="' . ($allow ? 'm360-rw-flash is-ok' : 'm360-rw-warn') . '">وضعیت گیت: <strong>' . m360_rw_h((string)$state['gate_status']) . '</strong> — ' . m360_rw_h((string)$state['label']) . '</p>';
+    if (!empty($state['message'])) {
+        echo '<p class="m360-rw-muted">' . m360_rw_h((string)$state['message']) . '</p>';
+    }
+    if (!empty($state['payment_backend_gap'])) {
+        echo '<p class="m360-rw-warn">زیرساخت پرداخت تأیید نهایی ندارد؛ پرداخت فقط از مسیر موجود ثبت/نمایش داده می‌شود و برای عبور بدون پرداخت، تصمیم مالک/مدیر مجاز لازم است.</p>';
+    }
+    echo '<div class="m360-rw-field-grid">';
+    m360_rw_intake_field('قرارداد امضا شده', m360_rw_intake_yes_no_fa($contractSigned));
+    m360_rw_intake_field('پیش‌پرداخت لازم است', m360_rw_intake_yes_no_fa(!empty($state['prepayment_required'])));
+    m360_rw_intake_field('مبلغ لازم', m360_rw_intake_prepayment_amount_label($state['required_amount'] ?? 0));
+    m360_rw_intake_field('مبلغ پرداخت/ثبت‌شده', m360_rw_intake_prepayment_amount_label($state['paid_amount'] ?? 0));
+    m360_rw_intake_field('پرداخت تأیید شده', m360_rw_intake_yes_no_fa(!empty($state['payment_confirmed'])));
+    m360_rw_intake_field('وضعیت تصمیم مالک', $ownerStatus !== '' ? $ownerStatus : 'NONE');
+    m360_rw_intake_field('بازیگر بعدی', (string)($state['next_actor'] ?? '—'));
+    m360_rw_intake_field('منبع پرداخت', trim((string)($state['payment_backend_source'] ?? '')) !== '' ? (string)$state['payment_backend_source'] : 'در دسترس نیست');
+    echo '</div>';
+
+    if (!$canAct) {
+        echo '</section>';
+        return;
+    }
+
+    if (!$contractSigned) {
+        echo '<p class="m360-rw-warn">تا قبل از امضا و OTP مشتری، هیچ اقدام مالک یا سالن مجاز نیست.</p>';
+        echo '</section>';
+        return;
+    }
+
+    if (!$allow && !$ownerRequestPending && !$ownerRejected) {
+        echo '<form class="m360-rw-form" method="post" action="' . m360_rw_h($saveUrl) . '">';
+        echo $csrfInputHtml;
+        echo '<input type="hidden" name="online_request_id" value="' . (int)$onlineRequestId . '">';
+        echo '<input type="hidden" name="action_type" value="request_start_without_prepayment">';
+        m360_rw_intake_return_step_hidden('referral');
+        echo '<input type="hidden" name="return_section" value="section-referral">';
+        m360_rw_intake_form_field('دلیل درخواست شروع بدون پیش‌پرداخت', 'prepayment_gate_reason', '', 'textarea', true);
+        echo '<button type="submit" class="m360-rw-btn m360-rw-btn-secondary">درخواست شروع بدون پیش‌پرداخت</button>';
+        echo '</form>';
+    }
+
+    if ($ownerRequestPending && !empty($actor['can_approve'])) {
+        foreach ([
+            'approve_start_without_prepayment' => 'تأیید شروع بدون پیش‌پرداخت',
+            'reject_start_without_prepayment' => 'رد شروع بدون پیش‌پرداخت',
+            'return_start_without_prepayment' => 'برگشت برای اصلاح',
+        ] as $action => $label) {
+            echo '<form class="m360-rw-form" method="post" action="' . m360_rw_h($saveUrl) . '">';
+            echo $csrfInputHtml;
+            echo '<input type="hidden" name="online_request_id" value="' . (int)$onlineRequestId . '">';
+            echo '<input type="hidden" name="action_type" value="' . m360_rw_h($action) . '">';
+            m360_rw_intake_return_step_hidden('referral');
+            echo '<input type="hidden" name="return_section" value="section-referral">';
+            m360_rw_intake_form_field('دلیل تصمیم مالک/مدیر مجاز', 'prepayment_gate_reason', '', 'textarea', true);
+            echo '<button type="submit" class="m360-rw-btn">' . m360_rw_h($label) . '</button>';
+            echo '</form>';
+        }
+    } elseif ($ownerRequestPending) {
+        echo '<p class="m360-rw-muted">تصمیم در انتظار مالک/سیستم ادمین یا مدیر دارای مجوز است؛ پذیرش نمی‌تواند آن را تأیید کند.</p>';
+    }
+
+    if (!$allow) {
+        echo '<p class="m360-rw-warn">HALL_CANNOT_BYPASS_GATE: ارسال به مسئول سالن تا مؤثر شدن گیت غیرفعال می‌ماند.</p>';
+    }
+
+    echo '</section>';
+}
+
+/**
+ * @param array<string, mixed> $payload
+ */
+function m360_rw_intake_operation_gate_hall_manager_allowed(array $payload): bool
+{
+    if (!m360_rw_intake_reception_is_completed($payload)) {
+        return false;
+    }
+    if (!m360_rw_intake_contract_customer_accepted($payload)) {
+        return false;
+    }
+
+    $prepayment = m360_rw_intake_prepayment_state($payload);
+
+    return !empty($prepayment['allow_handoff']);
+}
+
+/**
+ * @param array<string, mixed> $payload
+ */
+function m360_rw_intake_operation_gate_message_fa(array $payload): string
+{
+    if (!m360_rw_intake_reception_is_completed($payload)) {
+        return 'پرونده پذیرش هنوز تکمیل نشده است.';
+    }
+    if (!m360_rw_intake_contract_customer_accepted($payload)) {
+        return m360_rw_contract_pending_customer_message_fa();
+    }
+
+    $prepayment = m360_rw_intake_prepayment_state($payload);
+    if (!empty($prepayment['allow_handoff'])) {
+        return '';
+    }
+
+    return (string)($prepayment['message'] !== '' ? $prepayment['message'] : $prepayment['label']);
+}
+
+/**
+ * @return array{ok:bool,sent:bool,message:string,skipped_reason:string}
+ */
+function m360_rw_intake_send_contract_notification_sms(string $mobile, bool $allowLiveSend = true, string $reviewUrl = ''): array
+{
+    $phone = trim($mobile);
+    if ($phone === '') {
+        return ['ok' => false, 'sent' => false, 'message' => 'شماره موبایل مشتری موجود نیست.', 'skipped_reason' => 'missing_mobile'];
+    }
+    if (!$allowLiveSend || PHP_SAPI === 'cli') {
+        return ['ok' => true, 'sent' => false, 'message' => 'ارسال پیامک در محیط تست/خودکار غیرفعال است.', 'skipped_reason' => 'automated_or_cli'];
+    }
+
+    $otpHelper = __DIR__ . DIRECTORY_SEPARATOR . 'm360-otp-helper.php';
+    if (!is_file($otpHelper)) {
+        return ['ok' => false, 'sent' => false, 'message' => 'زیرساخت پیامک در دسترس نیست.', 'skipped_reason' => 'otp_helper_missing'];
+    }
+    require_once $otpHelper;
+    if (!function_exists('m360_otp_sms_configured') || !m360_otp_sms_configured()) {
+        return ['ok' => false, 'sent' => false, 'message' => 'ارسال پیامک قرارداد نیازمند پیکربندی IPPanel است.', 'skipped_reason' => 'sms_not_configured'];
+    }
+    if (!function_exists('m360_otp_normalize_phone')) {
+        return ['ok' => false, 'sent' => false, 'message' => 'زیرساخت پیامک در دسترس نیست.', 'skipped_reason' => 'otp_helper_incomplete'];
+    }
+    $normalized = m360_otp_normalize_phone($phone);
+    if ($normalized === null) {
+        return ['ok' => false, 'sent' => false, 'message' => 'شماره موبایل مشتری نامعتبر است.', 'skipped_reason' => 'invalid_mobile'];
+    }
+    $settings = m360_otp_sms_settings();
+    if (($settings['provider'] ?? '') !== 'ippanel') {
+        return ['ok' => false, 'sent' => false, 'message' => 'ارسال پیامک قرارداد فقط از مسیر IPPanel پشتیبانی می‌شود.', 'skipped_reason' => 'unsupported_provider'];
+    }
+    $message = M360_RW_INTAKE_CONTRACT_SMS_TEXT_FA;
+    $reviewUrl = trim($reviewUrl);
+    if ($reviewUrl !== '') {
+        $base = m360_intake_contract_public_base_url();
+        $fullUrl = str_starts_with($reviewUrl, 'http') ? $reviewUrl : rtrim($base, '/') . '/' . ltrim($reviewUrl, '/');
+        $message .= ' ' . $fullUrl;
+    }
+    $payload = m360_otp_ippanel_webservice_payload($normalized, $message, $settings);
+    $send = m360_otp_ippanel_send($payload, (string)($settings['api_key'] ?? ''));
+    if (empty($send['ok'])) {
+        return [
+            'ok' => false,
+            'sent' => false,
+            'message' => (string)($send['message'] ?? 'ارسال پیامک قرارداد انجام نشد.'),
+            'skipped_reason' => 'provider_error',
+        ];
+    }
+
+    return ['ok' => true, 'sent' => true, 'message' => 'پیامک اطلاع‌رسانی قرارداد ارسال شد.', 'skipped_reason' => ''];
+}
+
+/**
+ * @param array<string, mixed> $payload
+ * @param array<string, mixed> $requestRow
+ * @return array{plate:string,vin:string,brand:string,model:string,mileage:string,fuel_level:string}
+ */
+function m360_rw_intake_vehicle_canonical(array $payload, array $requestRow = [], ?array $erpVehicle = null): array
+{
+    if ($erpVehicle === null) {
+        $vehicleId = (int)($requestRow['vehicle_id'] ?? 0);
+        if ($vehicleId > 0) {
+            $conn = customer_core_db();
+            if ($conn !== false) {
+                $rows = customer_core_fetch_rows($conn, 'SELECT TOP 1 * FROM dbo.erp_vehicles WHERE vehicle_id = ?', [$vehicleId]);
+                $erpVehicle = $rows[0] ?? null;
+            }
+        }
+    }
+    $resolved = m360_rw_intake_resolve_vehicle_dossier_fields($payload, $requestRow, $erpVehicle);
+    $model = trim((string)($resolved['model']['value'] ?? ''));
+    $vehicleClass = trim((string)($resolved['vehicle_class']['value'] ?? ''));
+    if ($model === '' && $vehicleClass !== '') {
+        $model = $vehicleClass;
+    }
+    $riVehicle = is_array($payload['reception_intake']['vehicle'] ?? null) ? $payload['reception_intake']['vehicle'] : [];
+    $productionYear = trim((string)($resolved['production_year']['value'] ?? ''));
+    if ($productionYear === '') {
+        $productionYear = trim((string)($riVehicle['vehicle_year_pair'] ?? $payload['vehicle_year_pair'] ?? $payload['vehicle_year'] ?? ''));
+    }
+    $visitDate = trim((string)($riVehicle['visit_date'] ?? $payload['visit_date'] ?? $requestRow['visit_date'] ?? ''));
+
+    return [
+        'plate' => (string)($resolved['plate']['value'] ?? ''),
+        'vin' => (string)($resolved['vin']['value'] ?? ''),
+        'brand' => (string)($resolved['brand']['value'] ?? ''),
+        'model' => $model,
+        'vehicle_class' => $vehicleClass !== '' ? $vehicleClass : $model,
+        'vehicle_type' => (string)($resolved['vehicle_type']['value'] ?? ''),
+        'mileage' => (string)($resolved['mileage']['value'] ?? ''),
+        'fuel_level' => (string)($resolved['fuel_level']['value'] ?? ''),
+        'production_year' => $productionYear,
+        'visit_date' => $visitDate,
+        'fields' => $resolved,
+    ];
+}
+
+/**
+ * Bound vehicle identity: ERP vehicle_id + plate + brand present.
+ * Missing year must not force full plate re-entry.
+ *
+ * @param array<string, mixed> $payload
+ * @param array<string, mixed> $requestRow
+ */
+function m360_rw_intake_vehicle_is_bound(array $payload, array $requestRow = []): bool
+{
+    $riVehicle = is_array($payload['reception_intake']['vehicle'] ?? null)
+        ? $payload['reception_intake']['vehicle']
+        : [];
+    $vehicleId = (int)($requestRow['vehicle_id'] ?? $payload['vehicle_id'] ?? 0);
+    if ($vehicleId < 1) {
+        $vehicleId = (int)($riVehicle['vehicle_id'] ?? $riVehicle['selected_vehicle_id'] ?? $payload['selected_vehicle_id'] ?? 0);
+    }
+    if ($vehicleId < 1) {
+        return false;
+    }
+    $vehicle = m360_rw_intake_vehicle_canonical($payload, $requestRow);
+
+    return trim((string)($vehicle['plate'] ?? '')) !== ''
+        && trim((string)($vehicle['brand'] ?? '')) !== '';
+}
+
+/**
+ * @param array<string, mixed> $payload
+ * @param array<string, mixed> $requestRow
+ * @param array<string, mixed> $post
+ * @return array{
+ *   brand:string,model:string,plate:string,vin:string,mileage:string,
+ *   production_year:string,visit_date:string,fuel_level:string,
+ *   identity_ready:bool,missing_fields:list<string>
+ * }
+ */
+function m360_rw_intake_resolve_vehicle_step_context(array $payload, array $requestRow = [], array $post = []): array
+{
+    $canon = m360_rw_intake_vehicle_canonical($payload, $requestRow);
+    $riVehicle = is_array($payload['reception_intake']['vehicle'] ?? null) ? $payload['reception_intake']['vehicle'] : [];
+
+    $pickExisting = static function (string ...$values): string {
+        foreach ($values as $value) {
+            $value = trim((string)$value);
+            if ($value !== '') {
+                return $value;
+            }
+        }
+
+        return '';
+    };
+
+    // Identity fields: canonical/server sources only (POST is not source of truth).
+    $brand = $pickExisting($canon['brand'], $riVehicle['brand'] ?? '', $payload['brand'] ?? '', $payload['vehicle_brand'] ?? '');
+    $model = $pickExisting($canon['model'], $canon['vehicle_class'], $riVehicle['model'] ?? '', $payload['model'] ?? '', $payload['vehicle_model'] ?? '', $payload['vehicle_class'] ?? '');
+    $plate = $pickExisting($canon['plate'], $riVehicle['plate'] ?? '', $riVehicle['plate_number'] ?? '', $riVehicle['plate_display'] ?? '', $payload['plate'] ?? '', $payload['vehicle_plate'] ?? '');
+    $vin = $pickExisting($canon['vin'], $riVehicle['vin'] ?? '', $payload['vin'] ?? '');
+    $mileage = $pickExisting($canon['mileage'], $riVehicle['mileage'] ?? '', $riVehicle['odometer_km'] ?? '', $payload['mileage'] ?? '', $payload['odometer_km'] ?? '');
+    $productionYear = $pickExisting(
+        $canon['production_year'],
+        $riVehicle['vehicle_year_pair'] ?? '',
+        $riVehicle['production_year'] ?? '',
+        $payload['vehicle_year_pair'] ?? '',
+        $payload['vehicle_year'] ?? '',
+        $payload['production_year'] ?? '',
+        $payload['model_year'] ?? ''
+    );
+    $visitDate = $pickExisting(
+        $canon['visit_date'],
+        $riVehicle['visit_date'] ?? '',
+        $payload['visit_date'] ?? '',
+        $requestRow['visit_date'] ?? '',
+        $payload['appointment_date'] ?? '',
+        $payload['reception_date'] ?? ''
+    );
+
+    // Fuel: POST wins when present; otherwise existing intake/canonical.
+    $fuelPost = '';
+    if (array_key_exists('fuel_level', $post) || array_key_exists('fuelLevel', $post)) {
+        $fuelRaw = $post['fuel_level'] ?? $post['fuelLevel'] ?? '';
+        $fuelNorm = m360_rw_intake_normalize_scalar_text($fuelRaw);
+        $fuelPost = $fuelNorm['ok'] ? $fuelNorm['value'] : '';
+    }
+    $fuelLevel = $pickExisting(
+        $fuelPost,
+        $canon['fuel_level'],
+        $riVehicle['fuel_level'] ?? '',
+        $payload['fuel_level'] ?? '',
+        $payload['intake_fuel_level'] ?? '',
+        $payload['fuel'] ?? ''
+    );
+
+    $ctx = [
+        'brand' => $brand,
+        'model' => $model,
+        'plate' => $plate,
+        'vin' => $vin,
+        'mileage' => $mileage,
+        'production_year' => $productionYear,
+        'visit_date' => $visitDate,
+        'fuel_level' => $fuelLevel,
+    ];
+    $missing = [];
+    foreach (['brand', 'model', 'plate', 'mileage', 'production_year', 'visit_date', 'fuel_level'] as $field) {
+        if (trim((string)($ctx[$field] ?? '')) === '') {
+            $missing[] = $field;
+        }
+    }
+    $bound = m360_rw_intake_vehicle_is_bound($payload, $requestRow);
+    if ($bound && $brand !== '' && $plate !== '' && $mileage !== '' && $visitDate !== '') {
+        // Bound vehicle: year missing is a warning, not a plate re-entry loop.
+        $identityReady = true;
+    } else {
+        $identityReady = !array_intersect(['brand', 'model', 'plate', 'mileage', 'production_year', 'visit_date'], $missing);
+    }
+
+    return $ctx + [
+        'identity_ready' => $identityReady,
+        'missing_fields' => $missing,
+        'vehicle_bound' => $bound,
+        'year_missing_warning' => $bound && $productionYear === '',
+    ];
+}
+
+/**
+ * @param array<string, mixed> $payload
+ * @param array<string, mixed> $requestRow
+ */
+function m360_rw_intake_vehicle_step_complete(array $payload, array $requestRow = []): bool
+{
+    $vehicle = m360_rw_intake_vehicle_canonical($payload, $requestRow);
+    $riVehicle = is_array($payload['reception_intake']['vehicle'] ?? null) ? $payload['reception_intake']['vehicle'] : [];
+    foreach (['plate', 'brand', 'mileage', 'fuel_level'] as $field) {
+        if (trim($vehicle[$field]) === '') {
+            return false;
+        }
+    }
+    if (trim((string)($riVehicle['visit_date'] ?? $payload['visit_date'] ?? $requestRow['visit_date'] ?? '')) === '') {
+        return false;
+    }
+
+    // Bound existing vehicle (walk-in or online): do not require year / approved-brand re-entry.
+    if (m360_rw_intake_vehicle_is_bound($payload, $requestRow)) {
+        return true;
+    }
+
+    if (trim((string)($riVehicle['vehicle_year_pair'] ?? $payload['vehicle_year_pair'] ?? '')) === '') {
+        return false;
+    }
+    $brand = trim($vehicle['brand']);
+    if (!in_array($brand, m360_rw_intake_approved_vehicle_brands(), true)) {
+        return false;
+    }
+    if ($brand === M360_RW_TOP_LEVEL_OTHER_BRAND) {
+        return trim((string)($riVehicle['brand_other_explanation'] ?? '')) !== '';
+    }
+
+    return trim($vehicle['model']) !== '';
+}
+
+/** @return array<string, string> */
+function m360_rw_intake_trunk_item_definitions(): array
+{
+    return [
+        'spare_or_kit' => 'زاپاس یا کیت پنچرگیری',
+        'jack' => 'جک',
+        'wheel_wrench' => 'آچار چرخ',
+        'locking_nut_key' => 'کلید قفل رینگ',
+        'tow_hook' => 'بکسل‌بند',
+        'warning_triangle' => 'مثلث خطر',
+    ];
+}
+
+/** @return array<string, string> */
+function m360_rw_intake_damage_zone_definitions(): array
+{
+    // C11 canonical zones for the structured damage selector. Codes are storage source-of-truth
+    // and MUST stay stable; C11 adds headlight/mirror/wheel codes additively (no rename/remap).
+    return [
+        'front_bumper' => 'سپر جلو',
+        'hood' => 'کاپوت',
+        'front_fender_left' => 'گلگیر جلو چپ',
+        'front_fender_right' => 'گلگیر جلو راست',
+        'headlight_left' => 'چراغ جلو چپ',
+        'headlight_right' => 'چراغ جلو راست',
+        'windshield' => 'شیشه جلو',
+        'door_front_left' => 'در جلو چپ',
+        'door_rear_left' => 'در عقب چپ',
+        'sill_left' => 'رکاب چپ',
+        'mirror_left' => 'آینه چپ',
+        'rear_fender_left' => 'گلگیر عقب چپ',
+        'door_front_right' => 'در جلو راست',
+        'door_rear_right' => 'در عقب راست',
+        'sill_right' => 'رکاب راست',
+        'mirror_right' => 'آینه راست',
+        'rear_fender_right' => 'گلگیر عقب راست',
+        'trunk' => 'صندوق یا در عقب',
+        'rear_bumper' => 'سپر عقب',
+        'rear_glass' => 'شیشه عقب',
+        'roof' => 'سقف',
+        'wheel_front_left' => 'چرخ جلو چپ',
+        'wheel_front_right' => 'چرخ جلو راست',
+        'wheel_rear_left' => 'چرخ عقب چپ',
+        'wheel_rear_right' => 'چرخ عقب راست',
+    ];
+}
+
+/**
+ * C11 grouped presentation order for the structured zone selector.
+ *
+ * @return array<int, array{title:string, zones:array<int,string>}>
+ */
+function m360_rw_intake_damage_zone_groups(): array
+{
+    return [
+        ['title' => 'جلوی خودرو', 'zones' => ['front_bumper', 'hood', 'front_fender_left', 'front_fender_right', 'headlight_left', 'headlight_right', 'windshield']],
+        ['title' => 'سمت چپ', 'zones' => ['door_front_left', 'door_rear_left', 'sill_left', 'mirror_left', 'rear_fender_left']],
+        ['title' => 'سمت راست', 'zones' => ['door_front_right', 'door_rear_right', 'sill_right', 'mirror_right', 'rear_fender_right']],
+        ['title' => 'عقب و بالای خودرو', 'zones' => ['trunk', 'rear_bumper', 'rear_glass', 'roof']],
+        ['title' => 'چرخ‌ها', 'zones' => ['wheel_front_left', 'wheel_front_right', 'wheel_rear_left', 'wheel_rear_right']],
+    ];
+}
+
+/** @return array<string, string> */
+function m360_rw_intake_damage_status_labels(): array
+{
+    return [
+        'HEALTHY' => 'سالم',
+        'MINOR' => 'آسیب جزئی',
+        'SEVERE' => 'آسیب شدید',
+    ];
+}
+
+/**
+ * @param array<string, mixed> $payload
+ * @return array{
+ *   vehicle_items:string,
+ *   visible_damage:string,
+ *   initial_vehicle_condition:string,
+ *   trunk_belongings:array<string,mixed>,
+ *   damage_zones:array<string,string>,
+ *   damage_general_note:string,
+ *   legacy_vehicle_items:string,
+ *   legacy_visible_damage:string,
+ *   structured:bool
+ * }
+ */
+function m360_rw_intake_condition_canonical(array $payload): array
+{
+    $payload = m360_rw_intake_ensure_nested($payload);
+    $condition = is_array($payload['reception_intake']['condition'] ?? null) ? $payload['reception_intake']['condition'] : [];
+    $legacyItems = trim((string)($condition['legacy_vehicle_items'] ?? ''));
+    $legacyDamage = trim((string)($condition['legacy_visible_damage'] ?? ''));
+    $items = m360_rw_pick([$condition, $payload], 'vehicle_items', 'belongings');
+    $damage = m360_rw_pick([$condition, $payload], 'visible_damage', 'body_damage');
+    if ($legacyItems === '' && $items !== '' && empty($condition['trunk_belongings'])) {
+        $legacyItems = $items;
+    }
+    if ($legacyDamage === '' && $damage !== '' && empty($condition['damage_zones'])) {
+        $legacyDamage = $damage;
+    }
+
+    $trunk = m360_rw_intake_normalize_trunk_belongings(
+        is_array($condition['trunk_belongings'] ?? null) ? $condition['trunk_belongings'] : []
+    );
+    $zones = m360_rw_intake_normalize_damage_zones(
+        is_array($condition['damage_zones'] ?? null) ? $condition['damage_zones'] : []
+    );
+    $note = trim((string)($condition['damage_general_note'] ?? $condition['initial_vehicle_condition'] ?? m360_rw_pick([$payload], 'initial_vehicle_condition')));
+    $structured = (is_array($condition['trunk_belongings'] ?? null) && $condition['trunk_belongings'] !== [])
+        || (is_array($condition['damage_zones'] ?? null) && $condition['damage_zones'] !== []);
+
+    return [
+        'vehicle_items' => $items,
+        'visible_damage' => $damage,
+        'initial_vehicle_condition' => $note,
+        'trunk_belongings' => $trunk,
+        'damage_zones' => $zones,
+        'damage_general_note' => $note,
+        'legacy_vehicle_items' => $legacyItems,
+        'legacy_visible_damage' => $legacyDamage,
+        'structured' => $structured,
+    ];
+}
+
+/**
+ * @param array<string, mixed> $raw
+ * @return array<string, mixed>
+ */
+function m360_rw_intake_normalize_trunk_belongings(array $raw): array
+{
+    $out = [];
+    foreach (m360_rw_intake_trunk_item_definitions() as $key => $_label) {
+        $status = strtoupper(m360_rw_intake_scalar_string($raw[$key] ?? ''));
+        $out[$key] = in_array($status, ['PRESENT', 'ABSENT'], true) ? $status : '';
+    }
+    $otherRaw = is_array($raw['other'] ?? null) ? $raw['other'] : [];
+    $otherText = m360_rw_intake_scalar_string($otherRaw['text'] ?? $raw['other_text'] ?? '');
+    $selected = !empty($otherRaw['selected']) || !empty($raw['other_selected']) || $otherText !== '';
+    $out['other'] = [
+        'selected' => $selected,
+        'text' => $otherText,
+    ];
+
+    return $out;
+}
+
+/**
+ * @param array<string, mixed> $raw
+ * @return array<string, string>
+ */
+function m360_rw_intake_normalize_damage_zones(array $raw): array
+{
+    // Legacy aliases → current canonical codes (reload compatibility only; no remap of new saves).
+    // C7 doors.
+    if (!array_key_exists('door_front_left', $raw) && array_key_exists('door_left', $raw)) {
+        $raw['door_front_left'] = $raw['door_left'];
+    }
+    if (!array_key_exists('door_front_right', $raw) && array_key_exists('door_right', $raw)) {
+        $raw['door_front_right'] = $raw['door_right'];
+    }
+    // C7 wheels: fl/fr/rl/rr → wheel_front_left/…/wheel_rear_right.
+    $wheelAliases = [
+        'wheel_fl' => 'wheel_front_left',
+        'wheel_fr' => 'wheel_front_right',
+        'wheel_rl' => 'wheel_rear_left',
+        'wheel_rr' => 'wheel_rear_right',
+    ];
+    foreach ($wheelAliases as $legacy => $canonical) {
+        if (!array_key_exists($canonical, $raw) && array_key_exists($legacy, $raw)) {
+            $raw[$canonical] = $raw[$legacy];
+        }
+    }
+    // C7 single "mirrors" → apply to both mirror sides when specific sides are absent.
+    if (array_key_exists('mirrors', $raw)) {
+        if (!array_key_exists('mirror_left', $raw)) {
+            $raw['mirror_left'] = $raw['mirrors'];
+        }
+        if (!array_key_exists('mirror_right', $raw)) {
+            $raw['mirror_right'] = $raw['mirrors'];
+        }
+    }
+
+    $allowed = array_keys(m360_rw_intake_damage_status_labels());
+    $out = [];
+    foreach (m360_rw_intake_damage_zone_definitions() as $key => $_label) {
+        $status = strtoupper(m360_rw_intake_scalar_string($raw[$key] ?? 'HEALTHY'));
+        $out[$key] = in_array($status, $allowed, true) ? $status : 'HEALTHY';
+    }
+
+    return $out;
+}
+
+/** @param array<string, mixed> $trunk */
+function m360_rw_intake_trunk_summary_fa(array $trunk): string
+{
+    $parts = [];
+    foreach (m360_rw_intake_trunk_item_definitions() as $key => $label) {
+        $status = strtoupper(trim((string)($trunk[$key] ?? '')));
+        if ($status === 'PRESENT') {
+            $parts[] = $label . ': موجود';
+        } elseif ($status === 'ABSENT') {
+            $parts[] = $label . ': موجود نیست';
+        }
+    }
+    $other = is_array($trunk['other'] ?? null) ? $trunk['other'] : [];
+    if (!empty($other['selected'])) {
+        $text = trim((string)($other['text'] ?? ''));
+        $parts[] = 'سایر' . ($text !== '' ? ': ' . $text : '');
+    }
+
+    return implode('؛ ', $parts);
+}
+
+/** @param array<string, string> $zones */
+function m360_rw_intake_damage_summary_fa(array $zones): string
+{
+    $labels = m360_rw_intake_damage_status_labels();
+    $zoneLabels = m360_rw_intake_damage_zone_definitions();
+    $parts = [];
+    foreach ($zones as $key => $status) {
+        if ($status === 'HEALTHY') {
+            continue;
+        }
+        $parts[] = ($zoneLabels[$key] ?? $key) . ': ' . ($labels[$status] ?? $status);
+    }
+
+    return $parts === [] ? 'وضعیت ظاهری: همه نواحی سالم' : implode('؛ ', $parts);
+}
+
+/**
+ * @param array<string, mixed> $post
+ * @return array{ok:bool,error:string,trunk:array<string,mixed>,zones:array<string,string>,note:string}
+ */
+function m360_rw_intake_validate_condition_structured_post(array $post): array
+{
+    $trunk = [];
+    foreach (m360_rw_intake_trunk_item_definitions() as $key => $label) {
+        $status = strtoupper(trim((string)($post['trunk_' . $key] ?? $post['trunk_belongings'][$key] ?? '')));
+        if (!in_array($status, ['PRESENT', 'ABSENT'], true)) {
+            return ['ok' => false, 'error' => 'وضعیت «' . $label . '» باید موجود یا موجود نیست باشد.', 'trunk' => [], 'zones' => [], 'note' => ''];
+        }
+        $trunk[$key] = $status;
+    }
+    $otherSelected = trim((string)($post['trunk_other_selected'] ?? '')) === '1'
+        || trim((string)($post['trunk_other_selected'] ?? '')) === 'on';
+    $otherTextNorm = m360_rw_intake_post_scalar($post, 'trunk_other_text');
+    if (!$otherTextNorm['ok']) {
+        return ['ok' => false, 'error' => $otherTextNorm['error'], 'trunk' => [], 'zones' => [], 'note' => ''];
+    }
+    $otherText = $otherTextNorm['value'];
+    $vtOther = m360_rw_intake_validate_text($otherText, 500, 'سایر متعلقات صندوق');
+    if (!$vtOther['ok']) {
+        return ['ok' => false, 'error' => $vtOther['error'], 'trunk' => [], 'zones' => [], 'note' => ''];
+    }
+    $trunk['other'] = [
+        'selected' => $otherSelected,
+        'text' => $otherSelected ? $otherText : '',
+    ];
+
+    $rawZones = is_array($post['damage_zone'] ?? null) ? $post['damage_zone'] : [];
+    $zones = m360_rw_intake_normalize_damage_zones($rawZones);
+    $allowed = array_keys(m360_rw_intake_damage_status_labels());
+    foreach ($zones as $key => $status) {
+        if (!in_array($status, $allowed, true)) {
+            return ['ok' => false, 'error' => 'وضعیت آسیب نامعتبر است.', 'trunk' => [], 'zones' => [], 'note' => ''];
+        }
+    }
+
+    $noteNorm = m360_rw_intake_post_scalar($post, 'damage_general_note');
+    if (!$noteNorm['ok']) {
+        $noteNorm = m360_rw_intake_post_scalar($post, 'initial_vehicle_condition');
+    }
+    if (!$noteNorm['ok']) {
+        return ['ok' => false, 'error' => $noteNorm['error'], 'trunk' => [], 'zones' => [], 'note' => ''];
+    }
+    $note = $noteNorm['value'];
+    $vtNote = m360_rw_intake_validate_text($note, 2000, 'یادداشت عمومی وضعیت');
+    if (!$vtNote['ok']) {
+        return ['ok' => false, 'error' => $vtNote['error'], 'trunk' => [], 'zones' => [], 'note' => ''];
+    }
+
+    return ['ok' => true, 'error' => '', 'trunk' => $trunk, 'zones' => $zones, 'note' => $note];
+}
+
+/**
+ * @param array<string, mixed> $payload
+ */
+function m360_rw_intake_condition_step_complete(array $payload): bool
+{
+    $condition = m360_rw_intake_condition_canonical($payload);
+    // C7: trunk checklist + damage-zone map are canonical; legacy free-text alone is not enough.
+    if (empty($condition['structured'])) {
+        return false;
+    }
+    foreach (m360_rw_intake_trunk_item_definitions() as $key => $_label) {
+        if (!in_array((string)($condition['trunk_belongings'][$key] ?? ''), ['PRESENT', 'ABSENT'], true)) {
+            return false;
+        }
+    }
+    foreach (m360_rw_intake_damage_zone_definitions() as $key => $_label) {
+        if (!isset($condition['damage_zones'][$key])) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+/**
+ * @param array<string, mixed> $payload
+ * @param array<string, string> $formValues
+ */
+function m360_rw_intake_render_condition_structured_form(
+    int $onlineRequestId,
+    array $payload,
+    array $formValues,
+    string $csrfInputHtml,
+    string $saveUrl
+): void {
+    $condition = m360_rw_intake_condition_canonical($payload);
+    $trunk = $condition['trunk_belongings'];
+    $zones = $condition['damage_zones'];
+    $labels = m360_rw_intake_damage_status_labels();
+    $structured = !empty($condition['structured']);
+
+    echo '<style>
+.m360-rw-trunk-grid{display:grid;gap:.65rem;margin:.5rem 0 1rem}
+.m360-rw-trunk-row{display:grid;grid-template-columns:1fr auto auto;gap:.5rem;align-items:center;padding:.55rem .65rem;border:1px solid rgba(148,163,184,.24);border-radius:8px;background:rgba(15,22,19,.86);color:var(--m360-text)}
+.m360-rw-trunk-row label{margin:0;font-size:.92rem}
+/* C11 — non-interactive schematic reference + structured zone selector */
+.m360-rw-damage-schematic{margin:0 auto 1rem;max-width:560px;border:1px solid rgba(148,163,184,.22);border-radius:12px;overflow:hidden;background:rgba(15,22,19,.9)}
+.m360-rw-damage-schematic img{display:block;width:100%;height:auto;pointer-events:none;user-select:none}
+.m360-rw-damage-schematic figcaption{padding:.45rem .65rem;font-size:.82rem;color:var(--m360-muted);text-align:center;background:rgba(0,0,0,.22)}
+.m360-rw-damage-legend{display:flex;flex-wrap:wrap;gap:.75rem;margin:.35rem 0 1rem;font-size:.9rem}
+.m360-rw-damage-legend span{display:inline-flex;align-items:center;gap:.35rem}
+.m360-rw-damage-swatch{width:.9rem;height:.9rem;border-radius:3px;border:1px solid rgba(255,255,255,.28);display:inline-block}
+.m360-rw-damage-swatch.is-healthy{background:rgba(46,160,67,.45)}
+.m360-rw-damage-swatch.is-minor{background:rgba(245,166,35,.55)}
+.m360-rw-damage-swatch.is-severe{background:rgba(220,53,69,.55)}
+.m360-rw-damage-selector{display:grid;gap:1rem;margin:.25rem 0 1rem}
+.m360-rw-damage-group{border:1px solid rgba(148,163,184,.22);border-radius:12px;padding:.65rem .75rem;background:rgba(0,0,0,.18);color:var(--m360-text)}
+.m360-rw-damage-group>h4{margin:0 0 .55rem;font-size:.98rem}
+.m360-rw-zone-row{display:grid;grid-template-columns:minmax(120px,1fr) minmax(0,2fr);gap:.5rem .75rem;align-items:center;padding:.5rem 0;border-top:1px solid rgba(148,163,184,.18)}
+.m360-rw-zone-row:first-of-type{border-top:0}
+.m360-rw-zone-label{font-size:.94rem;font-weight:600}
+.m360-rw-zone-seg{display:grid;grid-template-columns:repeat(3,1fr);gap:.4rem}
+.m360-rw-zone-seg button{min-height:44px;border:1px solid rgba(148,163,184,.28);border-radius:10px;background:rgba(15,22,19,.92);color:var(--m360-text);font-size:.9rem;cursor:pointer;padding:.3rem .35rem;transition:background .12s ease,border-color .12s ease,color .12s ease}
+.m360-rw-zone-seg button:focus-visible{outline:2px solid var(--m360-accent);outline-offset:2px}
+.m360-rw-zone-seg button.is-active[data-status="HEALTHY"]{background:rgba(34,197,94,.2);border-color:rgba(34,197,94,.7);color:#bbf7d0;font-weight:700}
+.m360-rw-zone-seg button.is-active[data-status="MINOR"]{background:rgba(245,166,35,.24);border-color:rgba(245,166,35,.7);color:#fde68a;font-weight:700}
+.m360-rw-zone-seg button.is-active[data-status="SEVERE"]{background:rgba(220,53,69,.24);border-color:rgba(248,113,113,.75);color:#fecaca;font-weight:700}
+.m360-rw-zone-row[data-assessed="0"] .m360-rw-zone-label::after{content:" • بررسی‌نشده";color:#fde68a;font-weight:500;font-size:.8rem}
+.m360-rw-damage-actions{display:flex;flex-wrap:wrap;gap:.5rem;margin:.35rem 0 1rem}
+.m360-rw-damage-actions .m360-rw-btn{min-height:42px}
+.m360-rw-damage-summary{margin:0 0 1rem;padding:.75rem .9rem;border-radius:10px;background:rgba(0,0,0,.2);border:1px solid rgba(148,163,184,.22);color:var(--m360-text)}
+.m360-rw-damage-summary h4{margin:0 0 .4rem;font-size:.98rem}
+.m360-rw-damage-summary ul{margin:0;padding-inline-start:1.2rem}
+@media (max-width:720px){
+  .m360-rw-trunk-row{grid-template-columns:1fr;gap:.25rem}
+  .m360-rw-zone-row{grid-template-columns:1fr}
+  .m360-rw-zone-seg button{min-height:48px}
+}
+</style>';
+
+    if ($condition['legacy_vehicle_items'] !== '') {
+        echo '<div class="m360-rw-field"><span class="m360-rw-field-lbl">یادداشت قدیمی متعلقات</span><span class="m360-rw-field-val">'
+            . m360_rw_h($condition['legacy_vehicle_items']) . '</span></div>';
+    }
+    if ($condition['legacy_visible_damage'] !== '') {
+        echo '<div class="m360-rw-field"><span class="m360-rw-field-lbl">یادداشت قدیمی وضعیت ظاهری</span><span class="m360-rw-field-val">'
+            . m360_rw_h($condition['legacy_visible_damage']) . '</span></div>';
+    }
+
+    echo '<form class="m360-rw-form" id="m360_rw_condition_form" method="post" action="' . m360_rw_h($saveUrl) . '">';
+    echo $csrfInputHtml;
+    echo '<input type="hidden" name="online_request_id" value="' . $onlineRequestId . '">';
+    echo '<input type="hidden" name="action_type" value="save_condition_notes">';
+    m360_rw_intake_return_step_hidden('condition');
+
+    echo '<h3 class="m360-rw-section-title">متعلقات صندوق</h3>';
+    echo '<div class="m360-rw-trunk-grid">';
+    foreach (m360_rw_intake_trunk_item_definitions() as $key => $label) {
+        $status = (string)($trunk[$key] ?? '');
+        echo '<div class="m360-rw-trunk-row"><span>' . m360_rw_h($label) . '</span>';
+        echo '<label><input type="radio" name="trunk_' . m360_rw_h($key) . '" value="PRESENT"' . ($status === 'PRESENT' ? ' checked' : '') . ' required> موجود</label>';
+        echo '<label><input type="radio" name="trunk_' . m360_rw_h($key) . '" value="ABSENT"' . ($status === 'ABSENT' ? ' checked' : '') . '> موجود نیست</label>';
+        echo '</div>';
+    }
+    $other = is_array($trunk['other'] ?? null) ? $trunk['other'] : ['selected' => false, 'text' => ''];
+    $otherOn = !empty($other['selected']);
+    echo '<div class="m360-rw-trunk-row" style="grid-template-columns:1fr">';
+    echo '<label><input type="checkbox" id="m360_rw_trunk_other_selected" name="trunk_other_selected" value="1"' . ($otherOn ? ' checked' : '') . '> سایر</label>';
+    echo '<input class="m360-rw-form-input" type="text" id="m360_rw_trunk_other_text" name="trunk_other_text" maxlength="500" placeholder="شرح اختیاری سایر" value="'
+        . m360_rw_h((string)($other['text'] ?? '')) . '"' . ($otherOn ? '' : ' hidden') . '>';
+    echo '</div></div>';
+
+    echo '<h3 class="m360-rw-section-title">وضعیت ظاهری خودرو</h3>';
+    echo '<figure class="m360-rw-damage-schematic">';
+    echo '<img src="assets/images/vehicle-condition-schematic.jpg?v=c11" alt="شماتیک مرجع نواحی خودرو" width="1024" height="765" loading="lazy" draggable="false">';
+    echo '<figcaption>شماتیک مرجع نواحی خودرو (فقط راهنمای بصری — غیرفعال)</figcaption>';
+    echo '</figure>';
+    echo '<div class="m360-rw-damage-legend">';
+    echo '<span><i class="m360-rw-damage-swatch is-healthy"></i> سالم</span>';
+    echo '<span><i class="m360-rw-damage-swatch is-minor"></i> آسیب جزئی</span>';
+    echo '<span><i class="m360-rw-damage-swatch is-severe"></i> آسیب شدید</span>';
+    echo '</div>';
+    echo '<p class="m360-rw-muted">برای هر ناحیه یکی از سه وضعیت را انتخاب کنید. عکس‌های شش‌گانه همچنان الزامی‌اند.</p>';
+
+    echo '<div class="m360-rw-damage-actions">';
+    echo '<button type="button" class="m360-rw-btn m360-rw-btn-secondary" id="m360_rw_damage_all_healthy">ثبت همه نواحی به‌عنوان سالم</button>';
+    echo '<button type="button" class="m360-rw-btn m360-rw-btn-secondary" id="m360_rw_damage_clear">پاک‌کردن انتخاب‌های ظاهری</button>';
+    echo '</div>';
+
+    echo '<div class="m360-rw-damage-selector" id="m360_rw_damage_selector">';
+    foreach (m360_rw_intake_damage_zone_groups() as $group) {
+        echo '<section class="m360-rw-damage-group">';
+        echo '<h4>' . m360_rw_h((string)$group['title']) . '</h4>';
+        $zoneLabels = m360_rw_intake_damage_zone_definitions();
+        foreach ($group['zones'] as $key) {
+            $label = $zoneLabels[$key] ?? $key;
+            $status = strtoupper((string)($zones[$key] ?? 'HEALTHY'));
+            if (!isset($labels[$status])) {
+                $status = 'HEALTHY';
+            }
+            $assessed = $structured ? '1' : '0';
+            echo '<div class="m360-rw-zone-row" data-zone="' . m360_rw_h($key) . '" data-label="' . m360_rw_h($label)
+                . '" data-status="' . m360_rw_h($status) . '" data-assessed="' . $assessed . '">';
+            echo '<span class="m360-rw-zone-label">' . m360_rw_h($label) . '</span>';
+            echo '<div class="m360-rw-zone-seg" role="group" aria-label="' . m360_rw_h($label) . '">';
+            foreach ($labels as $statusKey => $statusLabel) {
+                $active = ($assessed === '1' && $status === $statusKey);
+                echo '<button type="button" data-status="' . m360_rw_h($statusKey) . '"'
+                    . ($active ? ' class="is-active" aria-pressed="true"' : ' aria-pressed="false"') . '>'
+                    . m360_rw_h($statusLabel) . '</button>';
+            }
+            echo '</div>';
+            echo '<input type="hidden" name="damage_zone[' . m360_rw_h($key) . ']" id="m360_rw_damage_zone_'
+                . m360_rw_h($key) . '" value="' . m360_rw_h($status) . '">';
+            echo '</div>';
+        }
+        echo '</section>';
+    }
+    echo '</div>';
+
+    echo '<div class="m360-rw-damage-summary" id="m360_rw_damage_summary"><h4>آسیب‌های ثبت‌شده</h4><div id="m360_rw_damage_summary_body"></div></div>';
+
+    echo '<div class="m360-rw-form-field"><label class="m360-rw-form-label" for="damage_general_note">یادداشت عمومی (اختیاری)</label>';
+    echo '<textarea class="m360-rw-form-input m360-rw-form-textarea" id="damage_general_note" name="damage_general_note" rows="3">'
+        . m360_rw_h($condition['damage_general_note'] !== '' ? $condition['damage_general_note'] : (string)($formValues['initial_vehicle_condition'] ?? ''))
+        . '</textarea></div>';
+    echo '<button type="submit" class="m360-rw-btn">ذخیره و ادامه</button>';
+    echo '</form>';
+}
+
+/**
+ * @param array<string, mixed> $payload
+ * @return array{referral_team_id:string,referral_type:string}
+ */
+function m360_rw_intake_referral_canonical(array $payload): array
+{
+    $payload = m360_rw_intake_ensure_nested($payload);
+    $referral = is_array($payload['reception_intake']['referral'] ?? null) ? $payload['reception_intake']['referral'] : [];
+
+    return [
+        'referral_team_id' => trim((string)($referral['referral_team_id'] ?? '')),
+        'referral_type' => trim((string)($referral['referral_type'] ?? 'service_team')),
+    ];
+}
+
+/**
+ * @param array<string, mixed> $payload
+ */
+function m360_rw_intake_referral_step_complete(array $payload): bool
+{
+    return m360_rw_intake_hall_manager_step_complete($payload);
+}
+
+const M360_RW_INTAKE_CONTRACT_STATUS_PREPARED = 'prepared';
+const M360_RW_INTAKE_CONTRACT_STATUS_PENDING_CUSTOMER_REVIEW = 'pending_customer_review';
+const M360_RW_INTAKE_CONTRACT_STATUS_CUSTOMER_ACCEPTED = 'customer_accepted';
+const M360_RW_INTAKE_DOC_CONTRACT_STATUS_CUSTOMER_PENDING = 'customer_pending_review';
+const M360_RW_INTAKE_DOC_CONTRACT_STATUS_CUSTOMER_ACCEPTED = 'customer_accepted';
+const M360_RW_INTAKE_CARTABLE_STATUS_NOT_READY = 'not_ready';
+const M360_RW_INTAKE_CARTABLE_STATUS_PENDING = 'pending_customer_review';
+const M360_RW_INTAKE_CARTABLE_STATUS_CUSTOMER_ACCEPTED = 'customer_accepted';
+const M360_RW_INTAKE_CONTRACT_REVIEW_TTL_SECONDS = 172800;
+
+/**
+ * @param array<string, mixed> $payload
+ * @return array<string, mixed>
+ */
+function m360_rw_intake_contract_cartable_task(array $payload): array
+{
+    $payload = m360_rw_intake_ensure_nested($payload);
+    $cartable = is_array($payload['reception_intake']['customer_cartable'] ?? null)
+        ? $payload['reception_intake']['customer_cartable']
+        : [];
+    $task = is_array($cartable['contract_task'] ?? null) ? $cartable['contract_task'] : [];
+
+    return $task;
+}
+
+/**
+ * @param array<string, mixed> $payload
+ */
+function m360_rw_intake_contract_cartable_pending(array $payload): bool
+{
+    if (m360_rw_intake_contract_customer_accepted($payload)) {
+        return false;
+    }
+    $task = m360_rw_intake_contract_cartable_task($payload);
+    $taskStatus = trim((string)($task['status'] ?? ''));
+    if ($taskStatus === M360_RW_INTAKE_CARTABLE_STATUS_PENDING) {
+        return trim((string)($task['access_token_hash'] ?? '')) !== '';
+    }
+    $contract = is_array($payload['reception_intake']['contract'] ?? null) ? $payload['reception_intake']['contract'] : [];
+    $contractStatus = trim((string)($contract['status'] ?? ''));
+    $hasHash = trim((string)($contract['review_token_hash'] ?? '')) !== ''
+        || trim((string)($task['access_token_hash'] ?? '')) !== '';
+
+    return $hasHash && in_array($contractStatus, [
+        M360_RW_INTAKE_CONTRACT_STATUS_PREPARED,
+        M360_RW_INTAKE_CONTRACT_STATUS_PENDING_CUSTOMER_REVIEW,
+    ], true);
+}
+
+/**
+ * @param array<string, mixed> $payload
+ * @param array<string, string> $formValues
+ * @return array{diagnostic_ready:bool,cost_ready:bool,documents_cost_ready:bool}
+ */
+function m360_rw_intake_documents_cost_diagnostic_ready(array $payload, array $formValues): array
+{
+    $payload = m360_rw_intake_ensure_nested($payload);
+    $docs = is_array($payload['reception_intake']['documents'] ?? null) ? $payload['reception_intake']['documents'] : [];
+    $library = m360_rw_intake_documents_library_summary($payload);
+    $diagnosticReady = !empty($library['has_diagnostic_or_scanner'])
+        || trim((string)($formValues['diagnostic_status'] ?? '')) !== ''
+        || trim((string)($docs['diagnostic_status'] ?? '')) !== ''
+        || trim((string)($docs['diagnostic_pdf'] ?? '')) !== ''
+        || trim((string)($formValues['diagnostic_pdf'] ?? '')) !== '';
+    $agreementsReady = m360_rw_intake_agreements_ready($payload);
+    $costReady = !empty($agreementsReady['ready'])
+        || trim((string)($formValues['cost_agreement'] ?? '')) !== ''
+        || trim((string)($docs['cost_agreement'] ?? '')) !== ''
+        || trim((string)($payload['cost_agreement'] ?? '')) !== '';
+
+    return [
+        'diagnostic_ready' => $diagnosticReady,
+        'cost_ready' => $costReady,
+        'documents_cost_ready' => $diagnosticReady && $costReady,
+    ];
+}
+
+function m360_rw_intake_cartable_blocker_label_fa(string $stepKey, string $kind = 'item'): string
+{
+    $items = [
+        'otp' => 'تکمیل احراز هویت OTP مشتری',
+        'customer' => 'تکمیل اطلاعات مشتری',
+        'vehicle' => 'تکمیل اطلاعات خودرو',
+        'condition' => 'تکمیل وضعیت خودرو و تصاویر',
+        'service' => 'تکمیل مسیر خدمات',
+        'referral' => 'ارسال به مسئول سالن',
+        'diagnostic' => 'ثبت دیاگ',
+        'cost' => 'ثبت توافق هزینه',
+        'documents' => 'تکمیل چک‌لیست پذیرش و توافق اولیه',
+    ];
+    $actions = [
+        'otp' => 'بازگشت برای تکمیل احراز هویت مشتری',
+        'customer' => 'بازگشت برای تکمیل اطلاعات مشتری',
+        'vehicle' => 'بازگشت برای تکمیل اطلاعات خودرو',
+        'condition' => 'بازگشت برای تکمیل وضعیت خودرو و تصاویر',
+        'service' => 'بازگشت برای تکمیل مسیر خدمات',
+        'referral' => 'بازگشت برای ارسال به مسئول سالن',
+        'diagnostic' => 'بازگشت برای تکمیل چک‌لیست پذیرش',
+        'cost' => 'بازگشت برای تکمیل چک‌لیست پذیرش',
+        'documents' => 'بازگشت برای تکمیل چک‌لیست پذیرش',
+    ];
+
+    return $kind === 'action'
+        ? ($actions[$stepKey] ?? 'بازگشت برای تکمیل اطلاعات')
+        : ($items[$stepKey] ?? 'تکمیل مرحله ' . $stepKey);
+}
+
+/**
+ * @param array<string, mixed> $payload
+ * @param array<string, mixed> $requestRow
+ * @return array{
+ *   ready:bool,
+ *   blockers:list<array{step:string,label_fa:string,action_fa:string}>,
+ *   completed:list<string>,
+ *   first_blocker_step:string
+ * }
+ */
+function m360_rw_intake_contract_cartable_prerequisites(array $payload, array $requestRow): array
+{
+    $payload = m360_rw_intake_payload_for_recovery($payload);
+    $formValues = m360_rw_intake_form_values($payload, $requestRow);
+    $wizard = m360_rw_intake_get_wizard_step_state($payload, $requestRow);
+    $blockers = [];
+    $completed = [];
+
+    foreach (m360_rw_intake_reception_completion_keys() as $stepKey) {
+        if (!empty($wizard['steps'][$stepKey]['complete'])) {
+            $completed[] = $stepKey;
+            continue;
+        }
+        $blockers[] = [
+            'step' => $stepKey,
+            'label_fa' => m360_rw_intake_cartable_blocker_label_fa($stepKey, 'item'),
+            'action_fa' => m360_rw_intake_cartable_blocker_label_fa($stepKey, 'action'),
+        ];
+    }
+
+    $docReady = m360_rw_intake_documents_cost_diagnostic_ready($payload, $formValues);
+    if (!$docReady['diagnostic_ready']) {
+        $blockers[] = [
+            'step' => 'documents',
+            'label_fa' => m360_rw_intake_cartable_blocker_label_fa('diagnostic', 'item'),
+            'action_fa' => m360_rw_intake_cartable_blocker_label_fa('documents', 'action'),
+        ];
+    } else {
+        $completed[] = 'diagnostic';
+    }
+    if (!$docReady['cost_ready']) {
+        $blockers[] = [
+            'step' => 'documents',
+            'label_fa' => m360_rw_intake_cartable_blocker_label_fa('cost', 'item'),
+            'action_fa' => m360_rw_intake_cartable_blocker_label_fa('documents', 'action'),
+        ];
+    } else {
+        $completed[] = 'cost';
+    }
+
+    $firstBlocker = $blockers[0]['step'] ?? '';
+
+    return [
+        'ready' => $blockers === [],
+        'blockers' => $blockers,
+        'completed' => $completed,
+        'first_blocker_step' => $firstBlocker,
+    ];
+}
+
+/**
+ * @param array<string, mixed> $payload
+ * @param array<string, mixed> $requestRow
+ * @return string not_ready|ready|pending|accepted|returned_for_correction
+ */
+function m360_rw_intake_documents_cartable_ui_state(array $payload, array $requestRow): string
+{
+    if (m360_rw_intake_contract_customer_accepted($payload)) {
+        return 'accepted';
+    }
+    if (m360_rw_intake_contract_customer_correction_requested($payload)) {
+        return 'returned_for_correction';
+    }
+    if (m360_rw_intake_contract_cartable_pending($payload)) {
+        return 'pending';
+    }
+    $prereq = m360_rw_intake_contract_cartable_prerequisites($payload, $requestRow);
+    if (!$prereq['ready']) {
+        return 'not_ready';
+    }
+
+    return 'ready';
+}
+
+/**
+ * Customer returned contract for correction (payload flag; no schema).
+ *
+ * @param array<string, mixed> $payload
+ */
+function m360_rw_intake_contract_customer_correction_requested(array $payload): bool
+{
+    $payload = m360_rw_intake_ensure_nested($payload);
+    $contract = is_array($payload['reception_intake']['contract'] ?? null) ? $payload['reception_intake']['contract'] : [];
+    $status = strtoupper(trim((string)($contract['customer_correction_status'] ?? $contract['status'] ?? '')));
+
+    return $status === 'RETURNED_FOR_CORRECTION'
+        || !empty($contract['customer_correction_requested']);
+}
+
+/**
+ * @param array<string, mixed> $payload
+ */
+function m360_rw_intake_contract_customer_accepted(array $payload): bool
+{
+    $payload = m360_rw_intake_ensure_nested($payload);
+    $contract = is_array($payload['reception_intake']['contract'] ?? null) ? $payload['reception_intake']['contract'] : [];
+    $docs = is_array($payload['reception_intake']['documents'] ?? null) ? $payload['reception_intake']['documents'] : [];
+    $task = m360_rw_intake_contract_cartable_task($payload);
+    $status = trim((string)($contract['status'] ?? ''));
+    $docStatus = trim((string)($docs['contract_status'] ?? $payload['contract_status'] ?? ''));
+    $taskStatus = trim((string)($task['status'] ?? ''));
+
+    return $status === M360_RW_INTAKE_CONTRACT_STATUS_CUSTOMER_ACCEPTED
+        || $docStatus === M360_RW_INTAKE_CONTRACT_STATUS_CUSTOMER_ACCEPTED
+        || $docStatus === M360_RW_INTAKE_DOC_CONTRACT_STATUS_CUSTOMER_ACCEPTED
+        || $taskStatus === M360_RW_INTAKE_CARTABLE_STATUS_CUSTOMER_ACCEPTED;
+}
+
+function m360_rw_intake_contract_generate_review_token(int $requestId): string
+{
+    return rtrim(strtr(base64_encode($requestId . ':' . bin2hex(random_bytes(24))), '+/', '-_'), '=');
+}
+
+function m360_rw_intake_contract_parse_review_token(string $rawToken): int
+{
+    $rawToken = trim($rawToken);
+    if ($rawToken === '') {
+        return 0;
+    }
+    $decoded = base64_decode(strtr($rawToken, '-_', '+/'), true);
+    if ($decoded === false || !str_contains($decoded, ':')) {
+        return 0;
+    }
+    $parts = explode(':', $decoded, 2);
+    $requestId = (int)($parts[0] ?? 0);
+
+    return $requestId > 0 ? $requestId : 0;
+}
+
+function m360_rw_intake_contract_token_hash(string $rawToken): string
+{
+    return hash('sha256', trim($rawToken));
+}
+
+/**
+ * @param array<string, mixed> $payload
+ * @return array{ok:bool,error:string,request_id:int,expired:bool}
+ */
+function m360_rw_intake_contract_validate_review_token(array $payload, int $requestId, string $rawToken): array
+{
+    $invalidMessage = 'مأموریت قرارداد مشتری یافت نشد یا منقضی شده است.';
+    if ($requestId < 1 || trim($rawToken) === '') {
+        return ['ok' => false, 'error' => $invalidMessage, 'request_id' => 0, 'expired' => false];
+    }
+
+    $payload = m360_rw_intake_ensure_nested($payload);
+    $contract = is_array($payload['reception_intake']['contract'] ?? null) ? $payload['reception_intake']['contract'] : [];
+    $task = m360_rw_intake_contract_cartable_task($payload);
+    $storedHash = trim((string)($contract['review_token_hash'] ?? ''));
+    if ($storedHash === '') {
+        $storedHash = trim((string)($task['access_token_hash'] ?? ''));
+    }
+    if ($storedHash === '' || !hash_equals($storedHash, m360_rw_intake_contract_token_hash($rawToken))) {
+        return ['ok' => false, 'error' => $invalidMessage, 'request_id' => $requestId, 'expired' => false];
+    }
+
+    $expiresAt = trim((string)($task['access_token_expires_at'] ?? ''));
+    if ($expiresAt === '') {
+        $expiresAt = trim((string)($contract['review_token_expires_at'] ?? ''));
+    }
+    if ($expiresAt !== '') {
+        $expiresTs = strtotime($expiresAt);
+        if ($expiresTs !== false && time() > $expiresTs) {
+            return ['ok' => false, 'error' => $invalidMessage, 'request_id' => $requestId, 'expired' => true];
+        }
+    }
+
+    return ['ok' => true, 'error' => '', 'request_id' => $requestId, 'expired' => false];
+}
+
+function m360_rw_intake_contract_review_url(string $rawToken): string
+{
+    return 'customer-intake-contract-review.php?t=' . rawurlencode($rawToken);
+}
+
+/**
+ * @param resource $conn
+ * @param array<string, mixed> $payload
+ * @param array<string, mixed> $requestRow
+ * @return array{ok:bool,error:string,payload:array<string,mixed>,raw_token:string}
+ */
+function m360_rw_intake_bootstrap_contract_cartable_task($conn, int $requestId, array $requestRow, array $payload, int $userId): array
+{
+    if ($requestId < 1) {
+        return ['ok' => false, 'error' => 'شناسه درخواست نامعتبر است.', 'payload' => $payload, 'raw_token' => ''];
+    }
+
+    $payload = m360_rw_intake_ensure_nested($payload);
+    $rawToken = m360_rw_intake_contract_generate_review_token($requestId);
+    $tokenHash = m360_rw_intake_contract_token_hash($rawToken);
+    $now = gmdate('Y-m-d\TH:i:s\Z');
+    $expires = gmdate('Y-m-d\TH:i:s\Z', time() + M360_RW_INTAKE_CONTRACT_REVIEW_TTL_SECONDS);
+    $mobile = m360_rw_intake_resolve_mobile_for_otp($requestRow, $payload);
+    $vehicle = m360_rw_intake_vehicle_canonical($payload, $requestRow);
+    $summary = m360_rw_intake_contract_review_summary($payload, $requestRow);
+    $agreements = m360_rw_intake_agreements_from_payload($payload);
+    $minDigits = preg_replace('/[^\d]/', '', (string)($agreements['service_cost_min'] ?? '')) ?? '';
+    $maxDigits = preg_replace('/[^\d]/', '', (string)($agreements['service_cost_max'] ?? '')) ?? '';
+    $rangeFa = '';
+    if ($minDigits !== '' && $maxDigits !== '' && function_exists('m360_format_number')) {
+        $rangeFa = 'از ' . m360_format_number((int)$minDigits) . ' تا ' . m360_format_number((int)$maxDigits) . ' ریال';
+    }
+    $costAgreement = $summary['cost_agreement'] !== '' ? $summary['cost_agreement'] : $rangeFa;
+    $snapshot = [
+        'customer_name' => $summary['customer_name'] !== '' ? $summary['customer_name'] : (string)($requestRow['customer_name'] ?? '-'),
+        'mobile' => $mobile !== '' ? $mobile : '-',
+        'vehicle' => $summary['brand_model'] !== '' ? $summary['brand_model'] : '-',
+        'plate' => $vehicle['plate'] !== '' ? $vehicle['plate'] : (string)($requestRow['vehicle_plate'] ?? '-'),
+        'vin' => $vehicle['vin'] !== '' ? $vehicle['vin'] : '-',
+        'odometer' => $vehicle['mileage'] !== '' ? $vehicle['mileage'] : '-',
+        'service_type' => $summary['service_route'] !== '' ? $summary['service_route'] : '-',
+        'cost_range' => $costAgreement !== '' ? $costAgreement : '-',
+        'visit_date' => trim((string)($requestRow['visit_date'] ?? ($payload['visit_date'] ?? date('Y-m-d')))),
+        'reception_date' => date('Y-m-d'),
+    ];
+    if ($minDigits !== '') {
+        $snapshot['service_cost_min'] = $minDigits;
+    }
+    if ($maxDigits !== '') {
+        $snapshot['service_cost_max'] = $maxDigits;
+    }
+    if ($rangeFa !== '' && ($snapshot['cost_range'] === '-' || $snapshot['cost_range'] === '')) {
+        $snapshot['cost_range'] = $rangeFa;
+    }
+    $thirdFa = m360_rw_intake_agreement_yes_no_fa((string)($agreements['third_party_insurance'] ?? ''));
+    $bodyFa = m360_rw_intake_agreement_yes_no_fa((string)($agreements['body_insurance'] ?? ''));
+    $testFa = m360_rw_intake_agreement_yes_no_fa((string)($agreements['test_drive_permission'] ?? ''));
+    $purchaseFa = m360_rw_intake_part_purchase_authorization_fa((string)($agreements['part_purchase_authorization'] ?? ''));
+    if ($thirdFa !== '' && $thirdFa !== '—') {
+        $snapshot['third_party_insurance'] = $thirdFa;
+    }
+    if ($bodyFa !== '' && $bodyFa !== '—') {
+        $snapshot['body_insurance_status'] = $bodyFa;
+    }
+    if ($testFa !== '' && $testFa !== '—') {
+        $snapshot['test_drive_allowed'] = $testFa;
+    }
+    if ($purchaseFa !== '' && $purchaseFa !== '—') {
+        $snapshot['purchase_limit'] = $purchaseFa;
+    }
+    $otherNote = trim((string)($agreements['other_agreements_note'] ?? ''));
+    if ($otherNote !== '') {
+        $snapshot['other_agreements_note'] = $otherNote;
+    }
+
+    $contractId = 0;
+    if (!is_resource($conn)) {
+        return ['ok' => false, 'error' => 'اتصال به پایگاه داده برقرار نشد.', 'payload' => $payload, 'raw_token' => ''];
+    }
+    $generated = m360_intake_contract_generate_for_online_request(
+        $conn,
+        $requestId,
+        $rawToken,
+        gmdate('Y-m-d H:i:s', time() + M360_RW_INTAKE_CONTRACT_REVIEW_TTL_SECONDS),
+        $mobile,
+        (int)($requestRow['customer_id'] ?? 0) ?: null,
+        (int)($requestRow['vehicle_id'] ?? 0) ?: null,
+        $snapshot
+    );
+    if (!$generated['ok'] && empty($generated['reused'])) {
+        return ['ok' => false, 'error' => (string)($generated['message'] ?? 'ثبت قرارداد ناموفق بود.'), 'payload' => $payload, 'raw_token' => ''];
+    }
+    $contractId = (int)($generated['contract_id'] ?? 0);
+
+    if ($contractId > 0) {
+        m360_rw_intake_ensure_canonical_contract_cartable_task(
+            $conn,
+            $requestId,
+            $requestRow,
+            $payload,
+            $contractId,
+            $tokenHash,
+            $expires,
+            'STAFF',
+            (string)$userId
+        );
+    }
+
+    if (!isset($payload['reception_intake']['customer_cartable']) || !is_array($payload['reception_intake']['customer_cartable'])) {
+        $payload['reception_intake']['customer_cartable'] = [];
+    }
+    $payload['reception_intake']['customer_cartable']['contract_task'] = [
+        'status' => M360_RW_INTAKE_CARTABLE_STATUS_PENDING,
+        'title' => M360_RW_INTAKE_CARTABLE_TASK_TITLE_FA,
+        'message' => M360_RW_INTAKE_CARTABLE_TASK_MESSAGE_FA,
+        'assigned_at' => gmdate('Y-m-d H:i:s'),
+        'assigned_by_user_id' => (string)$userId,
+        'customer_mobile' => $mobile,
+        'contract_id' => $contractId > 0 ? (string)$contractId : '',
+        'access_token_hash' => $tokenHash,
+        'access_token_created_at' => $now,
+        'access_token_expires_at' => $expires,
+        'review_url_path' => m360_rw_intake_contract_review_url($rawToken),
+    ];
+    if (!isset($payload['reception_intake']['contract']) || !is_array($payload['reception_intake']['contract'])) {
+        $payload['reception_intake']['contract'] = [];
+    }
+    $payload['reception_intake']['contract'] = array_merge($payload['reception_intake']['contract'], [
+        'status' => M360_RW_INTAKE_CONTRACT_STATUS_PENDING_CUSTOMER_REVIEW,
+        'contract_id' => $contractId > 0 ? (string)$contractId : '',
+        'contract_version' => M360_CONTRACT_VERSION,
+        'review_token_hash' => $tokenHash,
+        'review_token_created_at' => $now,
+        'review_token_expires_at' => $expires,
+        'prepared_at' => $now,
+    ]);
+    if (!isset($payload['reception_intake']['documents']) || !is_array($payload['reception_intake']['documents'])) {
+        $payload['reception_intake']['documents'] = [];
+    }
+    $payload['reception_intake']['documents']['contract_status'] = M360_RW_INTAKE_DOC_CONTRACT_STATUS_CUSTOMER_PENDING;
+    $payload['contract_status'] = M360_RW_INTAKE_CONTRACT_STATUS_PENDING_CUSTOMER_REVIEW;
+
+    $validate = m360_rw_intake_contract_validate_review_token($payload, $requestId, $rawToken);
+    if (!$validate['ok']) {
+        return ['ok' => false, 'error' => 'خطای داخلی: ذخیره توکن کارتابل مشتری تأیید نشد.', 'payload' => $payload, 'raw_token' => ''];
+    }
+
+    $payload['_contract_review_token_once'] = $rawToken;
+    $payload['_contract_sms_after_save'] = '1';
+    m360_rw_intake_mark_section_saved($payload, 'contract');
+
+    return ['ok' => true, 'error' => '', 'payload' => $payload, 'raw_token' => $rawToken];
+}
+
+/**
+ * @param resource $conn
+ * @param array<string, mixed> $requestRow
+ * @param array<string, mixed> $payload
+ * @return array{ok:bool,contract_id:int,message:string}
+ */
+function m360_rw_intake_ensure_db_contract_for_cartable($conn, int $requestId, array $requestRow, array $payload, string $rawToken): array
+{
+    if (!is_resource($conn) || $requestId < 1 || trim($rawToken) === '') {
+        return ['ok' => false, 'contract_id' => 0, 'message' => 'اطلاعات ناقص است.'];
+    }
+    $existing = m360_intake_contract_find_active_for_online_request($conn, $requestId);
+    if ($existing !== null) {
+        $contractId = (int)($existing['contract_id'] ?? 0);
+        if ($contractId > 0) {
+            $payload = m360_rw_intake_ensure_nested($payload);
+            $task = m360_rw_intake_contract_cartable_task($payload);
+            $tokenHash = trim((string)($task['access_token_hash'] ?? ($existing['secure_token_hash'] ?? '')));
+            $expires = trim((string)($task['access_token_expires_at'] ?? ($existing['secure_token_expires_at'] ?? '')));
+            m360_rw_intake_ensure_canonical_contract_cartable_task(
+                $conn,
+                $requestId,
+                $requestRow,
+                $payload,
+                $contractId,
+                $tokenHash,
+                $expires,
+                'SYSTEM',
+                'ensure_db_contract_existing'
+            );
+        }
+
+        return ['ok' => true, 'contract_id' => $contractId, 'message' => ''];
+    }
+    $payload = m360_rw_intake_ensure_nested($payload);
+    $task = m360_rw_intake_contract_cartable_task($payload);
+    $expires = trim((string)($task['access_token_expires_at'] ?? ''));
+    if ($expires === '') {
+        $expires = gmdate('Y-m-d H:i:s', time() + M360_RW_INTAKE_CONTRACT_REVIEW_TTL_SECONDS);
+    } else {
+        $expires = str_replace('T', ' ', substr($expires, 0, 19));
+    }
+    $mobile = m360_rw_intake_resolve_mobile_for_otp($requestRow, $payload);
+    $vehicle = m360_rw_intake_vehicle_canonical($payload, $requestRow);
+    $summary = m360_rw_intake_contract_review_summary($payload, $requestRow);
+    $snapshot = [
+        'customer_name' => $summary['customer_name'] !== '' ? $summary['customer_name'] : (string)($requestRow['customer_name'] ?? '-'),
+        'mobile' => $mobile !== '' ? $mobile : '-',
+        'vehicle' => $summary['brand_model'] !== '' ? $summary['brand_model'] : '-',
+        'plate' => $vehicle['plate'] !== '' ? $vehicle['plate'] : (string)($requestRow['vehicle_plate'] ?? '-'),
+        'vin' => $vehicle['vin'] !== '' ? $vehicle['vin'] : '-',
+        'odometer' => $vehicle['mileage'] !== '' ? $vehicle['mileage'] : '-',
+        'service_type' => $summary['service_route'] !== '' ? $summary['service_route'] : '-',
+        'cost_range' => $summary['cost_agreement'] !== '' ? $summary['cost_agreement'] : '-',
+        'visit_date' => trim((string)($requestRow['visit_date'] ?? ($payload['visit_date'] ?? date('Y-m-d')))),
+        'reception_date' => date('Y-m-d'),
+    ];
+    $generated = m360_intake_contract_generate_for_online_request(
+        $conn,
+        $requestId,
+        $rawToken,
+        $expires,
+        $mobile,
+        (int)($requestRow['customer_id'] ?? 0) ?: null,
+        (int)($requestRow['vehicle_id'] ?? 0) ?: null,
+        $snapshot
+    );
+    if (!$generated['ok'] && empty($generated['reused'])) {
+        return ['ok' => false, 'contract_id' => 0, 'message' => (string)($generated['message'] ?? '')];
+    }
+    $contractId = (int)($generated['contract_id'] ?? 0);
+    if ($contractId > 0) {
+        $task = m360_rw_intake_contract_cartable_task($payload);
+        $tokenHash = trim((string)($task['access_token_hash'] ?? ''));
+        if ($tokenHash === '' && function_exists('m360_rw_intake_contract_token_hash')) {
+            $tokenHash = m360_rw_intake_contract_token_hash($rawToken);
+        }
+        m360_rw_intake_ensure_canonical_contract_cartable_task(
+            $conn,
+            $requestId,
+            $requestRow,
+            $payload,
+            $contractId,
+            $tokenHash,
+            $expires,
+            'SYSTEM',
+            'ensure_db_contract'
+        );
+        $payload['reception_intake']['contract']['contract_id'] = (string)$contractId;
+        $payload['reception_intake']['customer_cartable']['contract_task']['contract_id'] = (string)$contractId;
+        m360_rw_intake_persist_payload($conn, $requestId, $payload, []);
+    }
+
+    return ['ok' => $contractId > 0, 'contract_id' => $contractId, 'message' => ''];
+}
+
+/**
+ * @param array<string, mixed> $requestRow
+ * @param array<string, mixed> $payload
+ * @return array{ok:bool,task_id:int,created_new:bool,message:string}
+ */
+function m360_rw_intake_ensure_canonical_contract_cartable_task(
+    $conn,
+    int $requestId,
+    array $requestRow,
+    array $payload,
+    int $contractId,
+    string $tokenHash,
+    string $tokenExpiresAt,
+    string $actorType,
+    ?string $actorId
+): array {
+    $empty = ['ok' => false, 'task_id' => 0, 'created_new' => false, 'message' => ''];
+    if (!is_resource($conn) || $requestId < 1 || $contractId < 1 || !m360_cartable_tables_available($conn)) {
+        return array_merge($empty, ['message' => 'unavailable']);
+    }
+
+    $mobile = m360_rw_intake_resolve_mobile_for_otp($requestRow, $payload);
+    $mobile = m360_cartable_normalize_mobile($mobile);
+    if ($mobile === '') {
+        return array_merge($empty, ['message' => 'missing_mobile']);
+    }
+
+    $customerId = (int)($requestRow['customer_id'] ?? 0);
+    if ($customerId < 1) {
+        $customerRow = m360_rw_customer_profile_fetch_customer_row($conn, $mobile);
+        $customerId = (int)($customerRow['customer_id'] ?? 0);
+    }
+
+    $expiresAt = trim($tokenExpiresAt) !== '' ? str_replace('T', ' ', substr($tokenExpiresAt, 0, 19)) : null;
+    $created = m360_cartable_create_or_get_active($conn, [
+        'customer_id' => $customerId > 0 ? $customerId : null,
+        'customer_mobile_normalized' => $mobile,
+        'task_type' => M360_CARTABLE_TASK_TYPE_CONTRACT_SIGNATURE,
+        'title' => M360_CARTABLE_CONTRACT_TITLE_FA,
+        'message' => M360_CARTABLE_CONTRACT_MESSAGE_FA,
+        'priority' => M360_CARTABLE_CONTRACT_PRIORITY,
+        'status' => M360_CARTABLE_STATUS_PENDING,
+        'source_module' => M360_CARTABLE_SOURCE_MODULE_INTAKE_CONTRACT,
+        'source_entity_type' => M360_CARTABLE_SOURCE_ENTITY_TYPE_INTAKE_CONTRACT,
+        'source_entity_id' => (string)$contractId,
+        'online_request_id' => $requestId,
+        'contract_id' => $contractId,
+        'action_route' => M360_CARTABLE_CONTRACT_ACTION_ROUTE,
+        'action_token_hash' => trim($tokenHash) !== '' ? trim($tokenHash) : null,
+        'action_expires_at' => $expiresAt,
+        'created_by_actor_type' => $actorType,
+        'created_by_actor_id' => $actorId,
+        'event_type' => M360_CARTABLE_EVENT_SYNCED_FROM_MODULE,
+        'event_metadata' => ['online_request_id' => $requestId, 'contract_id' => $contractId],
+    ]);
+
+    if (!$created['ok']) {
+        return array_merge($empty, ['message' => (string)$created['message']]);
+    }
+
+    if ($created['created_new']) {
+        m360_cartable_append_event(
+            $conn,
+            (int)$created['task_id'],
+            M360_CARTABLE_EVENT_SYNCED_TO_COMPATIBILITY_PAYLOAD,
+            $actorType,
+            $actorId,
+            null,
+            null,
+            ['online_request_id' => $requestId, 'contract_id' => $contractId]
+        );
+    }
+
+    return [
+        'ok' => true,
+        'task_id' => (int)$created['task_id'],
+        'created_new' => (bool)$created['created_new'],
+        'message' => '',
+    ];
+}
+
+/**
+ * @param array<string, mixed> $contractRow
+ * @return array{ok:bool,message:string,changed:bool,compatibility_only:bool}
+ */
+function m360_rw_intake_complete_canonical_contract_cartable_task(
+    $conn,
+    array $contractRow,
+    string $completedChannel = 'CUSTOMER_PORTAL'
+): array {
+    $empty = ['ok' => false, 'message' => 'unavailable', 'changed' => false, 'compatibility_only' => false];
+    if (!is_resource($conn) || !m360_cartable_tables_available($conn)) {
+        return $empty;
+    }
+
+    $contractId = (int)($contractRow['contract_id'] ?? 0);
+    if ($contractId < 1) {
+        return array_merge($empty, ['message' => 'missing_contract']);
+    }
+
+    $task = m360_cartable_find_active_by_source(
+        $conn,
+        M360_CARTABLE_SOURCE_MODULE_INTAKE_CONTRACT,
+        M360_CARTABLE_SOURCE_ENTITY_TYPE_INTAKE_CONTRACT,
+        (string)$contractId,
+        M360_CARTABLE_TASK_TYPE_CONTRACT_SIGNATURE
+    );
+    if ($task === null) {
+        return ['ok' => true, 'message' => 'no_canonical_task', 'changed' => false, 'compatibility_only' => true];
+    }
+
+    $result = m360_cartable_complete_task(
+        $conn,
+        (int)$task['task_id'],
+        'CUSTOMER',
+        m360_cartable_normalize_mobile((string)($contractRow['mobile'] ?? '')),
+        $completedChannel,
+        ['contract_id' => $contractId, 'online_request_id' => (int)($contractRow['online_request_id'] ?? 0)]
+    );
+
+    return [
+        'ok' => $result['ok'],
+        'message' => (string)$result['message'],
+        'changed' => (bool)$result['changed'],
+        'compatibility_only' => false,
+    ];
+}
+
+/**
+ * @param resource $conn
+ * @param array<string, mixed> $contractRow
+ */
+function m360_rw_intake_sync_cartable_from_signed_contract($conn, array $contractRow): void
+{
+    if (!is_resource($conn)) {
+        return;
+    }
+    $requestId = (int)($contractRow['online_request_id'] ?? 0);
+    $contractId = (int)($contractRow['contract_id'] ?? 0);
+    if ($requestId < 1 || $contractId < 1) {
+        return;
+    }
+    $request = m360_online_req_fetch_by_id($conn, $requestId);
+    if ($request === null) {
+        return;
+    }
+    $payload = m360_online_req_parse_payload($request['request_payload_json'] ?? null);
+    $payload = m360_rw_intake_payload_for_recovery($payload);
+    if (m360_rw_intake_contract_customer_accepted($payload)) {
+        return;
+    }
+
+    $payload = m360_rw_intake_ensure_nested($payload);
+    $now = gmdate('Y-m-d\TH:i:s\Z');
+    $mobile = trim((string)($contractRow['mobile'] ?? ''));
+    $task = m360_rw_intake_contract_cartable_task($payload);
+    $payload['reception_intake']['customer_cartable']['contract_task'] = array_merge($task, [
+        'status' => M360_RW_INTAKE_CARTABLE_STATUS_CUSTOMER_ACCEPTED,
+        'title' => M360_RW_INTAKE_CARTABLE_TASK_TITLE_FA,
+        'contract_id' => (string)$contractId,
+        'accepted_at' => gmdate('Y-m-d H:i:s'),
+        'completed_at' => gmdate('Y-m-d H:i:s'),
+        'accepted_mobile' => $mobile,
+        'acceptance_method' => 'contract_signature_otp_confirmed',
+        'review_url_path' => '',
+    ]);
+    $payload['reception_intake']['contract'] = array_merge(
+        is_array($payload['reception_intake']['contract'] ?? null) ? $payload['reception_intake']['contract'] : [],
+        [
+            'status' => M360_RW_INTAKE_CONTRACT_STATUS_CUSTOMER_ACCEPTED,
+            'contract_id' => (string)$contractId,
+            'customer_accepted_at' => $now,
+            'acceptance_method' => 'contract_signature_otp_confirmed',
+            'contract_body_hash' => (string)($contractRow['contract_body_hash'] ?? ''),
+        ]
+    );
+    $payload['reception_intake']['documents']['contract_status'] = M360_RW_INTAKE_DOC_CONTRACT_STATUS_CUSTOMER_ACCEPTED;
+    $payload['contract_status'] = M360_RW_INTAKE_CONTRACT_STATUS_CUSTOMER_ACCEPTED;
+    if (!isset($payload['reception_intake']['operation_gate']) || !is_array($payload['reception_intake']['operation_gate'])) {
+        $payload['reception_intake']['operation_gate'] = [];
+    }
+    $payload['reception_intake']['operation_gate']['contract_customer_confirmed'] = true;
+    $payload['reception_intake']['operation_gate']['contract_confirmed_at'] = $now;
+    $payload['reception_intake']['operation_gate']['contract_pending_customer_review'] = false;
+    if (m360_rw_intake_reception_is_completed($payload)) {
+        $payload = m360_rw_intake_sync_prepayment_gate_for_context($conn, $request, $payload);
+        $prepayment = m360_rw_intake_prepayment_state_for_context($conn, $request, $payload);
+        $payload['reception_intake']['operation_gate']['hall_manager_allowed'] = !empty($prepayment['allow_handoff']);
+        $payload['reception_intake']['operation_gate']['prepayment_gate'] = $prepayment;
+        $payload['reception_intake']['operation_gate']['message_fa'] = !empty($prepayment['allow_handoff']) ? '' : (string)$prepayment['message'];
+    }
+
+    m360_rw_intake_persist_payload($conn, $requestId, $payload, []);
+    m360_online_req_write_history(
+        $conn,
+        $requestId,
+        'CUSTOMER_CONTRACT_SIGNATURE_CONFIRMED',
+        (string)($request['request_status'] ?? ''),
+        (string)($request['request_status'] ?? ''),
+        'contract_id=' . $contractId,
+        null
+    );
+}
+
+function m360_rw_intake_store_contract_review_token_once(int $requestId, string $rawToken): void
+{
+    if ($requestId < 1 || trim($rawToken) === '') {
+        return;
+    }
+    if (session_status() !== PHP_SESSION_ACTIVE) {
+        @session_start();
+    }
+    $_SESSION['m360_rw_contract_token_' . $requestId] = $rawToken;
+}
+
+function m360_rw_intake_consume_contract_review_token_once(int $requestId): string
+{
+    if ($requestId < 1) {
+        return '';
+    }
+    if (session_status() !== PHP_SESSION_ACTIVE) {
+        @session_start();
+    }
+    $key = 'm360_rw_contract_token_' . $requestId;
+    $token = trim((string)($_SESSION[$key] ?? ''));
+    unset($_SESSION[$key]);
+
+    return $token;
+}
+
+/**
+ * @param array<string, mixed> $payloadData
+ * @param array<string, mixed> $request
+ */
+function m360_rw_intake_render_documents_contract_staff_block(
+    int $onlineRequestId,
+    array $payloadData,
+    array $request,
+    string $csrfInputHtml,
+    string $saveUrl,
+    bool $canShowStepForm
+): void {
+    $uiState = m360_rw_intake_documents_cartable_ui_state($payloadData, $request);
+    $prereq = m360_rw_intake_contract_cartable_prerequisites($payloadData, $request);
+    $contractStatus = m360_rw_intake_contract_status_label_fa($payloadData);
+    $mobileRaw = m360_rw_intake_resolve_mobile_for_otp($request, $payloadData);
+    $mobileMasked = $mobileRaw !== '' && function_exists('m360_contract_mask_mobile')
+        ? m360_contract_mask_mobile($mobileRaw)
+        : ($mobileRaw !== '' ? (substr(preg_replace('/\D+/', '', $mobileRaw) ?? '', 0, 4) . '***' . substr(preg_replace('/\D+/', '', $mobileRaw) ?? '', -4)) : '—');
+    $smsMeta = is_array($payloadData['reception_intake']['operation_gate']['contract_sms'] ?? null)
+        ? $payloadData['reception_intake']['operation_gate']['contract_sms']
+        : [];
+    $taskMeta = m360_rw_intake_contract_cartable_task($payloadData);
+    $cartableActive = m360_rw_intake_contract_cartable_pending($payloadData)
+        || trim((string)($taskMeta['status'] ?? '')) !== '';
+
+    echo '<div class="m360-rw-contract-staff-block" id="section-documents-contract">';
+    echo '<h3 class="m360-rw-section-title">وضعیت قرارداد و ارسال به مشتری</h3>';
+    echo '<p class="m360-rw-muted">وضعیت قرارداد: <strong>' . m360_rw_h($contractStatus) . '</strong></p>';
+    $agreementsPreview = m360_rw_intake_agreements_from_payload($payloadData);
+    $minPreview = preg_replace('/[^\d]/', '', (string)($agreementsPreview['service_cost_min'] ?? '')) ?? '';
+    $maxPreview = preg_replace('/[^\d]/', '', (string)($agreementsPreview['service_cost_max'] ?? '')) ?? '';
+    echo '<div class="m360-rw-field-grid m360-rw-contract-cost-preview">';
+    echo '<div class="m360-rw-field"><span class="m360-rw-field-lbl">حداقل هزینه خدمات</span><span class="m360-rw-field-val">'
+        . m360_rw_h($minPreview !== '' && function_exists('m360_format_money_irr') ? m360_format_money_irr($minPreview) : 'ثبت نشده')
+        . '</span></div>';
+    echo '<div class="m360-rw-field"><span class="m360-rw-field-lbl">حداکثر هزینه خدمات</span><span class="m360-rw-field-val">'
+        . m360_rw_h($maxPreview !== '' && function_exists('m360_format_money_irr') ? m360_format_money_irr($maxPreview) : 'ثبت نشده')
+        . '</span></div>';
+    echo '</div>';
+    echo '<div class="m360-rw-field-grid m360-rw-sms-cartable-status">';
+    echo '<div class="m360-rw-field"><span class="m360-rw-field-lbl">کارتابل مشتری</span><span class="m360-rw-field-val">'
+        . m360_rw_h($cartableActive ? 'فعال' : 'غیرفعال') . '</span></div>';
+    echo '<div class="m360-rw-field"><span class="m360-rw-field-lbl">مقصد پیامک</span><span class="m360-rw-field-val">'
+        . m360_rw_h($mobileMasked) . '</span></div>';
+    $smsLabel = 'هنوز ارسال نشده';
+    if ($smsMeta !== []) {
+        if (!empty($smsMeta['sent'])) {
+            $smsLabel = 'پیامک ارسال شد به: ' . $mobileMasked;
+        } else {
+            $reason = trim((string)($smsMeta['skipped_reason'] ?? ''));
+            $reasonFa = match ($reason) {
+                'sms_not_configured' => 'پیکربندی پیامک موجود نیست',
+                'automated_or_cli' => 'حالت تست/بدون ارسال واقعی',
+                'missing_mobile' => 'شماره موبایل موجود نیست',
+                'invalid_mobile' => 'شماره موبایل نامعتبر است',
+                'otp_helper_missing', 'otp_helper_incomplete' => 'زیرساخت پیامک در دسترس نیست',
+                'unsupported_provider' => 'سرویس‌دهنده پیامک پشتیبانی نمی‌شود',
+                default => (trim((string)($smsMeta['message'] ?? '')) !== ''
+                    ? (string)$smsMeta['message']
+                    : ($reason !== '' ? $reason : 'دلیل نامشخص')),
+            };
+            $smsLabel = 'لینک قرارداد در کارتابل مشتری فعال شد، اما پیامک واقعی ارسال نشد: ' . $reasonFa;
+        }
+    }
+    echo '<div class="m360-rw-field"><span class="m360-rw-field-lbl">وضعیت پیامک</span><span class="m360-rw-field-val">'
+        . m360_rw_h($smsLabel) . '</span></div>';
+    echo '</div>';
+
+    $signed = $uiState === 'accepted';
+    if (!$signed) {
+        echo '<div class="m360-rw-contract-revision-actions">';
+        echo '<p class="m360-rw-muted"><strong>ویرایش اطلاعات قرارداد</strong> — قبل از امضای مشتری، از مسیر کنترل‌شده پذیرش اصلاح کنید:</p>';
+        echo '<div class="m360-rw-contract-edit-links">';
+        echo '<a class="m360-rw-btn m360-rw-btn-secondary" href="' . m360_rw_h(m360_rw_intake_step_go_url($onlineRequestId, 'customer')) . '">مشتری</a>';
+        echo '<a class="m360-rw-btn m360-rw-btn-secondary" href="' . m360_rw_h(m360_rw_intake_step_go_url($onlineRequestId, 'vehicle')) . '">خودرو / مراجعه</a>';
+        echo '<a class="m360-rw-btn m360-rw-btn-secondary" href="' . m360_rw_h(m360_rw_intake_step_go_url($onlineRequestId, 'service')) . '">خدمت</a>';
+        echo '<a class="m360-rw-btn m360-rw-btn-secondary" href="' . m360_rw_h(m360_rw_intake_step_go_url($onlineRequestId, 'documents')) . '#section-documents-files">اسناد / هزینه</a>';
+        echo '</div>';
+        echo '<p class="m360-rw-warn">پذیرش مجاز به امضا یا تأیید قرارداد به‌جای مشتری نیست.</p>';
+        echo '</div>';
+    }
+
+    if ($uiState === 'returned_for_correction') {
+        echo '<div class="m360-rw-flash is-err">';
+        echo '<p><strong>مشتری قرارداد را برای اصلاح برگرداند.</strong></p>';
+        $corrNote = trim((string)($payloadData['reception_intake']['contract']['customer_correction_note'] ?? ''));
+        if ($corrNote !== '') {
+            echo '<p>دلیل اصلاح: ' . m360_rw_h($corrNote) . '</p>';
+        }
+        echo '<p class="m360-rw-muted">پس از اصلاح داده‌های پذیرش، قرارداد را دوباره برای مشتری ارسال کنید. تأیید قبلی مشتری باطل/منسوخ می‌شود.</p>';
+        echo '</div>';
+        if ($canShowStepForm) {
+            echo '<form class="m360-rw-form" method="post" action="' . m360_rw_h($saveUrl) . '">';
+            echo $csrfInputHtml;
+            echo '<input type="hidden" name="online_request_id" value="' . $onlineRequestId . '">';
+            echo '<input type="hidden" name="action_type" value="prepare_customer_contract_review">';
+            m360_rw_intake_return_step_hidden('documents');
+            echo '<button type="submit" class="m360-rw-btn">ارسال مجدد قرارداد برای مشتری</button>';
+            echo '</form>';
+        }
+    } elseif ($uiState === 'not_ready') {
+        echo '<div class="m360-rw-alert m360-rw-cartable-blockers">';
+        echo '<p><strong>پرونده هنوز آماده ارسال به کارتابل مشتری نیست.</strong></p>';
+        echo '<p>موارد ناقص:</p><ul>';
+        foreach ($prereq['blockers'] as $blocker) {
+            echo '<li>' . m360_rw_h((string)($blocker['label_fa'] ?? '')) . '</li>';
+        }
+        echo '</ul>';
+        $firstStep = trim((string)($prereq['first_blocker_step'] ?? ''));
+        if ($firstStep !== '' && $firstStep !== 'documents') {
+            $actionLabel = m360_rw_intake_cartable_blocker_label_fa($firstStep, 'action');
+            $goUrl = m360_rw_intake_step_go_url($onlineRequestId, $firstStep);
+            echo '<a class="m360-rw-btn m360-rw-btn-secondary" href="' . m360_rw_h($goUrl) . '">' . m360_rw_h($actionLabel) . '</a>';
+        } elseif ($firstStep === 'documents') {
+            echo '<p class="m360-rw-muted">لطفاً چک‌لیست پذیرش، دیاگ و توافق اولیه هزینه را در Step 6 تکمیل کنید.</p>';
+        }
+        echo '</div>';
+    } elseif ($uiState === 'ready') {
+        if ($canShowStepForm) {
+            echo '<form class="m360-rw-form" method="post" action="' . m360_rw_h($saveUrl) . '">';
+            echo $csrfInputHtml;
+            echo '<input type="hidden" name="online_request_id" value="' . $onlineRequestId . '">';
+            echo '<input type="hidden" name="action_type" value="prepare_customer_contract_review">';
+            m360_rw_intake_return_step_hidden('documents');
+            echo '<input type="hidden" name="return_section" value="section-documents">';
+            echo '<button type="submit" class="m360-rw-btn m360-rw-btn-secondary">ارسال لینک امضا و تأیید قرارداد برای مشتری</button>';
+            echo '</form>';
+            echo '<p class="m360-rw-muted">' . m360_rw_h(m360_rw_canonical_contract_step_text_fa()) . '</p>';
+        }
+    } elseif ($uiState === 'pending') {
+        echo '<div class="m360-rw-flash is-info">';
+        echo '<p><strong>قرارداد ثبت شده و مأموریت در کارتابل مشتری فعال است.</strong></p>';
+        echo '<p>وضعیت: ' . m360_rw_h(m360_rw_contract_pending_customer_message_fa()) . '</p>';
+        echo '</div>';
+        $onceToken = m360_rw_intake_consume_contract_review_token_once($onlineRequestId);
+        if ($onceToken !== '') {
+            echo '<div class="m360-rw-contract-link-box">';
+            echo '<p class="m360-rw-muted">لینک موقت دسترسی به کارتابل مشتری برای V1 RC:</p>';
+            echo '<a class="m360-rw-btn" href="' . m360_rw_h(m360_rw_intake_contract_review_url($onceToken)) . '" target="_blank" rel="noopener">مشاهده پیش‌نمایش قرارداد مشتری</a>';
+            echo '</div>';
+        }
+        if ($canShowStepForm) {
+            echo '<form class="m360-rw-form" method="post" action="' . m360_rw_h($saveUrl) . '">';
+            echo $csrfInputHtml;
+            echo '<input type="hidden" name="online_request_id" value="' . $onlineRequestId . '">';
+            echo '<input type="hidden" name="action_type" value="prepare_customer_contract_review">';
+            m360_rw_intake_return_step_hidden('documents');
+            echo '<button type="submit" class="m360-rw-btn m360-rw-btn-secondary">ارسال مجدد قرارداد برای مشتری</button>';
+            echo '</form>';
+            echo '<p class="m360-rw-muted">ارسال مجدد، اسنپ‌شات قرارداد را از داده‌های فعلی پذیرش به‌روز می‌کند و تأیید قبلی مشتری را باطل نگه می‌دارد.</p>';
+        }
+    } elseif ($uiState === 'accepted') {
+        echo '<p class="m360-rw-flash is-ok">' . m360_rw_h(m360_rw_contract_accepted_customer_message_fa()) . '</p>';
+    }
+
+    $contractText = trim((string)($payloadData['reception_intake']['contract']['contract_text'] ?? ''));
+    if ($contractText !== '') {
+        echo '<div class="m360-rw-contract-text m360-rw-contract-compact">' . m360_rw_h(mb_substr($contractText, 0, 400)) . (mb_strlen($contractText) > 400 ? '…' : '') . '</div>';
+    }
+    echo '</div>';
+}
+
+/**
+ * @param resource $conn
+ * @return array{ok:bool,message:string}
+ */
+function m360_rw_intake_process_customer_contract_accept($conn, string $rawToken, array $post, array $server = []): array
+{
+    if (!is_resource($conn)) {
+        return ['ok' => false, 'message' => 'اتصال به پایگاه داده برقرار نشد.'];
+    }
+    $requestId = m360_rw_intake_contract_parse_review_token($rawToken);
+    if ($requestId < 1) {
+        return ['ok' => false, 'message' => 'مأموریت قرارداد مشتری یافت نشد یا منقضی شده است.'];
+    }
+    $request = m360_online_req_fetch_by_id($conn, $requestId);
+    if ($request === null) {
+        return ['ok' => false, 'message' => 'درخواست یافت نشد.'];
+    }
+    if (m360_online_req_is_converted($request)) {
+        return ['ok' => false, 'message' => 'این درخواست قبلاً تبدیل شده است.'];
+    }
+    $payload = m360_online_req_parse_payload($request['request_payload_json'] ?? null);
+    $payload = m360_rw_intake_payload_for_recovery($payload);
+    if (m360_rw_intake_is_locked($payload)) {
+        return ['ok' => false, 'message' => M360_RW_INTAKE_LOCK_MESSAGE_FA];
+    }
+    $tokenCheck = m360_rw_intake_contract_validate_review_token($payload, $requestId, $rawToken);
+    if (!$tokenCheck['ok']) {
+        return ['ok' => false, 'message' => $tokenCheck['error']];
+    }
+    if (m360_rw_intake_contract_customer_accepted($payload)) {
+        return ['ok' => true, 'message' => 'قرارداد پذیرش قبلاً تأیید شده است.'];
+    }
+    $accepted = isset($post['customer_accepts_contract']) && (string)$post['customer_accepts_contract'] === '1';
+    if ($accepted) {
+        return ['ok' => false, 'message' => 'تأیید قرارداد فقط پس از مطالعه کامل، پذیرش صریح، امضای مستقیم و OTP قرارداد امکان‌پذیر است.'];
+    }
+    return ['ok' => false, 'message' => 'عملیات نامعتبر است.'];
+}
+
+function m360_rw_intake_contract_status_label_fa(array $payload): string
+{
+    if (m360_rw_intake_contract_customer_accepted($payload)) {
+        return 'تأیید شده توسط مشتری';
+    }
+    if (m360_rw_intake_contract_cartable_pending($payload)) {
+        return 'در انتظار تأیید مشتری در کارتابل';
+    }
+    $contract = is_array($payload['reception_intake']['contract'] ?? null) ? $payload['reception_intake']['contract'] : [];
+    $status = trim((string)($contract['status'] ?? ''));
+    if (in_array($status, [
+        M360_RW_INTAKE_CONTRACT_STATUS_PREPARED,
+        M360_RW_INTAKE_CONTRACT_STATUS_PENDING_CUSTOMER_REVIEW,
+    ], true)) {
+        return 'در انتظار تأیید مشتری در کارتابل';
+    }
+
+    return 'ثبت نشده';
+}
+
+/**
+ * @param array<string, mixed> $payload
+ * @param array<string, mixed> $requestRow
+ * @return array<string, string>
+ */
+function m360_rw_intake_contract_review_summary(array $payload, array $requestRow): array
+{
+    $vehicle = m360_rw_intake_vehicle_canonical($payload, $requestRow);
+    $photos = m360_rw_intake_photos_canonical($payload);
+    $formValues = m360_rw_intake_form_values($payload, $requestRow);
+    $customerName = trim((string)m360_rw_pick([$requestRow, $payload], 'customer_name', 'full_name'));
+    $serviceFa = function_exists('m360_intake_contract_service_type_fa')
+        ? m360_intake_contract_service_type_fa(
+            (string)($formValues['customer_request_type'] ?? $requestRow['request_type'] ?? ''),
+            (string)($formValues['service_primary'] ?? '')
+        )
+        : (string)($formValues['service_primary'] ?? '');
+
+    return [
+        'customer_name' => $customerName !== '' ? $customerName : '—',
+        'mobile' => m360_rw_intake_resolve_mobile_for_otp($requestRow, $payload),
+        'plate' => $vehicle['plate'],
+        'brand_model' => trim($vehicle['brand'] . ' / ' . $vehicle['model'], ' /'),
+        'mileage' => (string)($vehicle['mileage'] ?? ''),
+        'fuel_level' => (string)($vehicle['fuel_level'] ?? ''),
+        'service_route' => $serviceFa,
+        'service_type_fa' => $serviceFa,
+        'service_subcategories' => is_array($formValues['service_diag_sub_codes'] ?? null)
+            ? implode('، ', $formValues['service_diag_sub_codes'])
+            : '',
+        'photos' => (string)($photos['completed_count'] ?? 0) . '/' . (string)($photos['required_count'] ?? 6),
+        'diagnostic' => trim((string)($formValues['diagnostic_status'] ?? '')),
+        'cost_agreement' => trim((string)($formValues['cost_agreement'] ?? '')),
+        'request_description' => trim((string)m360_rw_pick([$payload], 'request_description', 'service_description', 'service_note')),
+    ];
+}
+
+/**
+ * @param array<string, mixed> $payload
+ * @param array<string, mixed> $requestRow
+ * @param array<string, string> $server
+ * @return array{ok:bool,error:string,payload:array<string,mixed>}
+ */
+function m360_rw_intake_apply_customer_contract_acceptance(array $payload, array $requestRow, array $server = []): array
+{
+    if (!m360_online_req_payload_otp_verified($requestRow)) {
+        return ['ok' => false, 'error' => 'ابتدا احراز هویت موبایل مشتری در پذیرش باید با OTP انجام شود.', 'payload' => $payload];
+    }
+
+    $payload = m360_rw_intake_ensure_nested($payload);
+    $now = gmdate('Y-m-d\TH:i:s\Z');
+    $mobile = m360_rw_intake_resolve_mobile_for_otp($requestRow, $payload);
+    if (!isset($payload['reception_intake']['customer_cartable']) || !is_array($payload['reception_intake']['customer_cartable'])) {
+        $payload['reception_intake']['customer_cartable'] = [];
+    }
+    $task = m360_rw_intake_contract_cartable_task($payload);
+    $payload['reception_intake']['customer_cartable']['contract_task'] = array_merge($task, [
+        'status' => M360_RW_INTAKE_CARTABLE_STATUS_CUSTOMER_ACCEPTED,
+        'accepted_at' => gmdate('Y-m-d H:i:s'),
+        'accepted_mobile' => $mobile,
+        'acceptance_method' => 'otp_verified_identity_and_customer_cartable_confirmation',
+        'acceptance_ip' => trim((string)($server['REMOTE_ADDR'] ?? '')),
+        'acceptance_user_agent' => trim(substr((string)($server['HTTP_USER_AGENT'] ?? ''), 0, 500)),
+    ]);
+    if (!isset($payload['reception_intake']['contract']) || !is_array($payload['reception_intake']['contract'])) {
+        $payload['reception_intake']['contract'] = [];
+    }
+    $payload['reception_intake']['contract'] = array_merge($payload['reception_intake']['contract'], [
+        'status' => M360_RW_INTAKE_CONTRACT_STATUS_CUSTOMER_ACCEPTED,
+        'customer_accepted_at' => $now,
+        'customer_accepted_mobile' => $mobile,
+        'acceptance_method' => 'otp_verified_identity_and_customer_cartable_confirmation',
+        'acceptance_ip' => trim((string)($server['REMOTE_ADDR'] ?? '')),
+        'acceptance_user_agent' => trim(substr((string)($server['HTTP_USER_AGENT'] ?? ''), 0, 500)),
+    ]);
+    if (!isset($payload['reception_intake']['documents']) || !is_array($payload['reception_intake']['documents'])) {
+        $payload['reception_intake']['documents'] = [];
+    }
+    $payload['reception_intake']['documents']['contract_status'] = M360_RW_INTAKE_DOC_CONTRACT_STATUS_CUSTOMER_ACCEPTED;
+    $payload['contract_status'] = M360_RW_INTAKE_CONTRACT_STATUS_CUSTOMER_ACCEPTED;
+    m360_rw_intake_mark_section_saved($payload, 'contract');
+
+    return ['ok' => true, 'error' => '', 'payload' => $payload];
+}
+
+/**
+ * @param array<string, mixed> $payload
+ * @param array<string, string> $formValues
+ * @return array{complete:bool,reason:string,missing_fields:list<string>}
+ */
+function m360_rw_intake_documents_step_state(array $payload, array $formValues): array
+{
+    $payload = m360_rw_intake_ensure_nested($payload);
+    $docs = is_array($payload['reception_intake']['documents'] ?? null) ? $payload['reception_intake']['documents'] : [];
+    $contract = is_array($payload['reception_intake']['contract'] ?? null) ? $payload['reception_intake']['contract'] : [];
+    $missing = [];
+
+    $library = m360_rw_intake_documents_library_summary($payload);
+    $diag = !empty($library['has_diagnostic_or_scanner'])
+        || trim((string)($formValues['diagnostic_status'] ?? '')) !== ''
+        || trim((string)($docs['diagnostic_status'] ?? '')) !== ''
+        || trim((string)($docs['diagnostic_pdf'] ?? '')) !== ''
+        || trim((string)($formValues['diagnostic_pdf'] ?? '')) !== '';
+    if (!$diag) {
+        $missing[] = 'diagnostic_status';
+    }
+
+    $agreementsReady = m360_rw_intake_agreements_ready($payload);
+    if (empty($agreementsReady['ready'])) {
+        foreach ($agreementsReady['missing'] as $m) {
+            $missing[] = (string)$m;
+        }
+    }
+
+    $complete = $missing === [];
+
+    return [
+        'complete' => $complete,
+        'reason' => $complete ? 'documents complete' : 'documents incomplete',
+        'missing_fields' => $missing,
+    ];
+}
+
+/**
+ * @param array<string, mixed> $payload
+ * @return array{complete:bool,reason:string,missing_fields:list<string>}
+ */
+function m360_rw_intake_signature_step_state(array $payload): array
+{
+    if (m360_rw_intake_contract_customer_accepted($payload)) {
+        return ['complete' => true, 'reason' => 'customer contract signed with OTP', 'missing_fields' => []];
+    }
+
+    return [
+        'complete' => false,
+        'reason' => 'customer contract signature/OTP incomplete',
+        'missing_fields' => ['customer_contract_signature_otp'],
+    ];
+}
+
+/**
+ * @param array<string, array{complete:bool,reason:string,missing_fields:list<string>}> $steps
+ */
+function m360_rw_intake_wizard_blocker_message(array $steps, string $firstIncomplete): string
+{
+    if ($firstIncomplete === 'condition') {
+        $missing = $steps['condition']['missing_fields'] ?? [];
+        if (is_array($missing) && in_array('photos', $missing, true)) {
+            return 'ثبت عکس‌های شش‌گانه پذیرش لازم است.';
+        }
+    }
+    if ($firstIncomplete === 'documents') {
+        $missing = $steps['documents']['missing_fields'] ?? [];
+        $labels = [];
+        if (is_array($missing)) {
+            foreach ($missing as $field) {
+                $field = (string)$field;
+                $labels[] = match ($field) {
+                    'diagnostic_status', 'diagnostic_pdf' => 'گزارش دیاگ ثبت نشده است',
+                    'cost_agreement' => 'توافق هزینه ثبت نشده است',
+                    'part_purchase_authorization' => 'سقف مجاز خرید قطعه ثبت نشده است',
+                    'third_party_insurance' => 'بیمه شخص ثالث مشخص نشده است',
+                    'body_insurance' => 'بیمه بدنه مشخص نشده است',
+                    'test_drive_permission' => 'اجازه تست درایو مشخص نشده است',
+                    'service_cost_min' => 'حداقل هزینه خدمات ثبت نشده است',
+                    'service_cost_max' => 'حداکثر هزینه خدمات ثبت نشده است',
+                    'service_cost_range' => 'بازه هزینه خدمات نامعتبر است',
+                    default => $field,
+                };
+            }
+        }
+        if ($labels !== []) {
+            return implode(' — ', $labels);
+        }
+        return 'چک‌لیست پذیرش تکمیل نشده است';
+    }
+    if ($firstIncomplete === 'signature') {
+        return '';
+    }
+    if ($firstIncomplete === 'referral') {
+        return '';
+    }
+    if (in_array($firstIncomplete, m360_rw_intake_reception_completion_keys(), true)) {
+        $missing = $steps[$firstIncomplete]['missing_fields'] ?? [];
+        if ($missing !== []) {
+            return 'تکمیل پذیرش ناقص است: ' . implode('، ', $missing);
+        }
+    }
+
+    return '';
+}
+
+/**
+ * @param array<string, mixed> $payload
+ * @param array<string, mixed> $requestRow
+ * @return array{
+ *   steps:array<string,array{complete:bool,reason:string,missing_fields:list<string>}>,
+ *   first_incomplete:string,
+ *   resolved_active_step:string,
+ *   blocker_message:string
+ * }
+ */
+function m360_rw_intake_get_wizard_step_state(array $payload, array $requestRow): array
+{
+    $payload = m360_rw_intake_payload_for_recovery($payload);
+    $formValues = m360_rw_intake_form_values($payload, $requestRow);
+    $steps = [];
+
+    $otpComplete = trim((string)($requestRow['mobile'] ?? '')) !== '' && m360_rw_intake_reception_otp_verified($requestRow);
+    $steps['otp'] = [
+        'complete' => $otpComplete,
+        'reason' => $otpComplete ? 'otp_verified=1' : 'OTP not verified',
+        'missing_fields' => $otpComplete ? [] : ['otp_verified'],
+    ];
+
+    $customerName = trim((string)m360_rw_pick([$requestRow, $payload], 'customer_name', 'full_name'));
+    $customerMobile = trim((string)m360_rw_pick([$requestRow, $payload], 'mobile', 'normalized_mobile'));
+    $customerId = (int)($requestRow['customer_id'] ?? $payload['customer_id'] ?? 0);
+    $customerComplete = $customerMobile !== '' && $customerName !== '';
+    if (!$customerComplete && m360_online_req_is_staff_walkin($requestRow) && $customerId > 0 && ($customerName !== '' || $customerMobile !== '')) {
+        $customerComplete = $customerName !== '' && $customerMobile !== '';
+    }
+    $customerMissing = [];
+    if ($customerMobile === '') {
+        $customerMissing[] = 'mobile';
+    }
+    if ($customerName === '') {
+        $customerMissing[] = 'customer_name';
+    }
+    $steps['customer'] = [
+        'complete' => $customerComplete,
+        'reason' => $customerComplete ? 'canonical customer complete' : 'customer fields missing',
+        'missing_fields' => $customerMissing,
+    ];
+
+    $vehicleComplete = m360_rw_intake_vehicle_step_complete($payload, $requestRow);
+    $vehicleMissing = [];
+    if (!$vehicleComplete) {
+        foreach (m360_rw_intake_vehicle_canonical($payload, $requestRow) as $field => $value) {
+            if (!in_array($field, ['plate', 'brand', 'model', 'mileage', 'fuel_level'], true)) {
+                continue;
+            }
+            if (m360_rw_intake_scalar_string($value) === '') {
+                $vehicleMissing[] = $field;
+            }
+        }
+    }
+    $steps['vehicle'] = [
+        'complete' => $vehicleComplete,
+        'reason' => $vehicleComplete ? 'canonical vehicle complete' : 'vehicle fields missing',
+        'missing_fields' => $vehicleMissing,
+    ];
+
+    $conditionStructuredComplete = m360_rw_intake_condition_step_complete($payload);
+    $photosComplete = m360_rw_intake_photos_complete($payload);
+    $conditionMissing = [];
+    if (!$conditionStructuredComplete) {
+        $conditionCanon = m360_rw_intake_condition_canonical($payload);
+        if (empty($conditionCanon['structured'])) {
+            $conditionMissing[] = 'trunk_belongings';
+            $conditionMissing[] = 'damage_zones';
+        } else {
+            $trunk = is_array($conditionCanon['trunk_belongings'] ?? null)
+                ? $conditionCanon['trunk_belongings']
+                : [];
+            foreach (m360_rw_intake_trunk_item_definitions() as $key => $_label) {
+                $status = m360_rw_intake_scalar_string($trunk[$key] ?? '');
+                if (!in_array($status, ['PRESENT', 'ABSENT'], true)) {
+                    $conditionMissing[] = 'trunk_' . $key;
+                }
+            }
+            $zones = $conditionCanon['damage_zones'] ?? null;
+            if (!is_array($zones) || $zones === []) {
+                $conditionMissing[] = 'damage_zones';
+            } else {
+                $allowed = array_keys(m360_rw_intake_damage_status_labels());
+                foreach (m360_rw_intake_damage_zone_definitions() as $key => $_label) {
+                    $status = strtoupper(m360_rw_intake_scalar_string($zones[$key] ?? ''));
+                    if (!in_array($status, $allowed, true)) {
+                        $conditionMissing[] = 'damage_zone_' . $key;
+                    }
+                }
+            }
+        }
+    }
+    if (!$photosComplete) {
+        $conditionMissing[] = 'photos';
+    }
+    $conditionComplete = $conditionStructuredComplete && $photosComplete;
+    $steps['condition'] = [
+        'complete' => $conditionComplete,
+        'reason' => $conditionComplete
+            ? 'canonical condition/photos complete'
+            : (!$photosComplete && $conditionStructuredComplete
+                ? 'photos incomplete — six reception photos required'
+                : 'condition/photos incomplete'),
+        'missing_fields' => $conditionMissing,
+    ];
+
+    $serviceComplete = m360_rw_intake_service_wizard_step_complete(
+        $formValues,
+        m360_rw_request_service_policy_group(trim((string)m360_rw_pick([$requestRow, $payload], 'request_type')))
+    );
+    // Staff walk-in: request_type + description + mapped route seed is enough to mark service complete.
+    if (!$serviceComplete && m360_online_req_is_staff_walkin($requestRow)) {
+        $walkinReqType = trim((string)m360_rw_pick([$requestRow, $payload], 'request_type'));
+        $walkinDesc = trim((string)m360_rw_pick([$payload], 'request_description', 'service_description', 'service_note'));
+        $walkinRoute = trim((string)($formValues['service_route'] ?? $formValues['service_primary'] ?? ''));
+        if ($walkinRoute === '' && $walkinReqType !== '') {
+            $walkinRoute = m360_rw_map_request_type_to_service_route($walkinReqType);
+        }
+        $walkinPath = (string)($formValues['service_path_clear'] ?? '');
+        if ($walkinPath === '' && $walkinRoute !== '' && $walkinRoute !== 'diag') {
+            $walkinPath = '1';
+        }
+        if ($walkinReqType !== '' && $walkinDesc !== '' && $walkinRoute !== '') {
+            if ($walkinRoute === 'diag') {
+                $subs = $formValues['service_diag_sub_codes'] ?? [];
+                $serviceComplete = $walkinPath === '1' && is_array($subs) && $subs !== [];
+            } else {
+                $serviceComplete = true;
+            }
+        }
+    }
+    $serviceMissing = [];
+    $policyGroup = m360_rw_request_service_policy_group(trim((string)m360_rw_pick([$requestRow, $payload], 'request_type')));
+    if (!$serviceComplete) {
+        if ($policyGroup === 'TECHNICAL_DIAGNOSIS') {
+            if (trim((string)($formValues['service_route'] ?? $formValues['service_primary'] ?? '')) === '') {
+                $serviceMissing[] = 'service_route';
+            }
+            if ((string)($formValues['service_path_clear'] ?? '') !== '1') {
+                $serviceMissing[] = 'service_path_clear';
+            }
+            $route = trim((string)($formValues['service_route'] ?? $formValues['service_primary'] ?? ''));
+            if ($route === 'diag') {
+                $subs = $formValues['service_diag_sub_codes'] ?? [];
+                if (!is_array($subs) || $subs === []) {
+                    $serviceMissing[] = 'diagnostic_subcategories';
+                }
+            }
+        } elseif ($policyGroup === 'UNKNOWN_FAULT') {
+            $serviceMissing[] = 'temporary_reception_or_path';
+        } else {
+            $serviceMissing[] = 'service_reception_confirmation';
+        }
+    }
+    $steps['service'] = [
+        'complete' => $serviceComplete,
+        'reason' => $serviceComplete ? 'canonical service complete' : 'service classification incomplete',
+        'missing_fields' => $serviceMissing,
+    ];
+
+    $referralComplete = m360_rw_intake_referral_step_complete($payload);
+    $referralMissing = [];
+    if (!$referralComplete && m360_rw_intake_operation_gate_hall_manager_allowed($payload)) {
+        $referralMissing[] = 'hall_manager_send';
+    }
+    $steps['referral'] = [
+        'complete' => $referralComplete,
+        'reason' => $referralComplete ? 'hall manager gate complete' : 'post-reception operational gate',
+        'missing_fields' => $referralMissing,
+    ];
+
+    $steps['documents'] = m360_rw_intake_documents_step_state($payload, $formValues);
+    $steps['signature'] = m360_rw_intake_signature_step_state($payload);
+    $steps['locked_summary'] = [
+        'complete' => m360_rw_intake_is_locked($payload) && m360_rw_intake_hall_manager_step_complete($payload),
+        'reason' => m360_rw_intake_is_locked($payload) ? 'locked summary available' : 'not locked',
+        'missing_fields' => (m360_rw_intake_is_locked($payload) && m360_rw_intake_hall_manager_step_complete($payload)) ? [] : ['intake_lock'],
+    ];
+
+    $firstIncomplete = 'documents';
+    if (!m360_rw_intake_reception_otp_verified($requestRow)) {
+        $firstIncomplete = 'otp';
+    } else {
+        foreach (m360_rw_intake_reception_completion_keys() as $stepKey) {
+            if (empty($steps[$stepKey]['complete'])) {
+                $firstIncomplete = $stepKey;
+                break;
+            }
+        }
+        if ($firstIncomplete === 'documents') {
+            if (empty($steps['documents']['complete']) || !m360_rw_intake_reception_is_completed($payload)) {
+                $firstIncomplete = 'documents';
+            } elseif (empty($steps['signature']['complete'])) {
+                $firstIncomplete = 'signature';
+            } elseif (empty($steps['referral']['complete'])) {
+                $firstIncomplete = 'referral';
+            } else {
+                $firstIncomplete = 'referral';
+            }
+        }
+    }
+
+    return [
+        'steps' => $steps,
+        'first_incomplete' => $firstIncomplete,
+        'resolved_active_step' => $firstIncomplete,
+        'blocker_message' => m360_rw_intake_wizard_blocker_message($steps, $firstIncomplete),
+    ];
+}
+
+/**
+ * @param array<string, mixed> $payload
+ * @param array<string, mixed> $requestRow
+ */
+function m360_rw_intake_render_wizard_blocker_notice(array $payload, array $requestRow, string $activeStep): void
+{
+    $state = m360_rw_intake_get_wizard_step_state($payload, $requestRow);
+    $message = trim((string)($state['blocker_message'] ?? ''));
+    if ($message === '') {
+        return;
+    }
+    if ($activeStep !== ($state['first_incomplete'] ?? '') && $activeStep !== 'signature' && $activeStep !== 'documents') {
+        return;
+    }
+    echo '<div class="m360-rw-flash is-err m360-rw-wizard-blocker">' . m360_rw_h($message) . '</div>';
+}
+
+/**
+ * @param array<string, mixed> $payload
+ * @param array<string, mixed> $requestRow
+ */
+function m360_rw_intake_render_signature_checklist(array $payload, array $requestRow): void
+{
+    $accepted = m360_rw_intake_contract_customer_accepted($payload);
+    echo '<ul class="m360-rw-signature-checklist">';
+    echo '<li class="' . ($accepted ? 'is-done' : 'is-info') . '">مشاهده قرارداد توسط مشتری</li>';
+    echo '<li class="' . ($accepted ? 'is-done' : 'is-info') . '">امضای مستقیم مشتری یا نماینده مجاز</li>';
+    echo '<li class="' . ($accepted ? 'is-done' : 'is-info') . '">تأیید پیامکی قرارداد</li>';
+    echo '</ul>';
+    if (m360_rw_intake_reception_is_completed($payload)) {
+        echo '<p class="m360-rw-muted">' . m360_rw_h(m360_rw_canonical_contract_step_text_fa()) . '</p>';
+    }
+}
+
+/**
+ * @param array<string, mixed> $payload
+ * @param array<string, mixed> $request
+ * @param array<string, string> $formValues
+ */
+function m360_rw_intake_wizard_furthest_operational_step(?array $request, array $payload, array $formValues): string
+{
+    if ($request === null) {
+        return 'otp';
+    }
+
+    return m360_rw_intake_get_wizard_step_state($payload, $request)['first_incomplete'];
+}
+
+/**
+ * @param array<string, mixed> $payload
+ * @param array<string, mixed> $request
+ * @param array<string, string> $formValues
+ */
+function m360_rw_intake_wizard_prev_amendable_step(string $activeStep, array $payload, array $request, array $formValues): ?string
+{
+    if (m360_rw_intake_is_locked($payload) || $activeStep === 'signature' || $activeStep === 'locked_summary') {
+        return null;
+    }
+
+    $keys = m360_rw_intake_wizard_operational_keys();
+    $idx = array_search($activeStep, $keys, true);
+    if ($idx === false || $idx < 1) {
+        return null;
+    }
+
+    for ($i = $idx - 1; $i >= 0; $i--) {
+        if (m360_rw_intake_wizard_step_is_complete($keys[$i], $payload, $request, $formValues)) {
+            return $keys[$i];
+        }
+    }
+
+    return null;
+}
+
+function m360_rw_intake_wizard_amend_url(int $onlineRequestId, string $stepKey): string
+{
+    return 'erp-reception-intake-file.php?online_request_id=' . $onlineRequestId
+        . '&active_step=' . rawurlencode($stepKey)
+        . '&wizard_edit=1';
+}
+
+/**
+ * @return array<string, array{hash:string,label:string,num:int,sections:list<string>}>
+ */
+function m360_rw_intake_stepper_definition(): array
+{
+    $canonical = m360_rw_canonical_intake_steps();
+
+    return [
+        'otp' => ['hash' => 'step-otp', 'label' => $canonical['mobile_otp']['label'], 'num' => 1, 'sections' => ['mobile_otp']],
+        'customer' => ['hash' => 'step-customer', 'label' => $canonical['customer']['label'], 'num' => 2, 'sections' => ['customer_information']],
+        'vehicle' => ['hash' => 'step-vehicle', 'label' => $canonical['vehicle']['label'], 'num' => 3, 'sections' => ['vehicle_identity']],
+        'service' => ['hash' => 'step-service', 'label' => $canonical['service']['label'], 'num' => 4, 'sections' => ['service_classification', 'temporary_reception']],
+        'condition' => ['hash' => 'step-condition', 'label' => $canonical['condition']['label'], 'num' => 5, 'sections' => ['condition_notes', 'camera_photo']],
+        'documents' => ['hash' => 'step-documents', 'label' => $canonical['checklist']['label'], 'num' => 6, 'sections' => ['diagnostic_pdf', 'documents_cost', 'gate_checklist']],
+        'signature' => ['hash' => 'step-signature', 'label' => $canonical['contract']['label'], 'num' => 7, 'sections' => ['contract']],
+        'referral' => ['hash' => 'step-referral', 'label' => $canonical['hall_jobcard']['label'], 'num' => 8, 'sections' => ['referral']],
+        'locked_summary' => ['hash' => 'step-locked', 'label' => 'پرونده قفل‌شده پذیرش', 'num' => 9, 'sections' => []],
+    ];
+}
+
+/** @return list<string> */
+function m360_rw_intake_stepper_keys(): array
+{
+    return array_keys(m360_rw_intake_stepper_definition());
+}
+
+function m360_rw_intake_step_hash(string $stepKey): string
+{
+    $def = m360_rw_intake_stepper_definition();
+
+    return (string)($def[$stepKey]['hash'] ?? '');
+}
+
+function m360_rw_intake_step_primary_section(string $stepKey): string
+{
+    $def = m360_rw_intake_stepper_definition();
+    $sections = $def[$stepKey]['sections'] ?? [];
+
+    return $sections !== [] ? (string)$sections[0] : '';
+}
+
+function m360_rw_intake_section_to_step(string $sectionKey): string
+{
+    foreach (m360_rw_intake_stepper_definition() as $stepKey => $meta) {
+        if (in_array($sectionKey, $meta['sections'], true)) {
+            return (string)$stepKey;
+        }
+    }
+
+    return '';
+}
+
+function m360_rw_intake_action_to_step(string $actionType): string
+{
+    return match ($actionType) {
+        'save_mobile_correction', 'send_customer_otp', 'verify_customer_otp' => 'otp',
+        'save_vehicle_identity' => 'vehicle',
+        'save_condition_notes' => 'condition',
+        'save_service_classification', 'save_temporary_reception' => 'service',
+        'save_referral_team' => 'referral',
+        'send_to_hall_manager',
+        'request_start_without_prepayment',
+        'approve_start_without_prepayment',
+        'reject_start_without_prepayment',
+        'return_start_without_prepayment' => 'referral',
+        'save_camera_photo' => 'condition',
+        'save_diagnostic_pdf', 'save_intake_document', 'save_documents_and_cost', 'complete_reception_intake' => 'documents',
+        'prepare_customer_contract_review' => 'documents',
+        'save_reception_confirmation', 'sign_and_lock_intake' => 'signature',
+        default => 'otp',
+    };
+}
+
+/**
+ * @param array<string, mixed> $payload
+ * @param array<string, mixed> $request
+ * @param array<string, string> $formValues
+ */
+function m360_rw_intake_wizard_step_is_complete(string $stepKey, array $payload, array $request, array $formValues): bool
+{
+    $state = m360_rw_intake_get_wizard_step_state($payload, $request);
+
+    return !empty($state['steps'][$stepKey]['complete']);
+}
+
+/**
+ * @param array<string, string> $formValues
+ */
+function m360_rw_intake_step_is_complete(string $stepKey, array $payload, array $request, array $formValues): bool
+{
+    if ($stepKey === 'final') {
+        $stepKey = 'signature';
+    }
+
+    return m360_rw_intake_wizard_step_is_complete($stepKey, $payload, $request, $formValues);
+}
+
+/**
+ * @param array<string, mixed> $query
+ * @param array<string, string> $formValues
+ */
+function m360_rw_intake_resolve_active_step(array $query, ?array $request, array $payload, array $formValues): string
+{
+    if (m360_rw_intake_is_locked($payload)) {
+        if (!m360_rw_intake_hall_manager_step_complete($payload)) {
+            return 'referral';
+        }
+
+        return 'locked_summary';
+    }
+
+    $requestRow = $request ?? [];
+    $state = m360_rw_intake_get_wizard_step_state($payload, $requestRow);
+    $furthest = (string)($state['first_incomplete'] ?? 'otp');
+
+    $operational = m360_rw_intake_wizard_operational_keys();
+    $requested = trim((string)($query['active_step'] ?? ''));
+    if ($requested === 'final') {
+        $requested = 'signature';
+    }
+
+    $wizardEdit = isset($query['wizard_edit']) && (string)$query['wizard_edit'] === '1';
+
+    // Never allow jumping to documents (or any later step) while earlier gates are incomplete.
+    // Previous special-case for documents caused late validation bounce after "step 8".
+
+    if ($requested !== '' && in_array($requested, array_merge($operational, ['locked_summary']), true)) {
+        if ($requested === 'locked_summary') {
+            return $furthest;
+        }
+
+        $reqIdx = array_search($requested, $operational, true);
+        $furIdx = array_search($furthest, $operational, true);
+        if ($reqIdx !== false && $furIdx !== false) {
+            // Allow navigation only up to the first incomplete step (linear spine).
+            if ($reqIdx <= $furIdx) {
+                return $requested;
+            }
+
+            // Completed steps may be re-opened only with explicit wizard_edit=1.
+            if ($wizardEdit
+                && $requested !== 'signature'
+                && !empty($state['steps'][$requested]['complete'])) {
+                return $requested;
+            }
+        }
+    }
+
+    return $furthest;
+}
+
+/**
+ * @param array<string, string> $post
+ * @return array{active_step:string,hash:string,extra:array<string,string>}
+ */
+function m360_rw_intake_redirect_active_step($conn, int $requestId, string $actionType, bool $ok, array $post): array
+{
+    $stayStep = trim((string)($post['return_active_step'] ?? ''));
+    if ($stayStep === '') {
+        $returnSection = trim((string)($post['return_section'] ?? ''));
+        if ($returnSection !== '') {
+            $sectionKey = m360_rw_intake_anchor_to_section_key(ltrim($returnSection, '#'));
+            if ($sectionKey !== '') {
+                $stayStep = m360_rw_intake_section_to_step($sectionKey);
+            }
+        }
+    }
+    if ($stayStep === '') {
+        $stayStep = m360_rw_intake_action_to_step($actionType);
+    }
+
+    if (!$ok) {
+        return [
+            'active_step' => $stayStep,
+            'hash' => m360_rw_intake_step_hash($stayStep),
+            'extra' => [],
+        ];
+    }
+
+    $extra = [];
+    $nextStep = match ($actionType) {
+        'save_mobile_correction' => 'otp',
+        'send_customer_otp' => 'otp',
+        'verify_customer_otp' => 'vehicle',
+        'save_vehicle_identity' => 'service',
+        'save_condition_notes' => 'condition',
+        'save_service_classification', 'save_temporary_reception' => 'condition',
+        'save_diagnostic_pdf', 'save_intake_document', 'save_documents_and_cost' => 'documents',
+        'complete_reception_intake' => 'signature',
+        'prepare_customer_contract_review' => 'documents',
+        'save_reception_confirmation' => 'signature',
+        'sign_and_lock_intake' => 'signature',
+        'request_start_without_prepayment',
+        'approve_start_without_prepayment',
+        'reject_start_without_prepayment',
+        'return_start_without_prepayment' => 'referral',
+        'send_to_hall_manager' => 'locked_summary',
+        'save_camera_photo' => 'condition',
+        default => $stayStep,
+    };
+    if ($actionType === 'send_customer_otp') {
+        $extra['otp_sent'] = '1';
+    }
+
+    // Photo save: always stay on condition and return to the exact slot card (no top jump / no auto-advance).
+    if ($actionType === 'save_camera_photo') {
+        $nextStep = 'condition';
+        $slot = preg_replace('/[^a-z_]/', '', strtolower(trim((string)($post['photo_slot'] ?? '')))) ?? '';
+        if ($slot !== '') {
+            $extra['photo_saved'] = $slot;
+            return [
+                'active_step' => $nextStep,
+                'hash' => 'photo-slot-' . $slot,
+                'extra' => $extra,
+            ];
+        }
+        return [
+            'active_step' => $nextStep,
+            'hash' => m360_rw_intake_step_hash($nextStep),
+            'extra' => $extra,
+        ];
+    }
+
+    if ($actionType === 'save_diagnostic_pdf' || $actionType === 'save_intake_document') {
+        return [
+            'active_step' => 'documents',
+            'hash' => 'section-documents-files',
+            'extra' => ['doc_saved' => '1'],
+        ];
+    }
+
+    if ($actionType === 'save_documents_and_cost') {
+        return [
+            'active_step' => 'documents',
+            'hash' => 'section-agreements',
+            'extra' => ['agreements_saved' => '1'],
+        ];
+    }
+
+    if ($actionType === 'save_service_classification' && is_resource($conn) && $requestId > 0) {
+        $request = m360_online_req_fetch_by_id($conn, $requestId);
+        if ($request !== null) {
+            $payload = m360_online_req_parse_payload($request['request_payload_json'] ?? null);
+            $canonical = m360_rw_intake_service_classification_canonical($payload);
+            $nextStep = $canonical['service_path_clear'] === '1' ? 'condition' : 'service';
+        }
+    }
+
+    return [
+        'active_step' => $nextStep,
+        'hash' => m360_rw_intake_step_hash($nextStep),
+        'extra' => $extra,
+    ];
+}
+
+function m360_rw_intake_step_is_active(string $stepKey, string $activeStep): bool
+{
+    return $stepKey === $activeStep;
+}
+
+function m360_rw_intake_step_go_url(int $onlineRequestId, string $stepKey): string
+{
+    return 'erp-reception-intake-file.php?online_request_id=' . $onlineRequestId
+        . '&active_step=' . rawurlencode($stepKey)
+        . '#' . rawurlencode(m360_rw_intake_step_hash($stepKey));
+}
+
+/**
+ * @param array<string, mixed> $payload
+ * @param array<string, string> $request
+ */
+function m360_rw_intake_resolve_mobile_for_otp(array $request, array $payload): string
+{
+    m360_rw_intake_load_otp_helper();
+
+    $candidates = [];
+    $correction = trim((string)($payload['reception_intake']['mobile_correction']['mobile'] ?? ''));
+    if ($correction !== '') {
+        $candidates[] = $correction;
+    }
+    foreach (['mobile_corrected', 'mobile'] as $payloadKey) {
+        $val = trim((string)($payload[$payloadKey] ?? ''));
+        if ($val !== '') {
+            $candidates[] = $val;
+        }
+    }
+    $nestedMobile = trim((string)($payload['reception_intake']['mobile']['corrected'] ?? ''));
+    if ($nestedMobile !== '') {
+        $candidates[] = $nestedMobile;
+    }
+    $rowMobile = trim((string)($request['mobile'] ?? ''));
+    if ($rowMobile !== '') {
+        $candidates[] = $rowMobile;
+    }
+
+    foreach ($candidates as $raw) {
+        if (function_exists('m360_otp_normalize_phone')) {
+            $normalized = m360_otp_normalize_phone($raw);
+            if ($normalized !== null) {
+                return $normalized;
+            }
+        }
+        if (preg_match('/^09\d{9}$/', $raw)) {
+            return $raw;
+        }
+    }
+
+    return '';
+}
+
+function m360_rw_intake_flash_indicates_otp_sent(string $flashMsg): bool
+{
+    $msg = trim($flashMsg);
+    if ($msg === '') {
+        return false;
+    }
+
+    return str_contains($msg, 'پیامک OTP ارسال شد')
+        || str_contains($msg, 'کد تأیید برای شما ارسال شد');
+}
+
+function m360_rw_intake_otp_show_verify_form(?array $request, bool $otpVerified, array $payload = []): bool
+{
+    if ($otpVerified || $request === null) {
+        return false;
+    }
+    $ui = m360_rw_intake_otp_ui_status($payload, $request, false, false);
+
+    return !empty($ui['show_verify_form']);
+}
+
+/**
+ * @param array<string, string> $formValues
+ */
+function m360_rw_intake_step_nav_state(string $stepKey, string $activeStep, array $payload, array $request, array $formValues): array
+{
+    $complete = m360_rw_intake_step_is_complete($stepKey, $payload, $request, $formValues);
+    $isActive = $stepKey === $activeStep;
+    if ($isActive) {
+        $label = 'در حال تکمیل';
+    } elseif ($complete) {
+        $label = 'تکمیل شده';
+    } else {
+        $label = 'نیازمند تکمیل';
+    }
+
+    return ['complete' => $complete, 'active' => $isActive, 'status_label' => $label];
+}
+
+/**
+ * @param array<string, string> $formValues
+ */
+function m360_rw_intake_render_stepper_nav(int $onlineRequestId, string $activeStep, array $payload, array $request, array $formValues): void
+{
+    m360_rw_intake_render_wizard_progress($onlineRequestId, $activeStep, $payload, $request, $formValues);
+}
+
+/**
+ * @param array<string, mixed> $payload
+ * @param array<string, mixed> $request
+ * @param array<string, string> $formValues
+ */
+function m360_rw_intake_render_wizard_progress(int $onlineRequestId, string $activeStep, array $payload, array $request, array $formValues): void
+{
+    $furthest = m360_rw_intake_is_locked($payload)
+        ? 'locked_summary'
+        : m360_rw_intake_wizard_furthest_operational_step($request, $payload, $formValues);
+    $operational = m360_rw_intake_wizard_operational_keys();
+    $furIdx = array_search($furthest, $operational, true);
+    if ($furIdx === false) {
+        $furIdx = count($operational) - 1;
+    }
+
+    echo '<nav class="m360-rw-wizard-progress" aria-label="پیشرفت مراحل پذیرش">';
+    echo '<ol class="m360-rw-wizard-progress-track">';
+    foreach (m360_rw_intake_stepper_definition() as $stepKey => $meta) {
+        if ($stepKey === 'locked_summary') {
+            continue;
+        }
+        $complete = m360_rw_intake_wizard_step_is_complete($stepKey, $payload, $request, $formValues);
+        $isActive = $stepKey === $activeStep;
+        $opIdx = array_search($stepKey, $operational, true);
+        $isFuture = $opIdx !== false && $opIdx > $furIdx;
+        $cls = 'm360-rw-wizard-progress-item';
+        if ($isActive) {
+            $cls .= ' is-active';
+        } elseif ($complete) {
+            $cls .= ' is-done';
+        } elseif ($isFuture) {
+            $cls .= ' is-future';
+        } else {
+            $cls .= ' is-pending';
+        }
+        echo '<li class="' . m360_rw_h($cls) . '">';
+        $canLink = !$isActive
+            && $opIdx !== false
+            && $opIdx <= $furIdx;
+        if ($canLink) {
+            $href = 'erp-reception-intake-file.php?online_request_id=' . $onlineRequestId
+                . '&active_step=' . rawurlencode($stepKey)
+                . '#' . rawurlencode((string)$meta['hash']);
+            echo '<a class="m360-rw-wizard-progress-link" href="' . m360_rw_h($href) . '">';
+        }
+        echo '<span class="m360-rw-wizard-progress-num">' . m360_rw_h((string)$meta['num']) . '</span>';
+        echo '<span class="m360-rw-wizard-progress-title">' . m360_rw_h((string)$meta['label']) . '</span>';
+        if ($complete) {
+            $status = 'تکمیل';
+        } elseif ($isFuture) {
+            $status = 'بعدی';
+        } elseif ($isActive) {
+            $status = 'فعال';
+        } else {
+            $status = 'نیازمند';
+        }
+        echo '<span class="m360-rw-wizard-progress-status">' . m360_rw_h($status) . '</span>';
+        if ($canLink) {
+            echo '</a>';
+        }
+        echo '</li>';
+    }
+    echo '</ol></nav>';
+}
+
+/**
+ * @param array<string, string> $formValues
+ */
+function m360_rw_intake_step_panel_open(string $stepKey, string $activeStep, array $payload, array $request, array $formValues, string $title): void
+{
+    $def = m360_rw_intake_stepper_definition();
+    $hash = (string)($def[$stepKey]['hash'] ?? '');
+    $state = m360_rw_intake_step_nav_state($stepKey, $activeStep, $payload, $request, $formValues);
+    $cls = 'm360-rw-step-panel';
+    if ($state['active']) {
+        $cls .= ' is-active';
+    }
+    if ($state['complete']) {
+        $cls .= ' is-complete';
+    }
+    echo '<section class="' . m360_rw_h($cls) . '" id="' . m360_rw_h($hash) . '" data-step="' . m360_rw_h($stepKey) . '">';
+    echo '<header class="m360-rw-step-head"><h2 class="m360-rw-step-title">' . m360_rw_h($title) . '</h2>';
+    echo '<span class="m360-rw-step-badge">' . m360_rw_h((string)$state['status_label']) . '</span></header>';
+    if ($state['active']) {
+        echo '<div class="m360-rw-step-body">';
+    } else {
+        echo '<div class="m360-rw-step-compact-card">';
+    }
+}
+
+function m360_rw_intake_step_panel_close(string $stepKey, string $activeStep, int $onlineRequestId): void
+{
+    $section = m360_rw_intake_step_primary_section($stepKey);
+    echo '</div>';
+    if ($section !== '' && $stepKey !== $activeStep) {
+        echo '<p class="m360-rw-step-edit"><a class="m360-rw-btn m360-rw-btn-secondary" href="'
+            . m360_rw_h(m360_rw_intake_edit_url($onlineRequestId, $section)) . '">ویرایش این مرحله</a></p>';
+    }
+    echo '</section>';
+}
+
+function m360_rw_intake_render_stepper_footer_nav(int $onlineRequestId, string $activeStep): void
+{
+    $steps = m360_rw_intake_stepper_keys();
+    $idx = array_search($activeStep, $steps, true);
+    if ($idx === false) {
+        $idx = 0;
+    }
+    echo '<nav class="m360-rw-stepper-foot" aria-label="پیمایش مراحل" data-active-step="' . m360_rw_h($activeStep) . '">';
+    if ($idx > 0) {
+        $prev = $steps[$idx - 1];
+        $href = 'erp-reception-intake-file.php?online_request_id=' . $onlineRequestId
+            . '&active_step=' . rawurlencode($prev)
+            . '#' . rawurlencode(m360_rw_intake_step_hash($prev));
+        echo '<a class="m360-rw-btn m360-rw-btn-secondary m360-rw-step-prev" href="' . m360_rw_h($href) . '">مرحله قبل</a>';
+    } else {
+        echo '<span class="m360-rw-step-spacer"></span>';
+    }
+    if ($idx < count($steps) - 1) {
+        $next = $steps[$idx + 1];
+        $href = 'erp-reception-intake-file.php?online_request_id=' . $onlineRequestId
+            . '&active_step=' . rawurlencode($next)
+            . '#' . rawurlencode(m360_rw_intake_step_hash($next));
+        echo '<a class="m360-rw-btn m360-rw-step-next" href="' . m360_rw_h($href) . '" data-m360-validate-before-next="1" data-current-step="'
+            . m360_rw_h($activeStep) . '">مرحله بعد</a>';
+    }
+    echo '</nav>';
+    echo '<p id="m360_rw_step_nav_error" class="m360-rw-flash is-err" style="display:none" role="alert"></p>';
+}
+
+/**
+ * @param array<string, mixed> $payload
+ * @param array<string, string> $request
+ * @param array<string, string> $formValues
+ */
+function m360_rw_intake_render_step_compact_summary(
+    string $stepKey,
+    int $onlineRequestId,
+    array $payload,
+    array $request,
+    array $formValues,
+    array $otpStatusUi = []
+): void {
+    $state = m360_rw_intake_step_nav_state($stepKey, '---', $payload, $request, $formValues);
+    $goUrl = m360_rw_intake_step_go_url($onlineRequestId, $stepKey);
+    echo '<div class="m360-rw-step-compact-inner">';
+    echo '<p class="m360-rw-step-compact-status">' . m360_rw_h((string)$state['status_label']) . '</p>';
+    echo '<div class="m360-rw-step-compact-lines">';
+    switch ($stepKey) {
+        case 'otp':
+            echo '<span>موبایل: ' . m360_rw_h(m360_rw_intake_resolve_mobile_for_otp($request, $payload) ?: '—') . '</span>';
+            echo '<span>OTP: ' . m360_rw_h((string)($otpStatusUi['label_fa'] ?? '—')) . '</span>';
+            break;
+        case 'vehicle':
+            echo '<span>پلاک: ' . m360_rw_h($formValues['plate'] ?? '—') . '</span>';
+            echo '<span>خودرو: ' . m360_rw_h(trim(($formValues['brand'] ?? '') . ' ' . ($formValues['model'] ?? ''), ' ') ?: '—') . '</span>';
+            break;
+        case 'condition':
+            $items = trim((string)($formValues['vehicle_items'] ?? ''));
+            echo '<span>لوازم: ' . m360_rw_h($items !== '' ? mb_substr($items, 0, 40) : '—') . '</span>';
+            $photoStatus = m360_rw_intake_reception_photo_status($payload);
+            echo '<span>عکس: ' . m360_rw_h((string)$photoStatus['count']) . '/' . m360_rw_h((string)$photoStatus['min_required']) . '</span>';
+            break;
+        case 'service':
+            echo '<span>دسته: ' . m360_rw_h($formValues['service_primary'] ?? '—') . '</span>';
+            break;
+        case 'referral':
+            echo '<span>مسئول سالن: ' . m360_rw_h($formValues['hall_manager_status'] ?? '—') . '</span>';
+            break;
+        case 'documents':
+            $costDisp = (string)($formValues['cost_agreement'] ?? '—');
+            if ($costDisp !== '—' && $costDisp !== '' && function_exists('m360_format_number')) {
+                $costDisp = m360_format_number($costDisp);
+            }
+            echo '<span>توافق: ' . m360_rw_h($costDisp) . '</span>';
+            break;
+        case 'signature':
+            echo '<span>قرارداد: ' . m360_rw_h(m360_rw_intake_contract_status_label_fa($payload)) . '</span>';
+            break;
+    }
+    echo '</div>';
+    echo '<a class="m360-rw-btn m360-rw-btn-secondary m360-rw-step-go" href="' . m360_rw_h($goUrl) . '">رفتن به این مرحله</a>';
+    echo '</div>';
+}
+
+/**
+ * @param list<array{label_fa:string,value:string}> $payloadRows
+ * @param array{valid:bool,raw_warning:string} $payloadMeta
+ */
+function m360_rw_intake_render_payload_collapsed(array $payloadRows, array $payloadMeta): void
+{
+    if ($payloadRows === []) {
+        return;
+    }
+    echo '<details class="m360-rw-tech-details">';
+    echo '<summary>جزئیات فنی / فقط برای بررسی</summary>';
+    echo '<div class="m360-rw-tech-details-body">';
+    if (!$payloadMeta['valid']) {
+        echo '<p class="m360-rw-warn">' . m360_rw_h($payloadMeta['raw_warning']) . '</p>';
+    }
+    echo '<div class="m360-rw-field-grid">';
+    foreach ($payloadRows as $prow) {
+        echo '<div class="m360-rw-field"><span class="m360-rw-field-lbl">' . m360_rw_h($prow['label_fa']) . '</span>';
+        echo '<span class="m360-rw-field-val">' . m360_rw_h($prow['value'] !== '' ? $prow['value'] : '—') . '</span></div>';
+    }
+    echo '</div></div></details>';
+}
+
+function m360_rw_intake_return_step_hidden(string $stepKey): void
+{
+    if ($stepKey === '') {
+        return;
+    }
+    echo '<input type="hidden" name="active_step" value="' . m360_rw_h($stepKey) . '">';
+    echo '<input type="hidden" name="return_step" value="' . m360_rw_h($stepKey) . '">';
+    echo '<input type="hidden" name="return_active_step" value="' . m360_rw_h($stepKey) . '">';
+    $section = m360_rw_intake_step_primary_section($stepKey);
+    if ($section !== '') {
+        m360_rw_intake_return_section_hidden($section);
+    }
 }
 
 /** @return array<string, string> */
@@ -2206,6 +9022,7 @@ function m360_rw_intake_section_anchors(): array
 {
     return [
         'mobile_otp' => 'section-mobile-otp',
+        'customer_information' => 'section-customer-information',
         'vehicle_identity' => 'section-vehicle-identity',
         'condition_notes' => 'section-condition-notes',
         'service_classification' => 'section-service-classification',
@@ -2242,17 +9059,23 @@ function m360_rw_intake_anchor_to_section_key(string $anchor): string
 function m360_rw_intake_action_default_anchor(string $actionType): string
 {
     return match ($actionType) {
-        'save_mobile_correction', 'send_customer_otp' => 'section-mobile-otp',
+        'save_mobile_correction', 'send_customer_otp', 'verify_customer_otp' => 'section-mobile-otp',
         'save_vehicle_identity' => 'section-vehicle-identity',
         'save_condition_notes' => 'section-condition-notes',
         'save_service_classification' => 'section-service-classification',
         'save_temporary_reception' => 'section-temporary-reception',
         'save_referral_team' => 'section-referral-team',
         'save_camera_photo' => 'section-camera-photo',
-        'save_diagnostic_pdf' => 'section-diagnostic-pdf',
-        'run_intake_contract', 'approve_intake_contract' => 'section-contract',
-        'save_documents_and_cost' => 'section-documents-cost',
+        'save_diagnostic_pdf' => 'section-documents-files',
+        'save_intake_document' => 'section-documents-files',
+        'prepare_customer_contract_review' => 'section-documents-cost',
+        'save_documents_and_cost' => 'section-agreements',
         'save_reception_confirmation' => 'section-reception-confirmation',
+        'request_start_without_prepayment',
+        'approve_start_without_prepayment',
+        'reject_start_without_prepayment',
+        'return_start_without_prepayment',
+        'send_to_hall_manager' => 'section-referral',
         default => '',
     };
 }
@@ -2264,68 +9087,245 @@ function m360_rw_intake_return_section_hidden(string $sectionKey): void
         return;
     }
     echo '<input type="hidden" name="return_section" value="' . m360_rw_h($anchor) . '">';
+    $step = m360_rw_intake_section_to_step($sectionKey);
+    if ($step !== '') {
+        echo '<input type="hidden" name="return_active_step" value="' . m360_rw_h($step) . '">';
+    }
+}
+
+/**
+ * @param array<string, mixed> $payload
+ * @param array<string, string> $request
+ * @param array<string, string> $formValues
+ * @return array{show_summary:bool,show_form:bool,status_label:string,complete:bool}
+ */
+function m360_rw_intake_stepper_section_ui_state(
+    string $sectionId,
+    string $activeStep,
+    array $payload,
+    array $request,
+    array $formValues,
+    string $editSection
+): array {
+    $ui = m360_rw_intake_section_ui_state($sectionId, $payload, $request, $formValues, $editSection);
+    $step = m360_rw_intake_section_to_step($sectionId);
+    if ($step === $activeStep) {
+        $ui['show_form'] = true;
+        $ui['show_summary'] = $ui['complete'] && $editSection !== $sectionId && $editSection !== '';
+        $ui['status_label'] = 'در حال تکمیل';
+    } else {
+        $ui['show_form'] = false;
+        $ui['show_summary'] = true;
+    }
+
+    return $ui;
 }
 
 const M360_RW_INTAKE_PHOTO_MIN_REQUIRED = 6;
 
 /**
- * Six reception photo slots — aligned with MOGHARE360_INPUT_PHOTO_6_RULE (Persian labels for intake UI).
+ * Six reception photo slots — canonical keys for P11.9-C-2C-FIX-E5.
  *
  * @return array<string, string>
  */
 function m360_rw_intake_reception_photo_slots(): array
 {
     return [
-        'front' => 'نمای جلو خودرو',
-        'rear' => 'نمای عقب خودرو',
-        'right' => 'سمت راست خودرو',
-        'left' => 'سمت چپ خودرو',
-        'interior' => 'داخل کابین',
-        'dashboard' => 'کیلومتر / داشبورد',
+        'front' => 'جلو',
+        'rear' => 'عقب',
+        'right' => 'راست',
+        'left' => 'چپ',
+        'cabin' => 'کابین',
+        'dashboard' => 'داشبورد',
     ];
 }
 
 /**
  * @param array<string, mixed> $payload
- * @return array{count:int,min_required:int,complete:bool,missing_labels:list<string>,slots:array<string,array{label:string,file:string,saved:bool,saved_at:string}>,legacy_file:string,legacy_only:bool}
+ * @return array{required_count:int,completed_count:int,is_complete:bool,slots:array<string,array{label:string,status:string,captured_at:string,captured_by:string,data_key:string}>,missing_labels:list<string>}
+ */
+function m360_rw_intake_photos_canonical(array $payload): array
+{
+    $payload = m360_rw_intake_ensure_nested($payload);
+    $slotDefs = m360_rw_intake_reception_photo_slots();
+    $required = M360_RW_INTAKE_PHOTO_MIN_REQUIRED;
+    $storedCanonical = is_array($payload['reception_intake']['photos'] ?? null)
+        ? $payload['reception_intake']['photos']
+        : [];
+    $slots = is_array($storedCanonical['slots'] ?? null) ? $storedCanonical['slots'] : [];
+    $legacyStored = is_array($payload['reception_intake']['documents']['reception_photos'] ?? null)
+        ? $payload['reception_intake']['documents']['reception_photos']
+        : [];
+
+    foreach ($slotDefs as $key => $label) {
+        $entry = is_array($slots[$key] ?? null) ? $slots[$key] : [];
+        $legacyEntry = is_array($legacyStored[$key] ?? null) ? $legacyStored[$key] : [];
+        if ($key === 'cabin' && $legacyEntry === [] && is_array($legacyStored['interior'] ?? null)) {
+            $legacyEntry = $legacyStored['interior'];
+        }
+
+        $dataKey = trim((string)($entry['data_key'] ?? $entry['file'] ?? ''));
+        if ($dataKey === '' && $legacyEntry !== []) {
+            $dataKey = trim((string)($legacyEntry['file'] ?? ''));
+        }
+
+        $status = 'missing';
+        if (($entry['status'] ?? '') === 'captured' || $dataKey !== '') {
+            $status = 'captured';
+        }
+
+        $slots[$key] = [
+            'label' => $label,
+            'status' => $status,
+            'captured_at' => (string)($entry['captured_at'] ?? $legacyEntry['saved_at'] ?? ''),
+            'captured_by' => (string)($entry['captured_by'] ?? $legacyEntry['saved_by'] ?? ''),
+            'data_key' => $dataKey,
+        ];
+    }
+
+    return m360_rw_intake_photos_recalculate([
+        'required_count' => $required,
+        'completed_count' => 0,
+        'is_complete' => false,
+        'slots' => $slots,
+        'missing_labels' => [],
+    ]);
+}
+
+/**
+ * @param array{required_count?:int,completed_count?:int,is_complete?:bool,slots?:array<string,array<string,string>>,missing_labels?:list<string>} $canonical
+ * @return array{required_count:int,completed_count:int,is_complete:bool,slots:array<string,array{label:string,status:string,captured_at:string,captured_by:string,data_key:string}>,missing_labels:list<string>}
+ */
+function m360_rw_intake_photos_recalculate(array $canonical): array
+{
+    $slotDefs = m360_rw_intake_reception_photo_slots();
+    $required = M360_RW_INTAKE_PHOTO_MIN_REQUIRED;
+    $slots = is_array($canonical['slots'] ?? null) ? $canonical['slots'] : [];
+    $completed = 0;
+    $missing = [];
+
+    foreach ($slotDefs as $key => $label) {
+        $entry = is_array($slots[$key] ?? null) ? $slots[$key] : [
+            'label' => $label,
+            'status' => 'missing',
+            'captured_at' => '',
+            'captured_by' => '',
+            'data_key' => '',
+        ];
+        $dataKey = trim((string)($entry['data_key'] ?? ''));
+        if (($entry['status'] ?? '') === 'captured' && $dataKey !== '') {
+            $completed++;
+        } else {
+            $missing[] = $label;
+            $entry['status'] = 'missing';
+        }
+        $slots[$key] = [
+            'label' => (string)($entry['label'] ?? $label),
+            'status' => (string)$entry['status'],
+            'captured_at' => (string)($entry['captured_at'] ?? ''),
+            'captured_by' => (string)($entry['captured_by'] ?? ''),
+            'data_key' => $dataKey,
+        ];
+    }
+
+    $isComplete = $completed >= $required && $missing === [];
+
+    return [
+        'required_count' => $required,
+        'completed_count' => $completed,
+        'is_complete' => $isComplete,
+        'slots' => $slots,
+        'missing_labels' => $missing,
+    ];
+}
+
+/**
+ * @param array<string, mixed> $payload
+ */
+function m360_rw_intake_photos_complete(array $payload): bool
+{
+    $canonical = m360_rw_intake_photos_canonical($payload);
+
+    return !empty($canonical['is_complete'])
+        && ($canonical['completed_count'] ?? 0) >= M360_RW_INTAKE_PHOTO_MIN_REQUIRED
+        && ($canonical['missing_labels'] ?? []) === [];
+}
+
+/**
+ * @param array<string, mixed> $payload
+ * @param array{required_count:int,completed_count:int,is_complete:bool,slots:array<string,array<string,string>>,missing_labels:list<string>} $canonical
+ * @return array<string, mixed>
+ */
+function m360_rw_intake_photos_sync_to_payload(array $payload, array $canonical): array
+{
+    $payload = m360_rw_intake_ensure_nested($payload);
+    $payload['reception_intake']['photos'] = [
+        'required_count' => $canonical['required_count'],
+        'completed_count' => $canonical['completed_count'],
+        'is_complete' => $canonical['is_complete'],
+        'slots' => $canonical['slots'],
+    ];
+
+    if (!isset($payload['reception_intake']['documents']) || !is_array($payload['reception_intake']['documents'])) {
+        $payload['reception_intake']['documents'] = [];
+    }
+    $docs = &$payload['reception_intake']['documents'];
+    $docs['photo_count'] = $canonical['completed_count'];
+    $docs['photo_min_required'] = M360_RW_INTAKE_PHOTO_MIN_REQUIRED;
+    $docs['photo_status'] = $canonical['is_complete']
+        ? 'ثبت شد'
+        : ($canonical['completed_count'] . '/' . $canonical['required_count']);
+    $payload['photo_status'] = $docs['photo_status'];
+
+    $legacyPhotos = [];
+    foreach ($canonical['slots'] as $key => $slot) {
+        if (($slot['status'] ?? '') === 'captured' && trim((string)($slot['data_key'] ?? '')) !== '') {
+            $legacyPhotos[$key] = [
+                'label' => $slot['label'],
+                'file' => $slot['data_key'],
+                'saved_at' => $slot['captured_at'],
+                'saved_by' => $slot['captured_by'],
+            ];
+        }
+    }
+    $docs['reception_photos'] = $legacyPhotos;
+
+    return $payload;
+}
+
+/**
+ * @param array<string, mixed> $payload
+ * @return array{count:int,min_required:int,complete:bool,missing_labels:list<string>,slots:array<string,array{label:string,file:string,saved:bool,saved_at:string}>,legacy_file:string,legacy_only:bool,canonical:array<string,mixed>}
  */
 function m360_rw_intake_reception_photo_status(array $payload): array
 {
+    $canonical = m360_rw_intake_photos_canonical($payload);
     $slotDefs = m360_rw_intake_reception_photo_slots();
-    $min = M360_RW_INTAKE_PHOTO_MIN_REQUIRED;
-    $payload = m360_rw_intake_ensure_nested($payload);
     $docs = is_array($payload['reception_intake']['documents'] ?? null) ? $payload['reception_intake']['documents'] : [];
-    $stored = is_array($docs['reception_photos'] ?? null) ? $docs['reception_photos'] : [];
     $legacyFile = trim((string)($docs['photo_file'] ?? ''));
-    $count = 0;
-    $missing = [];
     $slots = [];
 
     foreach ($slotDefs as $key => $label) {
-        $entry = is_array($stored[$key] ?? null) ? $stored[$key] : [];
-        $file = trim((string)($entry['file'] ?? ''));
-        $saved = $file !== '';
-        if ($saved) {
-            $count++;
-        } else {
-            $missing[] = $label;
-        }
+        $cs = is_array($canonical['slots'][$key] ?? null) ? $canonical['slots'][$key] : [];
+        $file = trim((string)($cs['data_key'] ?? ''));
+        $saved = ($cs['status'] ?? '') === 'captured' && $file !== '';
         $slots[$key] = [
             'label' => $label,
             'file' => $file,
             'saved' => $saved,
-            'saved_at' => (string)($entry['saved_at'] ?? ''),
+            'saved_at' => (string)($cs['captured_at'] ?? ''),
         ];
     }
 
     return [
-        'count' => $count,
-        'min_required' => $min,
-        'complete' => $count >= $min && $missing === [],
-        'missing_labels' => $missing,
+        'count' => $canonical['completed_count'],
+        'min_required' => $canonical['required_count'],
+        'complete' => m360_rw_intake_photos_complete($payload),
+        'missing_labels' => $canonical['missing_labels'],
         'slots' => $slots,
         'legacy_file' => $legacyFile,
-        'legacy_only' => $legacyFile !== '' && $count === 0,
+        'legacy_only' => $legacyFile !== '' && $canonical['completed_count'] === 0,
+        'canonical' => $canonical,
     ];
 }
 
@@ -2368,16 +9368,17 @@ function m360_rw_intake_referral_teams(): array
 function m360_rw_intake_section_titles(): array
 {
     return [
-        'mobile_otp' => 'شماره موبایل و تأیید مشتری',
-        'vehicle_identity' => 'اطلاعات خودرو',
-        'condition_notes' => 'وضعیت خودرو (لوازم / آسیب)',
-        'service_classification' => 'دسته‌بندی خدمات پذیرشگر',
+        'mobile_otp' => m360_rw_canonical_intake_step_label('mobile_otp'),
+        'customer_information' => m360_rw_canonical_intake_step_label('customer'),
+        'vehicle_identity' => m360_rw_canonical_intake_step_label('vehicle'),
+        'condition_notes' => m360_rw_canonical_intake_step_label('condition'),
+        'service_classification' => m360_rw_canonical_intake_step_label('service'),
         'temporary_reception' => 'وضعیت پذیرش موقت',
         'referral' => 'ارجاع کارشناسی / تیم مسئول',
-        'documents_cost' => 'مستندات و توافق هزینه',
+        'documents_cost' => m360_rw_canonical_intake_step_label('checklist'),
         'camera_photo' => 'عکس پذیرش خودرو',
         'diagnostic_pdf' => 'فایل دیاگ اولیه',
-        'contract' => 'قرارداد پذیرش و تأیید مشتری',
+        'contract' => m360_rw_canonical_intake_step_label('contract'),
         'reception_confirmation' => 'تأیید نهایی پذیرشگر',
     ];
 }
@@ -2393,20 +9394,327 @@ function m360_rw_intake_load_otp_helper(): bool
     return function_exists('m360_otp_send');
 }
 
+/** @return array{active:bool,available:bool,reason_fa:string,config_missing:bool,dev_mode?:bool} */
+function m360_rw_intake_otp_config_status(): array
+{
+    if (!m360_rw_intake_load_otp_helper()) {
+        return [
+            'active' => false,
+            'available' => false,
+            'reason_fa' => 'تنظیمات پیامک فعال نیست؛ فایل خصوصی OTP تنظیم نشده است.',
+            'config_missing' => true,
+        ];
+    }
+    if (function_exists('m360_otp_sms_configured') && m360_otp_sms_configured()) {
+        return ['active' => true, 'available' => true, 'reason_fa' => '', 'config_missing' => false];
+    }
+    if (function_exists('m360_otp_can_use_dev_code') && m360_otp_can_use_dev_code()) {
+        return [
+            'active' => true,
+            'available' => true,
+            'reason_fa' => '',
+            'config_missing' => false,
+            'dev_mode' => true,
+        ];
+    }
+
+    return [
+        'active' => false,
+        'available' => false,
+        'reason_fa' => 'تنظیمات پیامک فعال نیست؛ فایل خصوصی OTP تنظیم نشده است.',
+        'config_missing' => true,
+    ];
+}
+
 /** @return array{available:bool,reason_fa:string} */
 function m360_rw_intake_otp_send_available(): array
 {
-    if (!m360_rw_intake_load_otp_helper()) {
-        return ['available' => false, 'reason_fa' => 'ارسال OTP نیازمند اتصال پیامک فعال است.'];
+    $status = m360_rw_intake_otp_config_status();
+
+    return ['available' => $status['available'], 'reason_fa' => $status['reason_fa']];
+}
+
+/**
+ * @param array<string, mixed> $payload
+ * @param array<string, string>|null $request
+ * @return array{label_fa:string,show_verify_form:bool,verified:bool,status_code:string}
+ */
+function m360_rw_intake_otp_ui_status(array $payload, ?array $request, bool $otpSentFlash = false, bool $flashOk = false, string $flashMsg = ''): array
+{
+    $verified = $request !== null && m360_rw_intake_reception_otp_verified($request);
+    if ($request !== null && m360_online_req_is_staff_walkin($request)) {
+        return [
+            'label_fa' => 'ثبت حضوری — OTP اولیه موبایل لازم نیست',
+            'show_verify_form' => false,
+            'verified' => true,
+            'status_code' => 'staff_walkin_exempt',
+        ];
     }
-    if (function_exists('m360_otp_sms_configured') && m360_otp_sms_configured()) {
-        return ['available' => true, 'reason_fa' => ''];
-    }
-    if (function_exists('m360_otp_can_use_dev_code') && m360_otp_can_use_dev_code()) {
-        return ['available' => true, 'reason_fa' => 'حالت توسعه محلی — کد OTP در لاگ/محیط dev'];
+    if ($verified) {
+        return [
+            'label_fa' => 'تأیید شده',
+            'show_verify_form' => false,
+            'verified' => true,
+            'status_code' => 'verified',
+        ];
     }
 
-    return ['available' => false, 'reason_fa' => 'ارسال OTP نیازمند اتصال پیامک فعال است.'];
+    if ($flashOk && ($otpSentFlash || m360_rw_intake_flash_indicates_otp_sent($flashMsg))) {
+        return [
+            'label_fa' => 'ارسال شده، در انتظار تأیید',
+            'show_verify_form' => true,
+            'verified' => false,
+            'status_code' => 'sent',
+        ];
+    }
+
+    $otpMeta = $payload['reception_intake']['otp'] ?? [];
+    if (!is_array($otpMeta)) {
+        $otpMeta = [];
+    }
+    $code = trim((string)($otpMeta['status'] ?? 'unverified'));
+    $labels = [
+        'unverified' => 'تأیید نشده',
+        'sent' => 'ارسال شده، در انتظار تأیید',
+        'expired' => 'منقضی شده',
+        'verified' => 'تأیید شده',
+        'failed' => 'ارسال ناموفق',
+        'config_missing' => 'تنظیمات پیامک فعال نیست',
+    ];
+    $label = $labels[$code] ?? 'تأیید نشده';
+    $mobileReady = $request !== null && m360_rw_intake_resolve_mobile_for_otp($request, $payload) !== '';
+    $showVerify = $mobileReady && in_array($code, ['sent', 'expired', 'failed', 'unverified'], true);
+
+    return [
+        'label_fa' => $label,
+        'show_verify_form' => $showVerify,
+        'verified' => false,
+        'status_code' => $code,
+    ];
+}
+
+/**
+ * @param array<string, mixed> $payload
+ * @param array<string, mixed> $request
+ * @param array<string, string> $formValues
+ * @param array{label_fa:string,show_verify_form:bool,verified:bool,status_code:string} $otpStatusUi
+ * @param array{available:bool,reason_fa:string} $otpSend
+ */
+function m360_rw_intake_render_otp_wizard_block(
+    int $onlineRequestId,
+    array $payload,
+    array $request,
+    array $formValues,
+    array $otpStatusUi,
+    array $otpSend,
+    bool $canShowStepForm,
+    bool $otpVerified,
+    string $otpMobile,
+    bool $otpSentFlash,
+    bool $flashOk,
+    string $csrfInputHtml,
+    string $saveUrl
+): void {
+    echo '<div class="m360-rw-otp-step-block" id="step-otp">';
+    echo '<div class="m360-rw-field-grid m360-rw-step-compact">';
+    echo '<div class="m360-rw-field"><span class="m360-rw-field-lbl">موبایل فعلی</span>';
+    echo '<span class="m360-rw-field-val">' . m360_rw_h($otpMobile !== '' ? $otpMobile : '—') . '</span></div>';
+    echo '<div class="m360-rw-field"><span class="m360-rw-field-lbl">وضعیت OTP</span>';
+    echo '<span class="m360-rw-field-val">' . m360_rw_h($otpStatusUi['label_fa']) . '</span></div>';
+    echo '</div>';
+
+    if ($otpVerified) {
+        echo '<p class="m360-rw-flash is-ok">OTP تأیید شده — با تکمیل این مرحله به مرحله خودرو می‌روید.</p>';
+        echo '</div>';
+
+        return;
+    }
+
+    echo '<p class="m360-rw-warn">' . m360_rw_h(M360_RW_RECEPTION_OTP_CUSTOMER_ONLY_MESSAGE_FA) . '</p>';
+    echo '<p class="m360-rw-muted">مشتری باید OTP را از صفحه «ثبت درخواست آنلاین» تکمیل کند. پس از تأیید، درخواست در فهرست پذیرش نمایش داده می‌شود.</p>';
+
+    if (!$canShowStepForm) {
+        echo '</div>';
+
+        return;
+    }
+
+    echo '<form class="m360-rw-form" method="post" action="' . m360_rw_h($saveUrl) . '">';
+    echo $csrfInputHtml;
+    echo '<input type="hidden" name="online_request_id" value="' . $onlineRequestId . '">';
+    echo '<input type="hidden" name="action_type" value="save_mobile_correction">';
+    m360_rw_intake_return_step_hidden('otp');
+    echo '<div class="m360-rw-form-field"><label class="m360-rw-form-label" for="mobile_corrected">موبایل اصلاح‌شده <span class="m360-rw-req">*</span></label>';
+    echo '<input class="m360-rw-form-input" type="tel" id="mobile_corrected" name="mobile_corrected" value="' . m360_rw_h($formValues['mobile_corrected'] ?? $otpMobile) . '" required></div>';
+    echo '<button type="submit" class="m360-rw-btn m360-rw-btn-secondary">ذخیره موبایل</button>';
+    echo '</form>';
+
+    echo '</div>';
+}
+
+/**
+ * @param array<string, mixed> $result
+ */
+function m360_rw_intake_classify_otp_send_failure(string $failMsg, array $result): string
+{
+    if (str_contains($failMsg, 'توکن iPPanel') || str_contains($failMsg, '401')) {
+        return 'invalid_token';
+    }
+    if (str_contains($failMsg, 'فعال نیست') || str_contains($failMsg, 'تنظیمات پیامک')) {
+        return 'config_missing';
+    }
+    if (str_contains($failMsg, 'ثانیه دیگر')) {
+        return 'rate_limited';
+    }
+    if ($failMsg === '' && empty($result['ok'])) {
+        return 'provider_fail';
+    }
+
+    return 'provider_fail';
+}
+
+/** @return array{ok:bool,message:string,history_written:bool,category?:string} */
+function m360_rw_intake_process_send_otp($conn, int $requestId, array $request): array
+{
+    if (!m360_rw_intake_load_otp_helper()) {
+        return ['ok' => false, 'message' => 'تنظیمات پیامک فعال نیست.', 'history_written' => false, 'category' => 'config_missing'];
+    }
+
+    $avail = m360_rw_intake_otp_send_available();
+    $existing = m360_online_req_parse_payload($request['request_payload_json'] ?? null);
+    $existing = m360_rw_intake_ensure_nested($existing);
+    $mobile = m360_rw_intake_resolve_mobile_for_otp($request, $existing);
+    if ($mobile === '' || !preg_match('/^09\d{9}$/', $mobile)) {
+        return ['ok' => false, 'message' => 'موبایل برای ارسال OTP ثبت نشده است.', 'history_written' => false, 'category' => 'invalid_mobile'];
+    }
+
+    $now = gmdate('Y-m-d\TH:i:s\Z');
+
+    if (!$avail['available']) {
+        $existing['reception_intake']['otp'] = [
+            'status' => 'config_missing',
+            'mobile' => $mobile,
+            'updated_at' => $now,
+        ];
+        m360_rw_intake_persist_payload($conn, $requestId, $existing, []);
+
+        return ['ok' => false, 'message' => 'تنظیمات پیامک فعال نیست.', 'history_written' => false, 'category' => 'config_missing'];
+    }
+
+    $result = m360_otp_send($mobile);
+    $provider = (function_exists('m360_otp_sms_configured') && m360_otp_sms_configured()) ? 'ippanel' : 'dev';
+
+    if (empty($result['ok'])) {
+        $existing['reception_intake']['otp'] = [
+            'status' => 'failed',
+            'mobile' => $mobile,
+            'provider' => $provider,
+            'updated_at' => $now,
+        ];
+        m360_rw_intake_persist_payload($conn, $requestId, $existing, []);
+        $failMsg = trim((string)($result['message'] ?? ''));
+        $category = m360_rw_intake_classify_otp_send_failure($failMsg, $result);
+
+        return ['ok' => false, 'message' => $failMsg !== '' ? $failMsg : 'ارسال OTP ناموفق بود.', 'history_written' => false, 'category' => $category];
+    }
+
+    $existing['reception_intake']['otp'] = [
+        'status' => 'sent',
+        'mobile' => $mobile,
+        'sent_at' => $now,
+        'provider' => $provider,
+        'updated_at' => $now,
+    ];
+    $persist = m360_rw_intake_persist_payload($conn, $requestId, $existing, []);
+    if (!$persist['ok']) {
+        return ['ok' => false, 'message' => 'پیامک ارسال شد اما ذخیره وضعیت انجام نشد.', 'history_written' => false, 'category' => 'persist_fail'];
+    }
+
+    return ['ok' => true, 'message' => 'پیامک OTP ارسال شد.', 'history_written' => false, 'category' => 'sent'];
+}
+
+/**
+ * @param array<string, string> $post
+ * @return array{ok:bool,message:string,history_written:bool}
+ */
+function m360_rw_intake_process_verify_otp($conn, int $requestId, array $request, array $post): array
+{
+    if (!m360_rw_intake_load_otp_helper()) {
+        return ['ok' => false, 'message' => 'تنظیمات پیامک فعال نیست.', 'history_written' => false];
+    }
+
+    $codeNorm = m360_rw_intake_post_scalar($post, 'otp_code');
+    if (!$codeNorm['ok']) {
+        return ['ok' => false, 'message' => $codeNorm['error'], 'history_written' => false];
+    }
+    $code = $codeNorm['value'];
+    if ($code === '') {
+        return ['ok' => false, 'message' => 'کد تأیید الزامی است.', 'history_written' => false];
+    }
+
+    $existing = m360_online_req_parse_payload($request['request_payload_json'] ?? null);
+    $existing = m360_rw_intake_ensure_nested($existing);
+    $mobile = m360_rw_intake_resolve_mobile_for_otp($request, $existing);
+    if ($mobile === '' || !preg_match('/^09\d{9}$/', $mobile)) {
+        return ['ok' => false, 'message' => 'موبایل برای تأیید OTP ثبت نشده است.', 'history_written' => false];
+    }
+
+    $now = gmdate('Y-m-d\TH:i:s\Z');
+    $provider = m360_otp_sms_configured() ? 'ippanel' : 'dev';
+
+    $result = m360_otp_verify($mobile, $code);
+    if (empty($result['ok'])) {
+        $msg = (string)($result['message'] ?? 'کد تأیید نادرست است.');
+        $otpMeta = $existing['reception_intake']['otp'] ?? [];
+        if (!is_array($otpMeta)) {
+            $otpMeta = [];
+        }
+        if (str_contains($msg, 'منقضی')) {
+            $otpMeta['status'] = 'expired';
+        } elseif (($otpMeta['status'] ?? '') === 'sent') {
+            $otpMeta['failed_attempt'] = true;
+        }
+        $otpMeta['updated_at'] = $now;
+        $existing['reception_intake']['otp'] = $otpMeta;
+        m360_rw_intake_persist_payload($conn, $requestId, $existing, []);
+
+        return ['ok' => false, 'message' => $msg, 'history_written' => false];
+    }
+
+    $existing['otp_verified'] = 1;
+    $existing['otp_verified_at'] = $now;
+    $existing['otp_verified_mobile'] = $mobile;
+    $existing['reception_intake']['otp'] = [
+        'status' => 'verified',
+        'mobile' => $mobile,
+        'verified_at' => $now,
+        'provider' => $provider,
+        'updated_at' => $now,
+    ];
+    m360_rw_intake_mark_section_saved($existing, 'mobile_otp');
+
+    $columnUpdates = [];
+    if (m360_online_req_has_column($conn, 'otp_verified')) {
+        $columnUpdates['otp_verified'] = 1;
+    }
+
+    $persist = m360_rw_intake_persist_payload($conn, $requestId, $existing, $columnUpdates);
+    if (!$persist['ok']) {
+        return ['ok' => false, 'message' => $persist['message'], 'history_written' => false];
+    }
+
+    $userId = erp_auth_current_user_id() ?? ERP_PHASE1_PLATFORM_OWNER_ID;
+    $historyWritten = m360_online_req_write_history(
+        $conn,
+        $requestId,
+        M360_RW_INTAKE_HISTORY_PREFIX . 'VERIFY_CUSTOMER_OTP',
+        (string)($request['request_status'] ?? ''),
+        (string)($request['request_status'] ?? ''),
+        'Customer OTP verified via reception intake',
+        $userId
+    );
+
+    return ['ok' => true, 'message' => 'شماره موبایل مشتری تأیید شد.', 'history_written' => $historyWritten];
 }
 
 function m360_rw_intake_storage_root(int $onlineRequestId): string
@@ -2441,23 +9749,63 @@ function m360_rw_intake_mark_section_saved(array &$payload, string $sectionId): 
  */
 function m360_rw_intake_section_is_complete(string $sectionId, array $payload, array $request, array $formValues): bool
 {
-    $status = $payload['reception_intake']['section_status'][$sectionId]['completed'] ?? false;
-    if ($status) {
-        return true;
+    $sectionToStep = [
+        'mobile_otp' => 'otp',
+        'customer_information' => 'customer',
+        'vehicle_identity' => 'vehicle',
+        'condition_notes' => 'condition',
+        'service_classification' => 'service',
+        'temporary_reception' => 'service',
+        'referral' => 'referral',
+        'camera_photo' => 'condition',
+        'diagnostic_pdf' => 'documents',
+        'contract' => 'signature',
+        'documents_cost' => 'documents',
+        'reception_confirmation' => 'signature',
+    ];
+    if (isset($sectionToStep[$sectionId])) {
+        $state = m360_rw_intake_get_wizard_step_state($payload, $request);
+        $stepKey = $sectionToStep[$sectionId];
+        if (!empty($state['steps'][$stepKey]['complete'])) {
+            return true;
+        }
+        if (in_array($sectionId, ['diagnostic_pdf', 'documents_cost'], true)) {
+            $docs = $state['steps']['documents'] ?? ['complete' => false, 'missing_fields' => []];
+            if ($sectionId === 'diagnostic_pdf') {
+                return !in_array('diagnostic_status', $docs['missing_fields'] ?? [], true);
+            }
+            if ($sectionId === 'documents_cost') {
+                return !in_array('cost_agreement', $docs['missing_fields'] ?? [], true);
+            }
+        }
+        if ($sectionId === 'camera_photo') {
+            return m360_rw_intake_photos_complete($payload);
+        }
+        if ($sectionId === 'reception_confirmation') {
+            return m360_rw_intake_is_locked($payload);
+        }
     }
 
     return match ($sectionId) {
-        'mobile_otp' => trim((string)($request['mobile'] ?? '')) !== '',
-        'vehicle_identity' => trim((string)($formValues['plate'] ?? '')) !== '',
-        'condition_notes' => trim((string)($formValues['vehicle_items'] ?? '')) !== '' || trim((string)($formValues['visible_damage'] ?? '')) !== '',
-        'service_classification' => trim((string)($formValues['service_primary'] ?? '')) !== '',
+        'mobile_otp' => trim((string)($request['mobile'] ?? '')) !== '' && m360_rw_intake_reception_otp_verified($request),
+        'customer_information' => trim((string)m360_rw_pick([$request, $payload], 'customer_name', 'full_name')) !== ''
+            && trim((string)m360_rw_pick([$request, $payload], 'mobile', 'normalized_mobile')) !== '',
+        'vehicle_identity' => m360_rw_intake_vehicle_step_complete($payload, $request),
+        'condition_notes' => m360_rw_intake_condition_step_complete($payload),
+        'service_classification' => m360_rw_intake_service_wizard_step_complete(
+            $formValues,
+            m360_rw_request_service_policy_group(trim((string)m360_rw_pick([$request, $payload], 'request_type')))
+        ),
         'temporary_reception' => trim((string)($formValues['temporary_status'] ?? '')) !== '',
-        'referral' => trim((string)($formValues['referral_team_id'] ?? '')) !== '',
-        'documents_cost' => trim((string)($formValues['cost_agreement'] ?? '')) !== '' || trim((string)($formValues['photo_status'] ?? '')) !== '',
-        'camera_photo' => m360_rw_intake_reception_photo_status($payload)['complete'],
-        'diagnostic_pdf' => !empty($payload['reception_intake']['documents']['diagnostic_pdf']),
-        'contract' => !empty($payload['reception_intake']['contract']['run_at']),
-        'reception_confirmation' => ($formValues['confirmed_by_receptionist'] ?? '') === '1',
+        'referral' => m360_rw_intake_referral_step_complete($payload),
+        'documents_cost' => !empty(m360_rw_intake_agreements_ready($payload)['ready'])
+            || trim((string)($formValues['cost_agreement'] ?? '')) !== '',
+        'camera_photo' => m360_rw_intake_photos_complete($payload),
+        'diagnostic_pdf' => !empty(m360_rw_intake_documents_library_summary($payload)['has_diagnostic_or_scanner'])
+            || trim((string)($formValues['diagnostic_status'] ?? '')) !== ''
+            || !empty($payload['reception_intake']['documents']['diagnostic_pdf']),
+        'contract' => m360_rw_intake_contract_customer_accepted($payload),
+        'reception_confirmation' => m360_rw_intake_is_locked($payload),
         default => false,
     };
 }
@@ -2478,41 +9826,47 @@ function m360_rw_intake_section_ui_state(string $sectionId, array $payload, arra
 
 /**
  * @param array<string, string> $post
- * @return array{ok:bool,error:string,plate:string,parts:array<string,string>}
+ * @return array{ok:bool,error:string,plate:string,display:string,parts:array<string,string>}
  */
 function m360_rw_intake_build_plate_from_post(array $post): array
 {
     $left = trim((string)($post['plate_left_2_digits'] ?? ''));
     $letter = trim((string)($post['plate_letter'] ?? ''));
     $mid = trim((string)($post['plate_middle_3_digits'] ?? ''));
-    $iran = trim((string)($post['plate_iran_2_digits'] ?? ''));
-    $fallback = trim((string)($post['plate'] ?? ''));
+    $iran = trim((string)($post['plate_region_2_digits'] ?? $post['plate_iran_2_digits'] ?? ''));
 
-    if ($left === '' && $letter === '' && $mid === '' && $iran === '') {
-        if ($fallback === '') {
-            return ['ok' => false, 'error' => 'پلاک الزامی است.', 'plate' => '', 'parts' => []];
-        }
+    if ($left === '' && isset($post['plate_first_digit_1'], $post['plate_first_digit_2'])) {
+        $left = trim((string)$post['plate_first_digit_1']) . trim((string)$post['plate_first_digit_2']);
+    }
+    if ($mid === '' && isset($post['plate_middle_digit_1'], $post['plate_middle_digit_2'], $post['plate_middle_digit_3'])) {
+        $mid = trim((string)$post['plate_middle_digit_1']) . trim((string)$post['plate_middle_digit_2']) . trim((string)$post['plate_middle_digit_3']);
+    }
+    if ($iran === '' && isset($post['plate_region_digit_1'], $post['plate_region_digit_2'])) {
+        $iran = trim((string)$post['plate_region_digit_1']) . trim((string)$post['plate_region_digit_2']);
+    }
 
-        return ['ok' => true, 'error' => '', 'plate' => $fallback, 'parts' => []];
+    if ($left === '' || $letter === '' || $mid === '' || $iran === '') {
+        return ['ok' => false, 'error' => 'پلاک باید با انتخاب رقم و حرف تکمیل شود.', 'plate' => '', 'display' => '', 'parts' => []];
     }
 
     if (!preg_match('/^\d{2}$/', $left)) {
-        return ['ok' => false, 'error' => 'دو رقم اول پلاک نامعتبر است.', 'plate' => '', 'parts' => []];
+        return ['ok' => false, 'error' => 'دو رقم اول پلاک نامعتبر است.', 'plate' => '', 'display' => '', 'parts' => []];
     }
     if (!preg_match('/^\d{3}$/', $mid)) {
-        return ['ok' => false, 'error' => 'سه رقم وسط پلاک نامعتبر است.', 'plate' => '', 'parts' => []];
+        return ['ok' => false, 'error' => 'سه رقم وسط پلاک نامعتبر است.', 'plate' => '', 'display' => '', 'parts' => []];
     }
     if (!preg_match('/^\d{2}$/', $iran)) {
-        return ['ok' => false, 'error' => 'کد ایران پلاک نامعتبر است.', 'plate' => '', 'parts' => []];
+        return ['ok' => false, 'error' => 'کد ایران پلاک نامعتبر است.', 'plate' => '', 'display' => '', 'parts' => []];
     }
     if ($letter === '' || !in_array($letter, m360_rw_intake_plate_letters(), true)) {
-        return ['ok' => false, 'error' => 'حرف پلاک نامعتبر است.', 'plate' => '', 'parts' => []];
+        return ['ok' => false, 'error' => 'حرف پلاک نامعتبر است.', 'plate' => '', 'display' => '', 'parts' => []];
     }
 
     $plate = $left . $letter . $mid . '-' . $iran;
+    $display = $left . ' ' . $letter . ' ' . $mid . ' ایران ' . $iran;
     $parts = ['left_2' => $left, 'letter' => $letter, 'middle_3' => $mid, 'region_2' => $iran];
 
-    return ['ok' => true, 'error' => '', 'plate' => $plate, 'parts' => $parts];
+    return ['ok' => true, 'error' => '', 'plate' => $plate, 'display' => $display, 'parts' => $parts];
 }
 
 /** @return array{ok:bool,error:string,relative_path:string} */
@@ -2546,42 +9900,750 @@ function m360_rw_intake_save_base64_image(int $onlineRequestId, string $base64, 
     return ['ok' => true, 'error' => '', 'relative_path' => 'reception-intake/' . $onlineRequestId . '/' . $fname];
 }
 
-/** @return array{ok:bool,error:string,relative_path:string} */
-function m360_rw_intake_save_pdf_upload(int $onlineRequestId, array $file): array
+/** @return array<string, string> Upload selector types only (canonical). */
+function m360_rw_intake_document_types(): array
 {
-    if (($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
-        return ['ok' => false, 'error' => 'فایل PDF دریافت نشد.', 'relative_path' => ''];
+    return [
+        'diagnostic_report' => 'گزارش دیاگ',
+        'scanner_report' => 'گزارش اسکنر',
+        'expert_report' => 'گزارش کارشناسی',
+        'vehicle_video' => 'ویدئوی وضعیت خودرو / مورد حاد',
+    ];
+}
+
+/** @return array<string, string> All labels including legacy display-only types. */
+function m360_rw_intake_document_type_labels_all(): array
+{
+    return array_merge(m360_rw_intake_document_types(), [
+        'inspection_report' => 'گزارش کارشناسی',
+        'cost_agreement' => 'توافق هزینه (بایگانی)',
+        'insurance' => 'بیمه (بایگانی)',
+        'test_drive' => 'تست رانندگی (بایگانی)',
+        'customer_document' => 'سند ارسالی مشتری (بایگانی)',
+        'other' => 'سایر (بایگانی)',
+        'diagnostic_pdf' => 'گزارش دیاگ',
+    ]);
+}
+
+function m360_rw_intake_normalize_document_type(string $type): string
+{
+    $type = strtolower(trim($type));
+    $aliases = [
+        'diagnostic_pdf' => 'diagnostic_report',
+        'diag' => 'diagnostic_report',
+        'diagnostic' => 'diagnostic_report',
+        'scanner' => 'scanner_report',
+        'inspection' => 'expert_report',
+        'inspection_report' => 'expert_report',
+        'expert' => 'expert_report',
+        'video' => 'vehicle_video',
+        'vehicle_condition_video' => 'vehicle_video',
+    ];
+    if (isset($aliases[$type])) {
+        $type = $aliases[$type];
     }
+    $uploadTypes = m360_rw_intake_document_types();
+    if (isset($uploadTypes[$type])) {
+        return $type;
+    }
+    $legacy = ['cost_agreement', 'insurance', 'test_drive', 'customer_document', 'other'];
+    if (in_array($type, $legacy, true)) {
+        return $type;
+    }
+
+    return 'other';
+}
+
+function m360_rw_intake_document_type_label(string $type): string
+{
+    $type = m360_rw_intake_normalize_document_type($type);
+    $labels = m360_rw_intake_document_type_labels_all();
+
+    return $labels[$type] ?? 'مدرک';
+}
+
+function m360_rw_intake_document_type_is_video(string $type): bool
+{
+    return m360_rw_intake_normalize_document_type($type) === 'vehicle_video';
+}
+
+/** @return array{ext:list<string>,mime:list<string>,max_bytes:int,accept:string} */
+function m360_rw_intake_document_upload_rules(string $type): array
+{
+    if (m360_rw_intake_document_type_is_video($type)) {
+        return [
+            'ext' => ['mp4', 'webm', 'mov', '3gp'],
+            'mime' => ['video/mp4', 'video/webm', 'video/quicktime', 'video/3gpp', 'video/3gpp2'],
+            'max_bytes' => 50 * 1024 * 1024,
+            'accept' => 'video/mp4,video/webm,video/quicktime,video/3gpp,.mp4,.webm,.mov,.3gp',
+        ];
+    }
+
+    return [
+        'ext' => ['pdf'],
+        'mime' => ['application/pdf'],
+        'max_bytes' => 5 * 1024 * 1024,
+        'accept' => 'application/pdf,.pdf',
+    ];
+}
+
+/** @return array{ok:bool,error:string,relative_path:string,original_name:string,stored_name:string,mime_type:string,file_size:int} */
+function m360_rw_intake_save_pdf_upload(int $onlineRequestId, array $file, string $documentType = 'diagnostic_report'): array
+{
+    return m360_rw_intake_save_document_upload($onlineRequestId, $file, $documentType);
+}
+
+/**
+ * Save PDF (reports) or video (vehicle_video). Append-only unique filename.
+ *
+ * @return array{ok:bool,error:string,relative_path:string,original_name:string,stored_name:string,mime_type:string,file_size:int}
+ */
+function m360_rw_intake_save_document_upload(int $onlineRequestId, array $file, string $documentType = 'diagnostic_report'): array
+{
+    $empty = [
+        'ok' => false,
+        'error' => 'فایل دریافت نشد.',
+        'relative_path' => '',
+        'original_name' => '',
+        'stored_name' => '',
+        'mime_type' => '',
+        'file_size' => 0,
+    ];
+    if (($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+        return $empty;
+    }
+    $documentType = m360_rw_intake_normalize_document_type($documentType);
+    $uploadTypes = m360_rw_intake_document_types();
+    if (!isset($uploadTypes[$documentType])) {
+        $empty['error'] = 'نوع سند برای بارگذاری مجاز نیست.';
+
+        return $empty;
+    }
+    $rules = m360_rw_intake_document_upload_rules($documentType);
     $name = (string)($file['name'] ?? '');
     $tmp = (string)($file['tmp_name'] ?? '');
     $size = (int)($file['size'] ?? 0);
-    if ($size < 1 || $size > 5 * 1024 * 1024) {
-        return ['ok' => false, 'error' => 'حجم PDF بیش از حد مجاز است.', 'relative_path' => ''];
+    if ($size < 1 || $size > (int)$rules['max_bytes']) {
+        $empty['error'] = m360_rw_intake_document_type_is_video($documentType)
+            ? 'حجم ویدئو بیش از حد مجاز است (حداکثر ۵۰ مگابایت).'
+            : 'حجم PDF بیش از حد مجاز است (حداکثر ۵ مگابایت).';
+
+        return $empty;
     }
     $ext = strtolower(pathinfo($name, PATHINFO_EXTENSION));
-    if ($ext !== 'pdf') {
-        return ['ok' => false, 'error' => 'فقط فایل PDF مجاز است.', 'relative_path' => ''];
+    if (!in_array($ext, $rules['ext'], true)) {
+        $empty['error'] = m360_rw_intake_document_type_is_video($documentType)
+            ? 'فقط ویدئو با فرمت mp4 / webm / mov / 3gp مجاز است.'
+            : 'فقط فایل PDF مجاز است.';
+
+        return $empty;
     }
     $finfo = finfo_open(FILEINFO_MIME_TYPE);
     $mime = $finfo !== false ? (string)finfo_file($finfo, $tmp) : '';
     if ($finfo !== false) {
         finfo_close($finfo);
     }
-    if ($mime !== '' && $mime !== 'application/pdf') {
-        return ['ok' => false, 'error' => 'نوع فایل PDF معتبر نیست.', 'relative_path' => ''];
+    if ($mime !== '' && !in_array($mime, $rules['mime'], true)) {
+        $empty['error'] = 'نوع فایل با پسوند انتخاب‌شده هم‌خوانی ندارد.';
+
+        return $empty;
     }
 
-    $dir = m360_rw_intake_storage_root($onlineRequestId) . DIRECTORY_SEPARATOR . 'diagnostic';
+    $dir = m360_rw_intake_storage_root($onlineRequestId)
+        . DIRECTORY_SEPARATOR . 'documents'
+        . DIRECTORY_SEPARATOR . $documentType;
     if (!is_dir($dir)) {
         @mkdir($dir, 0755, true);
     }
-    $fname = 'diag_' . gmdate('YmdHis') . '.pdf';
+    $fname = $documentType . '_' . gmdate('YmdHis') . '_' . bin2hex(random_bytes(4)) . '.' . $ext;
     $dest = $dir . DIRECTORY_SEPARATOR . $fname;
+    $guard = 0;
+    while (is_file($dest) && $guard < 8) {
+        $fname = $documentType . '_' . gmdate('YmdHis') . '_' . bin2hex(random_bytes(4)) . '.' . $ext;
+        $dest = $dir . DIRECTORY_SEPARATOR . $fname;
+        $guard++;
+    }
+    if (is_file($dest)) {
+        $empty['error'] = 'نام فایل ذخیره‌سازی تکراری شد.';
+
+        return $empty;
+    }
     if (!@move_uploaded_file($tmp, $dest)) {
-        return ['ok' => false, 'error' => 'ذخیره PDF انجام نشد.', 'relative_path' => ''];
+        $empty['error'] = 'ذخیره فایل انجام نشد.';
+
+        return $empty;
     }
 
-    return ['ok' => true, 'error' => '', 'relative_path' => 'reception-intake/' . $onlineRequestId . '/diagnostic/' . $fname];
+    return [
+        'ok' => true,
+        'error' => '',
+        'relative_path' => 'reception-intake/' . $onlineRequestId . '/documents/' . $documentType . '/' . $fname,
+        'original_name' => $name !== '' ? $name : $fname,
+        'stored_name' => $fname,
+        'mime_type' => $mime !== '' ? $mime : (m360_rw_intake_document_type_is_video($documentType) ? 'video/mp4' : 'application/pdf'),
+        'file_size' => $size,
+    ];
+}
+
+function m360_rw_intake_format_file_size(int $bytes): string
+{
+    if ($bytes < 1) {
+        return '—';
+    }
+    if ($bytes < 1024) {
+        return $bytes . ' B';
+    }
+    if ($bytes < 1024 * 1024) {
+        return number_format($bytes / 1024, 1) . ' KB';
+    }
+
+    return number_format($bytes / (1024 * 1024), 2) . ' MB';
+}
+
+/** @return array<string, string> */
+function m360_rw_intake_yes_no_options(): array
+{
+    return [
+        'yes' => 'دارد',
+        'no' => 'ندارد',
+    ];
+}
+
+/** @return array<string, string> */
+function m360_rw_intake_part_purchase_authorization_options(): array
+{
+    return [
+        'under_500m' => 'زیر 500,000,000 ریال',
+        'up_to_1b' => 'تا 1,000,000,000 ریال',
+        'up_to_2b' => 'تا 2,000,000,000 ریال',
+        'no_limit' => 'بدون سقف',
+        'owner_sms_coord' => 'با هماهنگی مالک پیامکی',
+    ];
+}
+
+function m360_rw_intake_agreement_yes_no_fa(string $value): string
+{
+    $value = strtolower(trim($value));
+    if ($value === 'yes' || $value === '1' || $value === 'true') {
+        return 'دارد';
+    }
+    if ($value === 'no' || $value === '0' || $value === 'false') {
+        return 'ندارد';
+    }
+
+    return trim($value) !== '' ? $value : '—';
+}
+
+function m360_rw_intake_part_purchase_authorization_fa(string $key): string
+{
+    $opts = m360_rw_intake_part_purchase_authorization_options();
+    $key = trim($key);
+
+    return $opts[$key] ?? ($key !== '' ? $key : '—');
+}
+
+/**
+ * @param array<string, mixed> $payload
+ * @return array<string, string>
+ */
+function m360_rw_intake_agreements_from_payload(array $payload): array
+{
+    $payload = m360_rw_intake_ensure_nested($payload);
+    $ag = is_array($payload['reception_intake']['agreements'] ?? null)
+        ? $payload['reception_intake']['agreements']
+        : [];
+    $docs = is_array($payload['reception_intake']['documents'] ?? null)
+        ? $payload['reception_intake']['documents']
+        : [];
+
+    return [
+        'third_party_insurance' => (string)($ag['third_party_insurance'] ?? ''),
+        'body_insurance' => (string)($ag['body_insurance'] ?? ''),
+        'test_drive_permission' => (string)($ag['test_drive_permission'] ?? ''),
+        'part_purchase_authorization' => (string)($ag['part_purchase_authorization'] ?? $payload['purchase_limit'] ?? ''),
+        'other_agreements_note' => (string)($ag['other_agreements_note'] ?? $docs['cost_agreement_note'] ?? $payload['cost_agreement_note'] ?? ''),
+        'service_cost_min' => (string)($ag['service_cost_min'] ?? ''),
+        'service_cost_max' => (string)($ag['service_cost_max'] ?? ''),
+    ];
+}
+
+/**
+ * @param array<string, mixed> $post
+ * @return array{ok:bool,error:string,agreements:array<string,string>}
+ */
+function m360_rw_intake_agreements_from_post(array $post): array
+{
+    $yesNo = m360_rw_intake_yes_no_options();
+    $purchaseOpts = m360_rw_intake_part_purchase_authorization_options();
+
+    $third = strtolower(trim((string)($post['third_party_insurance'] ?? '')));
+    $body = strtolower(trim((string)($post['body_insurance'] ?? '')));
+    $testDrive = strtolower(trim((string)($post['test_drive_permission'] ?? '')));
+    $purchase = trim((string)($post['part_purchase_authorization'] ?? ''));
+    $note = trim((string)($post['other_agreements_note'] ?? ''));
+    $minRaw = preg_replace('/[^\d]/', '', (string)($post['service_cost_min'] ?? '')) ?? '';
+    $maxRaw = preg_replace('/[^\d]/', '', (string)($post['service_cost_max'] ?? '')) ?? '';
+
+    if (!isset($yesNo[$third])) {
+        return ['ok' => false, 'error' => 'وضعیت بیمه شخص ثالث را مشخص کنید.', 'agreements' => []];
+    }
+    if (!isset($yesNo[$body])) {
+        return ['ok' => false, 'error' => 'وضعیت بیمه بدنه را مشخص کنید.', 'agreements' => []];
+    }
+    if (!isset($yesNo[$testDrive])) {
+        return ['ok' => false, 'error' => 'اجازه تست درایو را مشخص کنید.', 'agreements' => []];
+    }
+    if (!isset($purchaseOpts[$purchase])) {
+        return ['ok' => false, 'error' => 'سقف مجاز خرید قطعه را انتخاب کنید.', 'agreements' => []];
+    }
+    if ($minRaw === '' || !preg_match('/^\d+$/', $minRaw)) {
+        return ['ok' => false, 'error' => 'حداقل هزینه خدمات را به صورت عدد وارد کنید.', 'agreements' => []];
+    }
+    if ($maxRaw === '' || !preg_match('/^\d+$/', $maxRaw)) {
+        return ['ok' => false, 'error' => 'حداکثر هزینه خدمات را به صورت عدد وارد کنید.', 'agreements' => []];
+    }
+    $min = (int)$minRaw;
+    $max = (int)$maxRaw;
+    if ($max < $min) {
+        return ['ok' => false, 'error' => 'حداکثر هزینه خدمات نمی‌تواند کمتر از حداقل باشد.', 'agreements' => []];
+    }
+    if (mb_strlen($note) > 2000) {
+        $note = mb_substr($note, 0, 2000);
+    }
+
+    $rangeFa = 'از ' . m360_format_number($min) . ' تا ' . m360_format_number($max) . ' ریال';
+    $agreements = [
+        'third_party_insurance' => $third,
+        'body_insurance' => $body,
+        'test_drive_permission' => $testDrive,
+        'part_purchase_authorization' => $purchase,
+        'other_agreements_note' => $note,
+        'service_cost_min' => (string)$min,
+        'service_cost_max' => (string)$max,
+        'service_cost_currency' => 'IRR',
+        'service_cost_range_fa' => $rangeFa,
+        'third_party_insurance_fa' => m360_rw_intake_agreement_yes_no_fa($third),
+        'body_insurance_fa' => m360_rw_intake_agreement_yes_no_fa($body),
+        'test_drive_permission_fa' => m360_rw_intake_agreement_yes_no_fa($testDrive),
+        'part_purchase_authorization_fa' => m360_rw_intake_part_purchase_authorization_fa($purchase),
+        'saved_at' => gmdate('Y-m-d\TH:i:s\Z'),
+    ];
+
+    return ['ok' => true, 'error' => '', 'agreements' => $agreements];
+}
+
+/**
+ * @param array<string, mixed> $payload
+ * @return array{ready:bool,missing:list<string>}
+ */
+function m360_rw_intake_agreements_ready(array $payload): array
+{
+    $ag = m360_rw_intake_agreements_from_payload($payload);
+    $missing = [];
+    if (!isset(m360_rw_intake_yes_no_options()[$ag['third_party_insurance']])) {
+        $missing[] = 'third_party_insurance';
+    }
+    if (!isset(m360_rw_intake_yes_no_options()[$ag['body_insurance']])) {
+        $missing[] = 'body_insurance';
+    }
+    if (!isset(m360_rw_intake_yes_no_options()[$ag['test_drive_permission']])) {
+        $missing[] = 'test_drive_permission';
+    }
+    if (!isset(m360_rw_intake_part_purchase_authorization_options()[$ag['part_purchase_authorization']])) {
+        $missing[] = 'part_purchase_authorization';
+    }
+    if ($ag['service_cost_min'] === '' || !preg_match('/^\d+$/', $ag['service_cost_min'])) {
+        $missing[] = 'service_cost_min';
+    }
+    if ($ag['service_cost_max'] === '' || !preg_match('/^\d+$/', $ag['service_cost_max'])) {
+        $missing[] = 'service_cost_max';
+    }
+    if ($missing === [] && (int)$ag['service_cost_max'] < (int)$ag['service_cost_min']) {
+        $missing[] = 'service_cost_range';
+    }
+
+    return ['ready' => $missing === [], 'missing' => $missing];
+}
+
+/**
+ * @param array<string, mixed> $payload
+ * @param array<string, string> $formValues
+ */
+function m360_rw_intake_render_agreements_section(array $payload, array $formValues, bool $canEdit, string $csrfInputHtml, string $saveUrl, int $onlineRequestId): void
+{
+    $ag = m360_rw_intake_agreements_from_payload($payload);
+    $yesNo = m360_rw_intake_yes_no_options();
+    $purchaseOpts = m360_rw_intake_part_purchase_authorization_options();
+    $val = static function (string $key) use ($formValues, $ag): string {
+        $fromForm = trim((string)($formValues[$key] ?? ''));
+        if ($fromForm !== '') {
+            return $fromForm;
+        }
+
+        return (string)($ag[$key] ?? '');
+    };
+
+    echo '<section class="m360-rw-agreements" id="section-agreements" aria-label="توافقات و مجوزها">';
+    echo '<h3 class="m360-rw-section-title">توافقات و مجوزها</h3>';
+    echo '<p class="m360-rw-muted">این بخش داده ساختاریافته پذیرش است و به قرارداد مشتری منتقل می‌شود. بارگذاری فایل نیست.</p>';
+    if (!$canEdit) {
+        echo '<div class="m360-rw-field-grid">';
+        echo '<div class="m360-rw-field"><span class="m360-rw-field-lbl">بیمه شخص ثالث</span><span class="m360-rw-field-val">' . m360_rw_h(m360_rw_intake_agreement_yes_no_fa($val('third_party_insurance'))) . '</span></div>';
+        echo '<div class="m360-rw-field"><span class="m360-rw-field-lbl">بیمه بدنه</span><span class="m360-rw-field-val">' . m360_rw_h(m360_rw_intake_agreement_yes_no_fa($val('body_insurance'))) . '</span></div>';
+        echo '<div class="m360-rw-field"><span class="m360-rw-field-lbl">اجازه تست درایو</span><span class="m360-rw-field-val">' . m360_rw_h(m360_rw_intake_agreement_yes_no_fa($val('test_drive_permission'))) . '</span></div>';
+        echo '<div class="m360-rw-field"><span class="m360-rw-field-lbl">سقف مجاز خرید قطعه</span><span class="m360-rw-field-val">' . m360_rw_h(m360_rw_intake_part_purchase_authorization_fa($val('part_purchase_authorization'))) . '</span></div>';
+        echo '<div class="m360-rw-field"><span class="m360-rw-field-lbl">حداقل هزینه خدمات</span><span class="m360-rw-field-val">' . m360_rw_h($val('service_cost_min') !== '' ? m360_format_money_irr($val('service_cost_min')) : 'ثبت نشده') . '</span></div>';
+        echo '<div class="m360-rw-field"><span class="m360-rw-field-lbl">حداکثر هزینه خدمات</span><span class="m360-rw-field-val">' . m360_rw_h($val('service_cost_max') !== '' ? m360_format_money_irr($val('service_cost_max')) : 'ثبت نشده') . '</span></div>';
+        echo '<div class="m360-rw-field"><span class="m360-rw-field-lbl">سایر توافقات</span><span class="m360-rw-field-val">' . m360_rw_h($val('other_agreements_note') !== '' ? $val('other_agreements_note') : 'ثبت نشده') . '</span></div>';
+        echo '</div></section>';
+
+        return;
+    }
+
+    echo '<form class="m360-rw-form m360-rw-agreements-form" method="post" action="' . m360_rw_h($saveUrl) . '">';
+    echo $csrfInputHtml;
+    echo '<input type="hidden" name="online_request_id" value="' . $onlineRequestId . '">';
+    echo '<input type="hidden" name="action_type" value="save_documents_and_cost">';
+    m360_rw_intake_return_step_hidden('documents');
+    echo '<input type="hidden" name="return_section" value="section-agreements">';
+
+    echo '<div class="m360-rw-agreements-grid">';
+    foreach ([
+        'third_party_insurance' => 'بیمه شخص ثالث',
+        'body_insurance' => 'بیمه بدنه',
+        'test_drive_permission' => 'اجازه تست درایو',
+    ] as $field => $label) {
+        $current = $val($field);
+        echo '<div class="m360-rw-form-field">';
+        echo '<span class="m360-rw-form-label">' . m360_rw_h($label) . '</span>';
+        echo '<div class="m360-rw-yesno">';
+        foreach ($yesNo as $optKey => $optLabel) {
+            $id = $field . '_' . $optKey;
+            $checked = $current === $optKey ? ' checked' : '';
+            echo '<label class="m360-rw-yesno__opt" for="' . m360_rw_h($id) . '">';
+            echo '<input type="radio" id="' . m360_rw_h($id) . '" name="' . m360_rw_h($field) . '" value="' . m360_rw_h($optKey) . '" required' . $checked . '>';
+            echo '<span>' . m360_rw_h($optLabel) . '</span></label>';
+        }
+        echo '</div></div>';
+    }
+    echo '</div>';
+
+    echo '<div class="m360-rw-form-field">';
+    echo '<label class="m360-rw-form-label" for="part_purchase_authorization">حداکثر مبلغ مجاز خرید قطعه با تأیید مشتری</label>';
+    echo '<select class="m360-rw-form-input" id="part_purchase_authorization" name="part_purchase_authorization" required>';
+    echo '<option value="">انتخاب کنید</option>';
+    $purchaseCurrent = $val('part_purchase_authorization');
+    foreach ($purchaseOpts as $optKey => $optLabel) {
+        $sel = $purchaseCurrent === $optKey ? ' selected' : '';
+        echo '<option value="' . m360_rw_h($optKey) . '"' . $sel . '>' . m360_rw_h($optLabel) . '</option>';
+    }
+    echo '</select>';
+    echo '<p class="m360-rw-muted">گزینه «با هماهنگی مالک پیامکی» فقط به‌عنوان مقدار ذخیره‌شده ثبت می‌شود؛ ارسال خودکار پیامک مالک در این فاز پیاده‌سازی نشده است.</p>';
+    echo '</div>';
+
+    echo '<div class="m360-rw-form-field">';
+    echo '<label class="m360-rw-form-label" for="other_agreements_note">سایر موضوعات مورد توافق</label>';
+    echo '<textarea class="m360-rw-form-input m360-rw-form-textarea" id="other_agreements_note" name="other_agreements_note" rows="3" maxlength="2000">' . m360_rw_h($val('other_agreements_note')) . '</textarea>';
+    echo '</div>';
+
+    $minDisplay = $val('service_cost_min') !== '' ? m360_format_number($val('service_cost_min')) : '';
+    $maxDisplay = $val('service_cost_max') !== '' ? m360_format_number($val('service_cost_max')) : '';
+    echo '<div class="m360-rw-form-grid">';
+    echo '<div class="m360-rw-form-field">';
+    echo '<label class="m360-rw-form-label" for="service_cost_min">حداقل هزینه خدمات (ریال)</label>';
+    echo '<input class="m360-rw-form-input m360-rw-money-input" type="text" inputmode="numeric" autocomplete="off" id="service_cost_min" name="service_cost_min" value="' . m360_rw_h($minDisplay) . '" required data-m360-money="1">';
+    echo '</div>';
+    echo '<div class="m360-rw-form-field">';
+    echo '<label class="m360-rw-form-label" for="service_cost_max">حداکثر هزینه خدمات (ریال)</label>';
+    echo '<input class="m360-rw-form-input m360-rw-money-input" type="text" inputmode="numeric" autocomplete="off" id="service_cost_max" name="service_cost_max" value="' . m360_rw_h($maxDisplay) . '" required data-m360-money="1">';
+    echo '</div>';
+    echo '</div>';
+    echo '<p class="m360-rw-muted">واحد پول: ریال ایران (IRR) — نمایش با جداکننده هزارتایی؛ مقدار ذخیره‌شده خام عددی می‌ماند.</p>';
+    echo '<button type="submit" class="m360-rw-btn">ذخیره توافقات و مجوزها</button>';
+    echo '</form></section>';
+}
+
+/**
+ * Document cards from payload metadata (no schema). Append-only library.
+ *
+ * @param array<string, mixed> $payload
+ * @return list<array<string, mixed>>
+ */
+function m360_rw_intake_documents_files_list(array $payload): array
+{
+    $payload = m360_rw_intake_ensure_nested($payload);
+    $docs = is_array($payload['reception_intake']['documents'] ?? null) ? $payload['reception_intake']['documents'] : [];
+    $out = [];
+    $seen = [];
+
+    $push = static function (array $entry) use (&$out, &$seen): void {
+        $path = trim((string)($entry['relative_path'] ?? ''));
+        if ($path === '') {
+            $relUrl = trim((string)($entry['relative_url'] ?? ''));
+            if (str_starts_with($relUrl, 'storage/')) {
+                $path = substr($relUrl, strlen('storage/'));
+            }
+        }
+        if ($path === '' || isset($seen[$path])) {
+            return;
+        }
+        $seen[$path] = true;
+        $full = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'storage' . DIRECTORY_SEPARATOR . str_replace(['/', '\\'], DIRECTORY_SEPARATOR, $path);
+        $exists = is_file($full);
+        $typeRaw = (string)($entry['document_type'] ?? $entry['type'] ?? 'other');
+        $type = m360_rw_intake_normalize_document_type($typeRaw);
+        $label = trim((string)($entry['document_type_label'] ?? $entry['type_label_fa'] ?? ''));
+        if ($label === '') {
+            $label = m360_rw_intake_document_type_label($type);
+        }
+        $statusRaw = strtoupper(trim((string)($entry['status'] ?? 'ACTIVE')));
+        if (in_array($statusRaw, ['SAVED', 'OK', ''], true)) {
+            $statusRaw = 'ACTIVE';
+        }
+        $size = (int)($entry['file_size'] ?? 0);
+        if ($size < 1 && $exists) {
+            $size = (int)@filesize($full);
+        }
+        $uploaderId = (string)($entry['uploaded_by_user_id'] ?? $entry['uploaded_by'] ?? '');
+        $uploaderName = trim((string)($entry['uploaded_by_name'] ?? ''));
+        $out[] = [
+            'document_id' => (string)($entry['document_id'] ?? ('legacy_' . substr(sha1($path), 0, 12))),
+            'document_type' => $type,
+            'document_type_label' => $label,
+            'type' => $type,
+            'type_label_fa' => $label,
+            'relative_path' => $path,
+            'original_filename' => (string)($entry['original_filename'] ?? $entry['original_name'] ?? basename($path)),
+            'original_name' => (string)($entry['original_filename'] ?? $entry['original_name'] ?? basename($path)),
+            'stored_filename' => (string)($entry['stored_filename'] ?? $entry['stored_name'] ?? basename($path)),
+            'stored_name' => (string)($entry['stored_filename'] ?? $entry['stored_name'] ?? basename($path)),
+            'status' => $statusRaw,
+            'uploaded_at' => (string)($entry['uploaded_at'] ?? ''),
+            'uploaded_by_user_id' => $uploaderId,
+            'uploaded_by' => $uploaderId,
+            'uploaded_by_name' => $uploaderName,
+            'mime_type' => (string)($entry['mime_type'] ?? 'application/pdf'),
+            'file_size' => $size,
+            'note' => (string)($entry['note'] ?? $entry['description'] ?? ''),
+            'public_url' => 'storage/' . ltrim(str_replace('\\', '/', $path), '/'),
+            'relative_url' => 'storage/' . ltrim(str_replace('\\', '/', $path), '/'),
+            'exists' => $exists,
+        ];
+    };
+
+    $files = is_array($docs['files'] ?? null) ? $docs['files'] : [];
+    foreach ($files as $file) {
+        if (is_array($file)) {
+            $push($file);
+        }
+    }
+
+    $legacy = trim((string)($docs['diagnostic_pdf'] ?? ''));
+    if ($legacy !== '') {
+        $push([
+            'document_id' => 'legacy_diagnostic_pdf',
+            'document_type' => 'diagnostic_report',
+            'document_type_label' => 'گزارش دیاگ',
+            'relative_path' => $legacy,
+            'original_filename' => basename($legacy),
+            'status' => 'ACTIVE',
+            'uploaded_at' => (string)($docs['diagnostic_pdf_uploaded_at'] ?? ''),
+            'uploaded_by_user_id' => (string)($docs['diagnostic_pdf_uploaded_by'] ?? ''),
+        ]);
+    }
+
+    return $out;
+}
+
+/**
+ * @param array<string, mixed> $payload
+ * @return array{total:int,diagnostic_count:int,has_diagnostic_or_scanner:bool,has_cost_agreement_file:bool,by_type:array<string,list<array<string,mixed>>>}
+ */
+function m360_rw_intake_documents_library_summary(array $payload): array
+{
+    $files = m360_rw_intake_documents_files_list($payload);
+    $byType = [];
+    $diagCount = 0;
+    $hasDiagOrScanner = false;
+    $hasCostFile = false;
+    foreach ($files as $file) {
+        $status = strtoupper((string)($file['status'] ?? 'ACTIVE'));
+        if ($status !== 'ACTIVE') {
+            continue;
+        }
+        $type = (string)($file['document_type'] ?? 'other');
+        if (!isset($byType[$type])) {
+            $byType[$type] = [];
+        }
+        $byType[$type][] = $file;
+        if ($type === 'diagnostic_report') {
+            $diagCount++;
+            $hasDiagOrScanner = true;
+        }
+        if ($type === 'scanner_report') {
+            $hasDiagOrScanner = true;
+        }
+        if ($type === 'cost_agreement') {
+            $hasCostFile = true;
+        }
+    }
+
+    return [
+        'total' => count($files),
+        'diagnostic_count' => $diagCount,
+        'has_diagnostic_or_scanner' => $hasDiagOrScanner,
+        'has_cost_agreement_file' => $hasCostFile,
+        'by_type' => $byType,
+    ];
+}
+
+/**
+ * @param array<string, mixed> $payload
+ */
+function m360_rw_intake_render_documents_files_list(array $payload): void
+{
+    $summary = m360_rw_intake_documents_library_summary($payload);
+    $types = m360_rw_intake_document_type_labels_all();
+    echo '<section class="m360-rw-doc-list" id="section-documents-files" aria-label="کتابخانه مدارک پرونده">';
+    echo '<header class="m360-rw-doc-library-head">';
+    echo '<h3 class="m360-rw-section-title">کتابخانه مدارک</h3>';
+    echo '<div class="m360-rw-doc-counts">';
+    echo '<span>تعداد مدارک: <strong>' . (int)$summary['total'] . '</strong></span>';
+    echo '<span>گزارش‌های دیاگ: <strong>' . (int)$summary['diagnostic_count'] . '</strong></span>';
+    echo '</div>';
+    echo '</header>';
+
+    if ((int)$summary['total'] < 1) {
+        echo '<p class="m360-rw-muted">هنوز سندی بارگذاری نشده است. هر بارگذاری فایل جدید به کتابخانه اضافه می‌شود و فایل قبلی را جایگزین نمی‌کند.</p>';
+        echo '</section>';
+
+        return;
+    }
+
+    foreach ($types as $typeKey => $typeLabel) {
+        $group = $summary['by_type'][$typeKey] ?? [];
+        if ($group === []) {
+            continue;
+        }
+        $count = count($group);
+        echo '<details class="m360-rw-doc-group" open>';
+        echo '<summary class="m360-rw-doc-group__summary">' . m360_rw_h($typeLabel) . ' <span class="m360-rw-doc-group__count">(' . $count . ')</span></summary>';
+        echo '<div class="m360-rw-doc-cards">';
+        foreach ($group as $file) {
+            $statusFa = match (strtoupper((string)($file['status'] ?? 'ACTIVE'))) {
+                'ACTIVE', 'SAVED' => 'ذخیره شد',
+                'MISSING' => 'فایل در مسیر ذخیره یافت نشد',
+                'ERROR' => 'خطا',
+                default => 'در انتظار',
+            };
+            if (empty($file['exists'])) {
+                $statusFa = 'متادیتا موجود است؛ فایل روی دیسک یافت نشد';
+            }
+            echo '<article class="m360-rw-doc-card" id="doc-' . m360_rw_h((string)$file['document_id']) . '">';
+            echo '<div class="m360-rw-doc-card__meta">';
+            echo '<strong>' . m360_rw_h((string)$file['document_type_label']) . '</strong>';
+            echo '<span>نام فایل: ' . m360_rw_h((string)$file['original_filename']) . '</span>';
+            echo '<span class="m360-rw-doc-card__status">وضعیت: ' . m360_rw_h($statusFa) . '</span>';
+            if (trim((string)$file['uploaded_at']) !== '') {
+                echo '<span>تاریخ بارگذاری: ' . m360_rw_h((string)$file['uploaded_at']) . '</span>';
+            }
+            $uploader = trim((string)($file['uploaded_by_name'] ?? ''));
+            if ($uploader === '' && trim((string)($file['uploaded_by_user_id'] ?? '')) !== '') {
+                $uploader = '#' . (string)$file['uploaded_by_user_id'];
+            }
+            if ($uploader !== '') {
+                echo '<span>کاربر بارگذار: ' . m360_rw_h($uploader) . '</span>';
+            }
+            echo '<span>حجم: ' . m360_rw_h(m360_rw_intake_format_file_size((int)($file['file_size'] ?? 0))) . '</span>';
+            if (trim((string)($file['note'] ?? '')) !== '') {
+                echo '<span>توضیح: ' . m360_rw_h((string)$file['note']) . '</span>';
+            }
+            echo '</div>';
+            if (!empty($file['exists'])) {
+                echo '<div class="m360-rw-doc-card__actions">';
+                echo '<a class="m360-rw-btn m360-rw-btn-secondary" href="' . m360_rw_h((string)$file['public_url']) . '" target="_blank" rel="noopener">مشاهده</a>';
+                echo '<a class="m360-rw-btn m360-rw-btn-secondary" href="' . m360_rw_h((string)$file['public_url']) . '" download>دانلود</a>';
+                echo '</div>';
+            } else {
+                echo '<p class="m360-rw-warn">دسترسی فایل ممکن نیست؛ مسیر امن موجود نیست یا فایل حذف شده است.</p>';
+            }
+            echo '</article>';
+        }
+        echo '</div></details>';
+    }
+
+    foreach ($summary['by_type'] as $typeKey => $group) {
+        if (isset($types[$typeKey]) || $group === []) {
+            continue;
+        }
+        echo '<details class="m360-rw-doc-group" open>';
+        echo '<summary class="m360-rw-doc-group__summary">' . m360_rw_h(m360_rw_intake_document_type_label((string)$typeKey)) . ' <span class="m360-rw-doc-group__count">(' . count($group) . ')</span></summary>';
+        echo '<div class="m360-rw-doc-cards">';
+        foreach ($group as $file) {
+            echo '<article class="m360-rw-doc-card">';
+            echo '<div class="m360-rw-doc-card__meta">';
+            echo '<strong>' . m360_rw_h((string)$file['document_type_label']) . '</strong>';
+            echo '<span>' . m360_rw_h((string)$file['original_filename']) . '</span>';
+            echo '</div>';
+            if (!empty($file['exists'])) {
+                echo '<div class="m360-rw-doc-card__actions">';
+                echo '<a class="m360-rw-btn m360-rw-btn-secondary" href="' . m360_rw_h((string)$file['public_url']) . '" target="_blank" rel="noopener">مشاهده</a>';
+                echo '<a class="m360-rw-btn m360-rw-btn-secondary" href="' . m360_rw_h((string)$file['public_url']) . '" download>دانلود</a>';
+                echo '</div>';
+            }
+            echo '</article>';
+        }
+        echo '</div></details>';
+    }
+
+    echo '</section>';
+}
+
+/**
+ * Compact case identity strip for focused active_step pages (no tomar dump).
+ *
+ * @param array<string, mixed>|null $request
+ * @param array<string, mixed> $payload
+ * @param array<string, string> $formValues
+ */
+function m360_rw_intake_render_focused_case_strip(?array $request, array $payload, array $formValues, string $activeStep, int $onlineRequestId): void
+{
+    $customerName = trim((string)($request['customer_name'] ?? ''));
+    if ($customerName === '') {
+        $customerName = trim((string)($payload['reception_intake']['customer']['full_name'] ?? ''));
+    }
+    $plate = trim((string)($formValues['plate'] ?? ''));
+    if ($plate === '') {
+        $plate = trim((string)($payload['reception_intake']['vehicle']['plate'] ?? ''));
+    }
+    $vehicleLabel = trim(implode(' ', array_filter([
+        (string)($formValues['brand'] ?? $payload['reception_intake']['vehicle']['brand'] ?? ''),
+        (string)($formValues['model'] ?? $payload['reception_intake']['vehicle']['model'] ?? ''),
+    ])));
+    $stepTitles = [
+        'otp' => 'تأیید هویت',
+        'customer' => 'مشتری',
+        'vehicle' => 'خودرو / مراجعه جاری',
+        'service' => 'خدمت',
+        'condition' => 'وضعیت ظاهری و عکس‌ها',
+        'documents' => 'اسناد و قرارداد',
+        'signature' => 'امضای مشتری',
+        'referral' => 'پیش‌پرداخت / ارجاع سالن',
+        'locked_summary' => 'خلاصه قفل‌شده',
+    ];
+    $stepTitle = $stepTitles[$activeStep] ?? $activeStep;
+
+    echo '<section class="m360-rw-case-strip" aria-label="خلاصه پرونده">';
+    echo '<div class="m360-rw-case-strip__row">';
+    echo '<span><strong>درخواست #' . m360_rw_h((string)$onlineRequestId) . '</strong></span>';
+    echo '<span>گام: ' . m360_rw_h($stepTitle) . '</span>';
+    echo '</div>';
+    echo '<div class="m360-rw-case-strip__row">';
+    echo '<span>مشتری: ' . m360_rw_h($customerName !== '' ? $customerName : '—') . '</span>';
+    echo '<span>خودرو: ' . m360_rw_h($vehicleLabel !== '' ? $vehicleLabel : '—') . '</span>';
+    echo '<span>پلاک: ' . m360_rw_h($plate !== '' ? $plate : '—') . '</span>';
+    echo '</div>';
+    echo '</section>';
 }
 
 function m360_rw_intake_contract_template_text(array $request, array $payload): string
@@ -2597,32 +10659,13 @@ function m360_rw_intake_contract_template_text(array $request, array $payload): 
         . "با پذیرش این قرارداد، مشتری شرایط پذیرش و نگهداری خودرو در مرکز را مطالعه و تأیید می‌کند.";
 }
 
-/**
- * @return array{ok:bool,message:string,history_written:bool}
- */
-function m360_rw_intake_process_send_otp($conn, int $requestId, array $request): array
-{
-    $avail = m360_rw_intake_otp_send_available();
-    if (!$avail['available']) {
-        return ['ok' => false, 'message' => $avail['reason_fa'], 'history_written' => false];
-    }
-    $mobile = trim((string)($request['mobile'] ?? ''));
-    if ($mobile === '') {
-        return ['ok' => false, 'message' => 'موبایل برای ارسال OTP ثبت نشده است.', 'history_written' => false];
-    }
-    $result = m360_otp_send($mobile);
-    if (empty($result['ok'])) {
-        return ['ok' => false, 'message' => (string)($result['message'] ?? 'ارسال OTP انجام نشد.'), 'history_written' => false];
-    }
-
-    return ['ok' => true, 'message' => 'درخواست ارسال OTP ثبت شد. مشتری باید کد را از طریق مسیر تأیید مشتری وارد کند.', 'history_written' => false];
-}
-
 function m360_rw_intake_edit_url(int $onlineRequestId, string $sectionId): string
 {
-    $anchor = m360_rw_intake_section_key_to_anchor($sectionId);
+    $step = m360_rw_intake_section_to_step($sectionId);
+    $anchor = $step !== '' ? m360_rw_intake_step_hash($step) : m360_rw_intake_section_key_to_anchor($sectionId);
 
     return 'erp-reception-intake-file.php?online_request_id=' . $onlineRequestId
+        . '&active_step=' . rawurlencode($step !== '' ? $step : 'otp')
         . '&edit_section=' . rawurlencode($sectionId)
         . ($anchor !== '' ? '#' . $anchor : '');
 }
@@ -2644,26 +10687,59 @@ function m360_rw_intake_render_plate_widget(array $formValues): void
     $left = $formValues['plate_left_2_digits'] ?? '';
     $letter = $formValues['plate_letter'] ?? '';
     $mid = $formValues['plate_middle_3_digits'] ?? '';
-    $iran = $formValues['plate_iran_2_digits'] ?? '';
-    echo '<div class="m360-rw-plate-wrap">';
-    echo '<p class="m360-rw-muted">پلاک ایران — از چپ: ۲ رقم، حرف، ۳ رقم، کد ایران</p>';
-    echo '<div class="iran-plate-widget m360-rw-plate-widget" dir="rtl">';
-    echo '<div class="iran-plate-ir-band"><span class="iran-plate-ir-band__ir">IR</span><span class="iran-plate-ir-band__flag">🇮🇷</span></div>';
+    $iran = $formValues['plate_region_2_digits'] ?? ($formValues['plate_iran_2_digits'] ?? '');
+    $d1 = $left !== '' ? substr($left, 0, 1) : '';
+    $d2 = $left !== '' && strlen($left) > 1 ? substr($left, 1, 1) : '';
+    $m1 = $mid !== '' ? substr($mid, 0, 1) : '';
+    $m2 = $mid !== '' && strlen($mid) > 1 ? substr($mid, 1, 1) : '';
+    $m3 = $mid !== '' && strlen($mid) > 2 ? substr($mid, 2, 1) : '';
+    $r1 = $iran !== '' ? substr($iran, 0, 1) : '';
+    $r2 = $iran !== '' && strlen($iran) > 1 ? substr($iran, 1, 1) : '';
+    $display = trim((string)($formValues['plate_display'] ?? ''));
+    echo '<label class="iran-plate-field-label">پلاک خودرو <span class="m360-req">*</span></label>';
+    echo '<p class="iran-plate-field-hint">از چپ به راست: دو رقم، حرف، سه رقم، سپس کد ایران</p>';
+    echo '<div class="iran-plate-widget m360-rw-plate-widget" aria-label="پلاک خودرو">';
+    echo '<div class="iran-plate-ir-band" aria-hidden="true"><span class="iran-plate-ir-band__ir">IR</span><span class="iran-plate-ir-band__flag" aria-hidden="true">🇮🇷</span></div>';
     echo '<div class="iran-plate-body">';
-    echo '<input class="m360-rw-form-input m360-rw-plate-part" type="text" name="plate_left_2_digits" maxlength="2" inputmode="numeric" pattern="[0-9]{2}" value="' . m360_rw_h($left) . '" placeholder="۱۲">';
-    echo '<select class="m360-rw-form-input m360-rw-plate-letter" name="plate_letter"><option value="">حرف</option>';
-    foreach (m360_rw_intake_plate_letters() as $pl) {
-        $sel = ($letter === $pl) ? ' selected' : '';
-        echo '<option value="' . m360_rw_h($pl) . '"' . $sel . '>' . m360_rw_h($pl) . '</option>';
+    echo '<div class="iran-plate-group iran-plate-group--series" aria-label="دو رقم اول"><span class="iran-plate-group__label">۲ رقم</span><div class="iran-plate-group__inputs">';
+    for ($i = 1; $i <= 2; $i++) {
+        $sel = ($i === 1 ? $d1 : $d2);
+        echo '<select class="plate-digit-select" id="plate_first_digit_' . $i . '" name="plate_first_digit_' . $i . '" data-required-both="1" aria-label="رقم پلاک"><option value="">-</option>';
+        for ($d = 0; $d <= 9; $d++) {
+            echo '<option value="' . $d . '"' . ((string)$d === (string)$sel ? ' selected' : '') . '>' . $d . '</option>';
+        }
+        echo '</select>';
     }
-    echo '</select>';
-    echo '<input class="m360-rw-form-input m360-rw-plate-part" type="text" name="plate_middle_3_digits" maxlength="3" inputmode="numeric" pattern="[0-9]{3}" value="' . m360_rw_h($mid) . '" placeholder="۳۴۵">';
-    echo '</div>';
-    echo '<div class="iran-plate-region-box"><span class="iran-plate-region-box__label">ایران</span>';
-    echo '<input class="m360-rw-form-input m360-rw-plate-part" type="text" name="plate_iran_2_digits" maxlength="2" inputmode="numeric" pattern="[0-9]{2}" value="' . m360_rw_h($iran) . '" placeholder="۶۷">';
-    echo '</div></div>';
-    echo '<p id="m360_rw_plate_preview" class="iran-plate-preview m360-rw-plate-preview"></p>';
-    echo '</div>';
+    echo '</div></div><span class="iran-plate-sep" aria-hidden="true"></span>';
+    echo '<div class="iran-plate-group iran-plate-group--letter" aria-label="حرف پلاک"><span class="iran-plate-group__label">حرف</span>';
+    echo '<select class="plate-letter-select" id="plate_letter" name="plate_letter" data-required-both="1" aria-label="حرف پلاک"><option value="">حرف</option>';
+    foreach (m360_rw_intake_plate_letters() as $pl) {
+        echo '<option value="' . m360_rw_h($pl) . '"' . ($letter === $pl ? ' selected' : '') . '>' . m360_rw_h($pl) . '</option>';
+    }
+    echo '</select></div><span class="iran-plate-sep" aria-hidden="true"></span>';
+    echo '<div class="iran-plate-group iran-plate-group--middle" aria-label="سه رقم وسط"><span class="iran-plate-group__label">۳ رقم</span><div class="iran-plate-group__inputs">';
+    foreach ([1 => $m1, 2 => $m2, 3 => $m3] as $idx => $sel) {
+        echo '<select class="plate-digit-select" id="plate_middle_digit_' . $idx . '" name="plate_middle_digit_' . $idx . '" data-required-both="1" aria-label="رقم سه‌رقمی"><option value="">-</option>';
+        for ($d = 0; $d <= 9; $d++) {
+            echo '<option value="' . $d . '"' . ((string)$d === (string)$sel ? ' selected' : '') . '>' . $d . '</option>';
+        }
+        echo '</select>';
+    }
+    echo '</div></div></div>';
+    echo '<div class="iran-plate-region-box" aria-label="کد ایران"><span class="iran-plate-region-box__label">ایران</span><div class="iran-plate-region-box__digits">';
+    foreach ([1 => $r1, 2 => $r2] as $idx => $sel) {
+        echo '<select class="plate-digit-select" id="plate_region_digit_' . $idx . '" name="plate_region_digit_' . $idx . '" data-required-both="1" aria-label="رقم کد ایران"><option value="">-</option>';
+        for ($d = 0; $d <= 9; $d++) {
+            echo '<option value="' . $d . '"' . ((string)$d === (string)$sel ? ' selected' : '') . '>' . $d . '</option>';
+        }
+        echo '</select>';
+    }
+    echo '</div></div></div>';
+    echo '<p id="m360_rw_plate_preview" class="iran-plate-preview" aria-live="polite">' . ($display !== '' ? m360_rw_h($display) : 'پس از تکمیل، پلاک اینجا نمایش داده می‌شود') . '</p>';
+    echo '<input type="hidden" id="plate_left_2_digits" name="plate_left_2_digits" value="' . m360_rw_h($left) . '">';
+    echo '<input type="hidden" id="plate_middle_3_digits" name="plate_middle_3_digits" value="' . m360_rw_h($mid) . '">';
+    echo '<input type="hidden" id="plate_region_2_digits" name="plate_region_2_digits" value="' . m360_rw_h($iran) . '">';
+    echo '<input type="hidden" id="plate_display" name="plate_display" value="' . m360_rw_h($display) . '">';
 }
 
 /**
@@ -2679,17 +10755,29 @@ function m360_rw_intake_render_reception_photos_section(
     string $editSection,
     bool $canAct,
     string $csrfInputHtml,
-    string $saveUrl
+    string $saveUrl,
+    string $activeStep = '',
+    bool $stepperMode = false
 ): void {
-    $secCam = m360_rw_intake_section_ui_state('camera_photo', $payloadData, $request, $formValues, $editSection);
+    $secCam = $activeStep !== '' && $stepperMode
+        ? m360_rw_intake_stepper_section_ui_state('camera_photo', $activeStep, $payloadData, $request, $formValues, $editSection)
+        : m360_rw_intake_section_ui_state('camera_photo', $payloadData, $request, $formValues, $editSection);
     $photoStatus = m360_rw_intake_reception_photo_status($payloadData);
-    echo '<section class="m360-rw-section-block" id="section-camera-photo">';
-    echo '<h2 class="m360-rw-section-title">عکس‌های پذیرش خودرو</h2>';
-    echo '<div class="m360-rw-panel">';
+    if (!$stepperMode) {
+        echo '<section class="m360-rw-section-block" id="section-camera-photo">';
+        echo '<h2 class="m360-rw-section-title">عکس‌های پذیرش خودرو</h2>';
+    } else {
+        echo '<div class="m360-rw-panel" id="section-camera-photo">';
+    }
+    echo '<div class="m360-rw-panel-inner">';
     m360_rw_intake_render_section_header('عکس‌های پذیرش', $secCam, $onlineRequestId, 'camera_photo', $canAct);
-    echo '<p class="m360-rw-muted">حداقل ۶ عکس الزامی است. — <strong>' . m360_rw_h((string)$photoStatus['count']) . '/' . m360_rw_h((string)$photoStatus['min_required']) . '</strong></p>';
-    if ($photoStatus['legacy_only']) {
+    echo '<p class="m360-rw-muted">عکس‌های پذیرش: <strong>' . m360_rw_h((string)$photoStatus['count']) . '/' . m360_rw_h((string)$photoStatus['min_required']) . '</strong></p>';
+    if (!empty($photoStatus['complete'])) {
+        echo '<p class="m360-rw-flash is-ok">عکس‌های پذیرش کامل است.</p>';
+    } elseif ($photoStatus['legacy_only']) {
         echo '<p class="m360-rw-warn">عکس قدیمی موجود است، اما چک‌لیست ۶ عکس هنوز کامل نیست.</p>';
+    } elseif (!empty($photoStatus['missing_labels'])) {
+        echo '<p class="m360-rw-warn">اسلات‌های باقی‌مانده: ' . m360_rw_h(implode('، ', $photoStatus['missing_labels'])) . '</p>';
     }
     if ($secCam['show_summary']) {
         echo '<div class="m360-rw-sec-summary m360-rw-photo-slot-grid">';
@@ -2711,27 +10799,43 @@ function m360_rw_intake_render_reception_photos_section(
         foreach ($photoStatus['slots'] as $slotKey => $slot) {
             $st = !empty($slot['saved']) ? 'ثبت شده' : 'ثبت نشده';
             $cardClass = !empty($slot['saved']) ? 'is-done' : 'is-pending';
-            echo '<div class="m360-rw-photo-card ' . $cardClass . '" data-slot="' . m360_rw_h($slotKey) . '">';
+            echo '<div class="m360-rw-photo-card ' . $cardClass . '" id="photo-slot-' . m360_rw_h($slotKey) . '" data-slot="' . m360_rw_h($slotKey) . '">';
             echo '<span class="m360-rw-photo-card__label">' . m360_rw_h((string)$slot['label']) . '</span>';
             echo '<span class="m360-rw-photo-card__status">' . m360_rw_h($st) . '</span>';
             if (!empty($slot['saved'])) {
                 echo '<img class="m360-rw-photo-card__thumb" src="storage/' . m360_rw_h($slot['file']) . '" alt="">';
+                echo '<p class="m360-rw-flash is-ok m360-rw-photo-saved-label">عکس ذخیره شد.</p>';
             } else {
                 echo '<img class="m360-rw-photo-card__thumb" id="m360_rw_preview_' . m360_rw_h($slotKey) . '" alt="" style="display:none;">';
+                echo '<p class="m360-rw-muted m360-rw-photo-capture-hint" id="m360_rw_hint_' . m360_rw_h($slotKey) . '" hidden></p>';
             }
             echo '<form class="m360-rw-form m360-rw-photo-slot-form" method="post" action="' . m360_rw_h($saveUrl) . '">';
             echo $csrfInputHtml;
             echo '<input type="hidden" name="online_request_id" value="' . $onlineRequestId . '">';
             echo '<input type="hidden" name="action_type" value="save_camera_photo">';
             echo '<input type="hidden" name="photo_slot" value="' . m360_rw_h($slotKey) . '">';
-            m360_rw_intake_return_section_hidden('camera_photo');
+            if ($stepperMode) {
+                m360_rw_intake_return_step_hidden('condition');
+            } else {
+                m360_rw_intake_return_section_hidden('camera_photo');
+            }
             echo '<input type="hidden" name="camera_image_base64" class="m360-rw-slot-base64" value="">';
-            echo '<button type="button" class="m360-rw-btn m360-rw-btn-secondary m360-rw-slot-capture" data-slot="' . m360_rw_h($slotKey) . '">ثبت عکس</button>';
-            echo '<button type="submit" class="m360-rw-btn m360-rw-slot-save" data-slot="' . m360_rw_h($slotKey) . '" disabled>ذخیره</button>';
+            $captureLabel = !empty($slot['saved']) ? 'عکس مجدد' : 'ثبت عکس';
+            echo '<button type="button" class="m360-rw-btn m360-rw-btn-secondary m360-rw-slot-capture" data-slot="' . m360_rw_h($slotKey) . '">' . m360_rw_h($captureLabel) . '</button>';
+            echo '<button type="submit" class="m360-rw-btn m360-rw-slot-save" data-slot="' . m360_rw_h($slotKey) . '" disabled>ذخیره عکس</button>';
             echo '</form></div>';
         }
         echo '</div>';
+        if ($stepperMode && !empty($photoStatus['complete'])) {
+            echo '<div class="m360-rw-actions m360-rw-photo-continue">';
+            echo '<a class="m360-rw-btn" href="' . m360_rw_h(m360_rw_intake_step_go_url($onlineRequestId, 'documents')) . '">ادامه به مستندات</a>';
+            echo '</div>';
+        }
     }
-    echo '</div></section>';
+    echo '</div>';
+    if ($stepperMode) {
+        echo '</div>';
+    } else {
+        echo '</div></section>';
+    }
 }
-

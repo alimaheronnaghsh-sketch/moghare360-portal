@@ -37,11 +37,11 @@ mirror_render_head('ورود پرسنل', 'staff');
 ?>
 <section class="m360-hero">
     <h2>ورود پرسنل</h2>
-    <p>لطفاً نام کاربری و رمز عبور خود را وارد کنید.</p>
+    <p>نام کاربری و رمز عبور خود را وارد کنید. ورود مالک سیستم از همین مسیر با نقش مالک/مدیر سیستم انجام می‌شود.</p>
 </section>
 
 <?php if (!$otpEnabled): ?>
-    <p class="m360-otp-note">ورود با رمز فعال است. ورود پیامکی پس از فعال‌سازی پیامک در دسترس خواهد بود.</p>
+    <p class="m360-otp-note">ورود با رمز عبور فعال است. ورود پیامکی پس از فعال‌سازی پیامک در دسترس خواهد بود.</p>
 <?php endif; ?>
 
 <?php if ($result !== null): ?>
@@ -57,7 +57,7 @@ mirror_render_head('ورود پرسنل', 'staff');
         <label for="password">رمز عبور</label>
         <input type="password" id="password" name="password" required autocomplete="current-password">
         <?php if ($otpEnabled): ?>
-            <p class="m360-otp-note">ورود پیامکی نیز فعال است — از پنل مدیریت راهنمای ورود را ببینید.</p>
+            <p class="m360-otp-note">ورود پیامکی نیز فعال است؛ راهنمای ورود را از پنل مدیریت مشاهده کنید.</p>
         <?php endif; ?>
         <button type="submit" class="m360-btn">ورود</button>
     </form>

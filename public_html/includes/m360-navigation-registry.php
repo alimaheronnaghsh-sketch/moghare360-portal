@@ -69,10 +69,10 @@ function m360_nav_registry(): array
 
         // P1.5 — Contract
         m360_nav_route('p15_contract_template', 'P1.5', 'پیش‌نمایش قالب قرارداد', 'Contract Template Preview', 'contract-template-intake.php', 'Contract', 'staff', 'GET', $s()),
-        m360_nav_route('p15_customer_contract', 'P1.5', 'بررسی قرارداد مشتری', 'Customer Contract Review', 'customer-intake-contract.php', 'Contract', 'customer', 'GET', $c()),
-        m360_nav_route('p15_customer_contract_sign', 'P1.5', 'امضای قرارداد مشتری', 'Customer Contract Sign', 'customer-intake-contract-sign.php', 'Contract', 'customer', 'GET', $c()),
-        m360_nav_route('p15_intake_contracts', 'P1.5', 'برد قراردادهای پذیرش', 'Intake Contracts Board', 'erp-intake-contracts.php', 'Contract', 'staff', 'GET', $s()),
-        m360_nav_route('p15_intake_contract_detail', 'P1.5', 'جزئیات قرارداد پذیرش', 'Intake Contract Detail', 'erp-intake-contract-detail.php', 'Contract', 'staff', 'GET', $s()),
+        m360_nav_route('p15_customer_contract', 'P1.5', 'بررسی قرارداد (میراث — غیر اصلی)', 'Legacy Customer Contract View (non-primary)', 'customer-intake-contract.php', 'Contract', 'customer', 'GET', $c()),
+        m360_nav_route('p15_customer_contract_sign', 'P1.5', 'امضای قرارداد (میراث — غیر اصلی)', 'Legacy Customer Contract Sign (non-primary)', 'customer-intake-contract-sign.php', 'Contract', 'customer', 'GET', $c()),
+        m360_nav_route('p15_intake_contracts', 'P1.5', 'برد قراردادهای پذیرش (فقط‌خواندنی / هماهنگی)', 'Intake Contracts Board (read-only / coordination)', 'erp-intake-contracts.php', 'Contract', 'staff', 'GET', $s()),
+        m360_nav_route('p15_intake_contract_detail', 'P1.5', 'جزئیات قرارداد پذیرش (فقط‌خواندنی)', 'Intake Contract Detail (read-only)', 'erp-intake-contract-detail.php', 'Contract', 'staff', 'GET', $s()),
         m360_nav_route('p15_intake_contract_generate', 'P1.5', 'تولید قرارداد', 'Generate Contract', 'erp-intake-contract-generate.php', 'Contract', 'staff', 'POST', $s()),
         m360_nav_route('p15_intake_contract_send', 'P1.5', 'ارسال قرارداد', 'Send Contract', 'erp-intake-contract-send.php', 'Contract', 'staff', 'POST', $s()),
         m360_nav_route('p15_api_contract_otp', 'P1.5', 'API OTP قرارداد', 'Contract OTP API', 'api/customer/contract-send-otp.php', 'API', 'customer', 'POST', $a()),

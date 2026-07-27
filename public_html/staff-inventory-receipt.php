@@ -5,6 +5,10 @@ require_once __DIR__ . '/inventory-controlled-helpers.php';
 
 inv_require_inventory_access('receipt');
 
+// Canonical receipts are represented by immutable stock movement history.
+header('Location: erp-stock-movement-history.php', true, 302);
+exit;
+
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 header('Cache-Control: post-check=0, pre-check=0', false);
 header('Pragma: no-cache');

@@ -12,6 +12,9 @@ require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-operational-shell-helper.php';
 
 m360_reception_jobcard_require_staff();
+if (session_status() === PHP_SESSION_ACTIVE) {
+    session_write_close();
+}
 
 $p15Missing = !m360_reception_jobcard_p15_gate_available();
 $statusFilter = isset($_GET['status']) ? strtoupper(trim((string)$_GET['status'])) : 'ALL';

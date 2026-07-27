@@ -5,6 +5,7 @@ header('Content-Type: text/html; charset=UTF-8');
 header('X-Robots-Tag: noindex, nofollow');
 
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-final-invoice-helper.php';
+require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-staff-home-helper.php';
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
     header('Location: erp-final-invoice-board.php');
@@ -55,6 +56,7 @@ if ($jobcardId < 1) {
 }
 
 erp_auth_context_start();
+m360_staff_home_require_role_code($conn, ['OWNER', 'SYSTEM_ADMIN', 'FINANCE']);
 $userId = (int)(erp_auth_current_user_id() ?? 0);
 
 $result = m360_fi_apply_action($conn, $action, $userId, $jobcardId, $invoiceId > 0 ? $invoiceId : null, $_POST);

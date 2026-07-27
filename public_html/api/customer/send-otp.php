@@ -18,10 +18,12 @@ $phone = trim((string)($body['phone'] ?? $body['mobile'] ?? ''));
 $result = m360_otp_send($phone);
 
 if (!$result['ok']) {
-    m360_otp_json_fail($result['message'], 400);
+    m360_otp_json_fail($result['message'], 400, [
+        'error_code' => (string)($result['error_code'] ?? 'UNKNOWN'),
+    ]);
 }
 
-$responseData = ['expires_in' => M360_OTP_TTL_SECONDS];
+$responseData = ['expires_in' => m360_otp_ttl_seconds()];
 if (!empty($result['test_mode'])) {
     $responseData['test_mode'] = true;
     http_response_code(200);

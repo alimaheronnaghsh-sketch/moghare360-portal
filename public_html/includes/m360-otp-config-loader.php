@@ -6,9 +6,233 @@ declare(strict_types=1);
  * Never commits or prints real secrets.
  */
 
+function m360_otp_config_project_root(): string
+{
+    static $resolved = null;
+    if ($resolved !== null) {
+        return $resolved;
+    }
+
+    $envRoot = getenv('M360_REPO_ROOT');
+    if ($envRoot !== false) {
+        $trimmed = rtrim(trim((string)$envRoot), DIRECTORY_SEPARATOR);
+        if ($trimmed !== '' && is_dir($trimmed)) {
+            $resolved = $trimmed;
+
+            return $resolved;
+        }
+    }
+
+    $publicDir = dirname(__DIR__);
+    $resolved = dirname($publicDir);
+
+    return $resolved;
+}
+
 function m360_otp_config_repo_root(): string
 {
-    return dirname(__DIR__, 2);
+    return m360_otp_config_project_root();
+}
+
+/**
+ * Private OTP config candidates (lowest → highest merge priority).
+ *
+ * @return list<string>
+ */
+function m360_otp_config_private_candidate_paths(): array
+{
+    static $paths = null;
+    if ($paths !== null) {
+        return $paths;
+    }
+
+    $paths = [];
+    $envPath = getenv('M360_OTP_CONFIG_PATH');
+    if ($envPath !== false) {
+        $trimmed = trim((string)$envPath);
+        if ($trimmed !== '') {
+            $paths[] = $trimmed;
+        }
+    }
+
+    $projectRoot = m360_otp_config_project_root();
+    $paths[] = $projectRoot . DIRECTORY_SEPARATOR . 'private' . DIRECTORY_SEPARATOR . 'm360-otp-config.php';
+
+    $repoRootEnv = getenv('M360_REPO_ROOT');
+    if ($repoRootEnv !== false) {
+        $repoRoot = rtrim(trim((string)$repoRootEnv), DIRECTORY_SEPARATOR);
+        if ($repoRoot !== '') {
+            $repoPrivate = $repoRoot . DIRECTORY_SEPARATOR . 'private' . DIRECTORY_SEPARATOR . 'm360-otp-config.php';
+            if (!in_array($repoPrivate, $paths, true)) {
+                $paths[] = $repoPrivate;
+            }
+        }
+    }
+
+    $htdocsPrivate = dirname($projectRoot) . DIRECTORY_SEPARATOR . 'private' . DIRECTORY_SEPARATOR . 'm360-otp-config.php';
+    if (!in_array($htdocsPrivate, $paths, true)) {
+        $paths[] = $htdocsPrivate;
+    }
+
+    $apachePrivate = m360_otp_config_apache_htdocs_private_path();
+    if ($apachePrivate !== '' && !in_array($apachePrivate, $paths, true)) {
+        $paths[] = $apachePrivate;
+    }
+
+    $paths = array_values(array_unique($paths));
+    return $paths;
+}
+
+/**
+ * Apache/XAMPP: when DOCUMENT_ROOT is .../htdocs/moghare360, owner config may live in .../htdocs/private/.
+ */
+function m360_otp_config_apache_htdocs_private_path(): string
+{
+    $docRoot = trim((string)($_SERVER['DOCUMENT_ROOT'] ?? ''));
+    if ($docRoot === '') {
+        return '';
+    }
+    $docRoot = rtrim(str_replace(['/', '\\'], DIRECTORY_SEPARATOR, $docRoot), DIRECTORY_SEPARATOR);
+
+    return dirname($docRoot) . DIRECTORY_SEPARATOR . 'private' . DIRECTORY_SEPARATOR . 'm360-otp-config.php';
+}
+
+/**
+ * Reset merged config cache (CLI diagnostics only).
+ */
+function m360_otp_config_reset_merged_cache(): void
+{
+    $GLOBALS['m360_otp_config_merged_force_reload'] = true;
+}
+
+/**
+ * Non-secret fingerprint for comparing private config files (labels + set/placeholder only).
+ */
+function m360_otp_config_safe_fingerprint(string $path): string
+{
+    if (!is_file($path)) {
+        return '';
+    }
+
+    $cfg = m360_otp_config_normalize(m360_otp_config_load_file($path));
+    $labels = array_keys($cfg);
+    sort($labels);
+    $parts = [
+        'size:' . (string)filesize($path),
+        'mtime:' . (string)filemtime($path),
+    ];
+    foreach ($labels as $label) {
+        $val = $cfg[$label];
+        if (!is_scalar($val)) {
+            continue;
+        }
+        $text = trim((string)$val);
+        if ($text === '') {
+            $parts[] = $label . ':empty';
+            continue;
+        }
+        $parts[] = $label . ':' . (m360_otp_is_placeholder_value($text) ? 'placeholder' : 'set');
+    }
+
+    return hash('sha256', implode('|', $parts));
+}
+
+/**
+ * @return array<string, mixed>
+ */
+function m360_otp_config_source_report(): array
+{
+    $projectRoot = m360_otp_config_project_root();
+    $repoPrivate = $projectRoot . DIRECTORY_SEPARATOR . 'private' . DIRECTORY_SEPARATOR . 'm360-otp-config.php';
+    $htdocsPrivate = dirname($projectRoot) . DIRECTORY_SEPARATOR . 'private' . DIRECTORY_SEPARATOR . 'm360-otp-config.php';
+    $apachePrivate = m360_otp_config_apache_htdocs_private_path();
+
+    $repoRootEnv = getenv('M360_REPO_ROOT');
+    $envRepoPrivate = '';
+    if ($repoRootEnv !== false) {
+        $trimmed = rtrim(trim((string)$repoRootEnv), DIRECTORY_SEPARATOR);
+        if ($trimmed !== '') {
+            $envRepoPrivate = $trimmed . DIRECTORY_SEPARATOR . 'private' . DIRECTORY_SEPARATOR . 'm360-otp-config.php';
+        }
+    }
+
+    $fingerprints = [];
+    foreach ([
+        'project_private' => $repoPrivate,
+        'htdocs_private' => $htdocsPrivate,
+        'apache_htdocs_private' => $apachePrivate,
+        'env_repo_private' => $envRepoPrivate,
+    ] as $label => $path) {
+        if ($path === '') {
+            continue;
+        }
+        $fingerprints[$label] = [
+            'exists' => is_file($path),
+            'readable' => is_readable($path),
+            'fingerprint' => m360_otp_config_safe_fingerprint($path),
+        ];
+    }
+
+    $loaded = m360_otp_config_loaded_private_labels();
+    $fpValues = array_values(array_filter(array_map(
+        static fn(array $row): string => (string)($row['fingerprint'] ?? ''),
+        $fingerprints
+    )));
+    $sameFingerprint = count(array_unique($fpValues)) <= 1 && $fpValues !== [];
+
+    return [
+        'loaded_private_labels' => $loaded,
+        'fingerprints' => $fingerprints,
+        'fingerprints_match' => $sameFingerprint,
+        'sms_configured' => function_exists('m360_otp_sms_configured') ? m360_otp_sms_configured() : false,
+        'open_basedir' => (string)ini_get('open_basedir'),
+        'document_root' => (string)($_SERVER['DOCUMENT_ROOT'] ?? ''),
+        'sapi' => PHP_SAPI,
+    ];
+}
+
+/**
+ * @return list<string> Labels for loaded private config sources (no secrets).
+ */
+function m360_otp_config_loaded_private_labels(): array
+{
+    $labels = [];
+    foreach (m360_otp_config_private_candidate_paths() as $path) {
+        if (!is_file($path)) {
+            continue;
+        }
+        $projectRoot = m360_otp_config_project_root();
+        $htdocsPrivate = dirname($projectRoot) . DIRECTORY_SEPARATOR . 'private' . DIRECTORY_SEPARATOR . 'm360-otp-config.php';
+        if ($path === $htdocsPrivate) {
+            $labels[] = 'htdocs_private';
+            continue;
+        }
+        $apachePrivate = m360_otp_config_apache_htdocs_private_path();
+        if ($apachePrivate !== '' && $path === $apachePrivate) {
+            $labels[] = 'apache_htdocs_private';
+            continue;
+        }
+        if (str_ends_with(str_replace('\\', '/', $path), 'private/m360-otp-config.php')) {
+            $labels[] = 'project_private';
+            continue;
+        }
+        if (getenv('M360_OTP_CONFIG_PATH') !== false && realpath($path) === realpath(trim((string)getenv('M360_OTP_CONFIG_PATH')))) {
+            $labels[] = 'env_M360_OTP_CONFIG_PATH';
+            continue;
+        }
+        $repoRootEnv = getenv('M360_REPO_ROOT');
+        if ($repoRootEnv !== false) {
+            $repoPrivate = rtrim(trim((string)$repoRootEnv), DIRECTORY_SEPARATOR)
+                . DIRECTORY_SEPARATOR . 'private' . DIRECTORY_SEPARATOR . 'm360-otp-config.php';
+            if ($path === $repoPrivate) {
+                $labels[] = 'env_repo_private';
+                continue;
+            }
+        }
+        $labels[] = 'private_custom';
+    }
+
+    return $labels;
 }
 
 /**
@@ -74,6 +298,8 @@ function m360_otp_config_env_map(): array
         'IPPANEL_PATTERN_CODE' => 'IPPANEL_PATTERN_CODE',
         'IPPANEL_OTP_VARIABLE' => 'IPPANEL_OTP_VARIABLE',
         'M360_SMS_PATTERN_ID' => 'M360_SMS_PATTERN_ID',
+        'M360_IPPANEL_AUTH_HEADER_MODE' => 'ippanelAuthHeaderMode',
+        'IPPANEL_AUTH_HEADER_MODE' => 'ippanelAuthHeaderMode',
     ];
 }
 
@@ -234,11 +460,14 @@ function m360_otp_config_normalize(array $config): array
 function m360_otp_config_merged(): array
 {
     static $merged = null;
+    if (!empty($GLOBALS['m360_otp_config_merged_force_reload'])) {
+        $merged = null;
+        $GLOBALS['m360_otp_config_merged_force_reload'] = false;
+    }
     if ($merged !== null) {
         return $merged;
     }
 
-    $root = m360_otp_config_repo_root();
     $public = dirname(__DIR__);
 
     $config = [];
@@ -248,9 +477,11 @@ function m360_otp_config_merged(): array
         $config = array_merge($config, m360_otp_config_load_file($mirror));
     }
 
-    $private = $root . DIRECTORY_SEPARATOR . 'private' . DIRECTORY_SEPARATOR . 'm360-otp-config.php';
-    if (is_file($private)) {
-        $config = array_merge($config, m360_otp_config_load_file($private));
+    foreach (m360_otp_config_private_candidate_paths() as $privatePath) {
+        if (!is_file($privatePath)) {
+            continue;
+        }
+        $config = array_merge($config, m360_otp_config_load_file($privatePath));
     }
 
     $config = m360_otp_config_apply_env($config);
@@ -329,13 +560,20 @@ function m360_otp_config_int(array $config, int $default, string ...$keys): int
  */
 function m360_otp_config_diagnostics_report(): array
 {
-    $root = m360_otp_config_repo_root();
     $public = dirname(__DIR__);
+    $projectRoot = m360_otp_config_project_root();
     $mirrorPath = $public . DIRECTORY_SEPARATOR . 'mirror-config.php';
-    $privatePath = $root . DIRECTORY_SEPARATOR . 'private' . DIRECTORY_SEPARATOR . 'm360-otp-config.php';
+    $htdocsPrivatePath = dirname($projectRoot) . DIRECTORY_SEPARATOR . 'private' . DIRECTORY_SEPARATOR . 'm360-otp-config.php';
+    $projectPrivatePath = $projectRoot . DIRECTORY_SEPARATOR . 'private' . DIRECTORY_SEPARATOR . 'm360-otp-config.php';
 
     $rawMirror = is_file($mirrorPath) ? m360_otp_config_load_file($mirrorPath) : [];
-    $rawPrivate = is_file($privatePath) ? m360_otp_config_load_file($privatePath) : [];
+    $rawPrivate = [];
+    foreach (m360_otp_config_private_candidate_paths() as $privatePath) {
+        if (!is_file($privatePath)) {
+            continue;
+        }
+        $rawPrivate = array_merge($rawPrivate, m360_otp_config_load_file($privatePath));
+    }
 
     $warnings = array_values(array_unique(array_merge(
         m360_otp_config_collect_warnings($rawMirror),
@@ -394,8 +632,14 @@ function m360_otp_config_diagnostics_report(): array
         'warnings' => $warnings,
         'sources' => [
             'mirror_config_found' => is_file($mirrorPath),
-            'private_otp_config_found' => is_file($privatePath),
+            'project_private_found' => is_file($projectPrivatePath),
+            'project_private_readable' => is_readable($projectPrivatePath),
+            'htdocs_private_found' => is_file($htdocsPrivatePath),
+            'htdocs_private_readable' => is_readable($htdocsPrivatePath),
+            'private_otp_config_found' => m360_otp_config_loaded_private_labels() !== [],
+            'loaded_private_labels' => m360_otp_config_loaded_private_labels(),
             'primary_private_path' => 'private/m360-otp-config.php',
+            'htdocs_private_path' => 'htdocs/private/m360-otp-config.php',
         ],
         'api_key' => [
             'status' => $apiStatus,

@@ -62,6 +62,11 @@ function mirror_sms_otp_enabled(): bool
 
 function mirror_public_asset_version(): string
 {
+    $css = __DIR__ . DIRECTORY_SEPARATOR . '..' . DIRECTORY_SEPARATOR . 'assets' . DIRECTORY_SEPARATOR . 'css' . DIRECTORY_SEPARATOR . 'mirror.css';
+    if (is_file($css)) {
+        return (string)filemtime($css);
+    }
+
     return 'fix-f-v2';
 }
 
@@ -116,8 +121,8 @@ function mirror_render_foot(): void
 {
     echo '</main>';
     echo '<footer class="m360-footer">';
-    echo '© <span class="m360-brand-latin" lang="en" dir="ltr">MOGHAREH360</span> — تمامی حقوق محفوظ است.';
-    echo '<div class="m360-install-hint">برای نصب اپلیکیشن: از منوی مرورگر «افزودن به صفحه اصلی» را انتخاب کنید.</div>';
+    echo '© <span class="m360-brand-latin" lang="en" dir="ltr">MOGHAREH360</span> — تمام حقوق محفوظ است.';
+    echo '<div class="m360-install-hint">برای نصب اپلیکیشن، از منوی مرورگر «افزودن به صفحه اصلی» را انتخاب کنید.</div>';
     echo '</footer></div>';
     echo '<script>(function(){if("serviceWorker"in navigator){navigator.serviceWorker.getRegistrations().then(function(r){r.forEach(function(x){x.unregister();});});}if(window.caches&&caches.keys){caches.keys().then(function(k){k.forEach(function(n){caches.delete(n);});});}window.addEventListener("pageshow",function(e){if(e.persisted){window.location.reload();}});})();</script>';
     echo '</body></html>';

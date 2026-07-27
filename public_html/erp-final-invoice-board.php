@@ -6,10 +6,11 @@ header('X-Robots-Tag: noindex, nofollow');
 
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-final-invoice-helper.php';
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-operational-shell-helper.php';
+require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-case-stage-tree-helper.php';
+require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-case-stage-header.php';
 
 m360_fi_require_staff();
 
-/** @var array<string, string> */
 $boardFilterLabels = [
     'DELIVERY_READY' => 'آماده تحویل',
     'DRAFT' => 'پیش‌نویس',
@@ -32,7 +33,6 @@ $fiLabel = static function (string $code) use ($boardFilterLabels): string {
     }
     return $boardFilterLabels[$code] ?? $code;
 };
-
 ?>
 <!DOCTYPE html>
 <html lang="fa" dir="rtl">
@@ -43,14 +43,19 @@ $fiLabel = static function (string $code) use ($boardFilterLabels): string {
     <link rel="stylesheet" href="assets/moghare360-ui/moghare360-soft-run-release.css">
     <link rel="stylesheet" href="assets/css/m360-final-delivery.css">
     <link rel="stylesheet" href="<?= m360_operational_shell_h(m360_operational_shell_css_href()) ?>">
+    <link rel="stylesheet" href="assets/css/mirror.css">
+    <link rel="stylesheet" href="assets/css/moghare360-v1-luxury-ui.css">
 </head>
 <body class="m360-fi-page">
 <div class="w1c-wrap m360-fi-wrap">
     <?php m360_operational_shell_render_board('invoice_board'); ?>
     <header class="w1c-banner">
         <h1>برد فاکتور نهایی و تحویل</h1>
-        <p>فاکتور نهایی — تسویه — امضای تحویل — خروج خودرو</p>
+        <p>فاکتور نهایی، تسویه، امضای تحویل و خروج خودرو فقط پس از عبور گیت‌های QC و مالی مجاز است.</p>
     </header>
+    <section class="w1c-card m360-lux-warn">
+        <strong>گیت مالی/تحویل:</strong> فاکتور نهایی نباید از برآورد یا نسخه تأییدشده مشتری بیشتر شود. تحویل تا QC Pass، تسویه، تأیید نهایی و بسته شدن درخواست‌های باز مسدود است.
+    </section>
     <?php if ($conn === false): ?>
         <section class="w1c-card"><p>اتصال به پایگاه داده برقرار نشد.</p></section>
     <?php else: ?>
@@ -66,9 +71,9 @@ $fiLabel = static function (string $code) use ($boardFilterLabels): string {
             <?php else: ?>
                 <table class="m360-fi-table">
                     <thead><tr>
-                        <th>کارت کار</th><th>مشتری</th><th>موبایل</th><th>خودرو</th><th>پلاک</th>
+                        <th>کارت کار</th><th>مرحله پرونده</th><th>مشتری</th><th>موبایل</th><th>خودرو</th><th>پلاک</th>
                         <th>QC</th><th>آمادگی تحویل</th><th>فاکتور</th><th>مبلغ نهایی</th>
-                        <th>پرداخت‌شده</th><th>مانده</th><th>تسویه</th><th>تحویل</th><th></th>
+                        <th>پرداخت‌شده</th><th>مانده</th><th>تسویه</th><th>تحویل</th><th>اقدام</th>
                     </tr></thead>
                     <tbody>
                     <?php foreach ($rows as $r):
@@ -81,11 +86,16 @@ $fiLabel = static function (string $code) use ($boardFilterLabels): string {
                         if ((int)($r['final_invoice_id'] ?? 0) > 0) {
                             $detailHref .= '&final_invoice_id=' . (int)$r['final_invoice_id'];
                         }
+                        $m360RowStageTree = m360_case_stage_tree_resolve($conn, [
+                            'jobcard_id' => (int)($r['jobcard_id'] ?? 0),
+                            'final_invoice_id' => (int)($r['final_invoice_id'] ?? 0),
+                        ]);
                     ?>
                         <tr>
                             <td><?= m360_fi_h((string)$r['jobcard_id']) ?></td>
+                            <td><?= m360_render_case_stage_header($m360RowStageTree, ['compact' => true]) ?></td>
                             <td><?= m360_fi_h((string)($r['customer_name'] ?? '-')) ?></td>
-                            <td><?= m360_fi_h((string)($r['customer_mobile'] ?? '-')) ?></td>
+                            <td><?= m360_fi_h(m360_fi_mask_mobile((string)($r['customer_mobile'] ?? '-'))) ?></td>
                             <td><?= m360_fi_h($vehicle) ?></td>
                             <td><?= m360_fi_h((string)($r['plate_number'] ?? '-')) ?></td>
                             <td><?= m360_fi_h((string)($r['qc_status_label'] ?? $r['qc_status'] ?? '-')) ?></td>

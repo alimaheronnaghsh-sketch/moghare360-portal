@@ -2,7 +2,7 @@
 declare(strict_types=1);
 
 /**
- * MOGHARE360 P11.4 — Owner/admin access management console (shared bootstrap).
+ * MOGHARE360 P11.4 — Owner/admin access management console.
  */
 
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'erp-customer-core-helper.php';
@@ -20,14 +20,15 @@ const M360_ACCESS_ROLE_REVOKE_REQUEST_FAILED_FA = 'ثبت درخواست دست�
 
 /** @var array<string, array{role_key:string, erp_role_code:string, label_fa:string}> */
 const M360_ACCESS_MGMT_ROLE_CODE_MAP = [
-    'OWNER' => ['role_key' => 'owner', 'erp_role_code' => 'OWNER', 'label_fa' => 'مالک'],
-    'SYSTEM_ADMIN' => ['role_key' => 'system_admin', 'erp_role_code' => 'SYSTEM_ADMIN', 'label_fa' => 'ادمین سیستم'],
+    'OWNER' => ['role_key' => 'owner', 'erp_role_code' => 'OWNER', 'label_fa' => 'مالک سیستم'],
+    'SYSTEM_ADMIN' => ['role_key' => 'system_admin', 'erp_role_code' => 'SYSTEM_ADMIN', 'label_fa' => 'مدیر سیستم'],
     'RECEPTION' => ['role_key' => 'reception_staff', 'erp_role_code' => 'RECEPTION', 'label_fa' => 'پذیرش'],
-    'SERVICE_MANAGER' => ['role_key' => 'operations_manager', 'erp_role_code' => 'SERVICE_MANAGER', 'label_fa' => 'مدیر سرویس'],
+    'SERVICE_MANAGER' => ['role_key' => 'operations_manager', 'erp_role_code' => 'SERVICE_MANAGER', 'label_fa' => 'مسئول سالن'],
     'TECHNICIAN' => ['role_key' => 'mechanical_staff', 'erp_role_code' => 'TECHNICIAN', 'label_fa' => 'تکنسین'],
-    'PARTS' => ['role_key' => 'inventory_staff', 'erp_role_code' => 'PARTS', 'label_fa' => 'قطعات / انبار'],
+    'PARTS' => ['role_key' => 'inventory_staff', 'erp_role_code' => 'PARTS', 'label_fa' => 'انبار / قطعات'],
     'FINANCE' => ['role_key' => 'finance_staff', 'erp_role_code' => 'FINANCE', 'label_fa' => 'مالی'],
     'QC' => ['role_key' => 'technical_manager', 'erp_role_code' => 'QC', 'label_fa' => 'کنترل کیفیت'],
+    'CRM' => ['role_key' => 'crm_staff', 'erp_role_code' => 'CRM', 'label_fa' => 'ارتباط با مشتری'],
 ];
 
 /** @var list<string> */
@@ -165,7 +166,17 @@ function m360_access_mgmt_post_string(string $key): string
  */
 function m360_access_mgmt_role_code_map(): array
 {
-    return M360_ACCESS_MGMT_ROLE_CODE_MAP;
+    return [
+        'OWNER' => ['role_key' => 'owner', 'erp_role_code' => 'OWNER', 'label_fa' => 'مالک سیستم'],
+        'SYSTEM_ADMIN' => ['role_key' => 'system_admin', 'erp_role_code' => 'SYSTEM_ADMIN', 'label_fa' => 'مدیر سیستم'],
+        'RECEPTION' => ['role_key' => 'reception_staff', 'erp_role_code' => 'RECEPTION', 'label_fa' => 'پذیرش'],
+        'SERVICE_MANAGER' => ['role_key' => 'operations_manager', 'erp_role_code' => 'SERVICE_MANAGER', 'label_fa' => 'مسئول سالن'],
+        'TECHNICIAN' => ['role_key' => 'mechanical_staff', 'erp_role_code' => 'TECHNICIAN', 'label_fa' => 'تکنسین'],
+        'PARTS' => ['role_key' => 'inventory_staff', 'erp_role_code' => 'PARTS', 'label_fa' => 'انبار / قطعات'],
+        'FINANCE' => ['role_key' => 'finance_staff', 'erp_role_code' => 'FINANCE', 'label_fa' => 'مالی'],
+        'QC' => ['role_key' => 'technical_manager', 'erp_role_code' => 'QC', 'label_fa' => 'کنترل کیفیت'],
+        'CRM' => ['role_key' => 'crm_staff', 'erp_role_code' => 'CRM', 'label_fa' => 'ارتباط با مشتری'],
+    ];
 }
 
 /**
@@ -173,20 +184,22 @@ function m360_access_mgmt_role_code_map(): array
  */
 function m360_access_mgmt_first_wave_role_codes(): array
 {
-    return array_keys(M360_ACCESS_MGMT_ROLE_CODE_MAP);
+    return array_keys(m360_access_mgmt_role_code_map());
 }
 
 function m360_access_mgmt_resolve_role_code(string $roleCode): ?array
 {
     $roleCode = strtoupper(trim($roleCode));
 
-    return M360_ACCESS_MGMT_ROLE_CODE_MAP[$roleCode] ?? null;
+    $map = m360_access_mgmt_role_code_map();
+
+    return $map[$roleCode] ?? null;
 }
 
 function m360_access_mgmt_resolve_role_key(string $roleKey): ?array
 {
     $roleKey = strtolower(trim($roleKey));
-    foreach (M360_ACCESS_MGMT_ROLE_CODE_MAP as $code => $meta) {
+    foreach (m360_access_mgmt_role_code_map() as $code => $meta) {
         if ($meta['role_key'] === $roleKey) {
             return array_merge(['ui_role_code' => $code], $meta);
         }
@@ -298,12 +311,13 @@ function m360_access_mgmt_default_company_id($conn): int
 function m360_access_mgmt_nav(): array
 {
     return [
+        ['href' => 'erp-product-home.php', 'label' => 'خانه محصول'],
+        ['href' => 'erp-user-role-admin.php', 'label' => 'کاربران و نقش‌ها'],
         ['href' => 'erp-access-management.php', 'label' => 'مدیریت دسترسی'],
         ['href' => 'erp-access-user-create.php', 'label' => 'ایجاد پرسنل'],
-        ['href' => 'erp-access-change-history.php', 'label' => 'تاریخچه'],
-        ['href' => 'erp-product-home.php', 'label' => 'خانه محصول'],
-        ['href' => 'owner-login.php', 'label' => 'ورود مدیریت'],
+        ['href' => 'erp-access-change-history.php', 'label' => 'تاریخچه دسترسی'],
     ];
+
 }
 
 function m360_access_mgmt_render_head(string $title): void
@@ -311,21 +325,27 @@ function m360_access_mgmt_render_head(string $title): void
     echo '<!DOCTYPE html><html lang="fa" dir="rtl"><head>';
     echo '<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">';
     echo '<title>' . m360_access_mgmt_h($title) . '</title>';
-    echo '<link rel="stylesheet" href="assets/moghare360-ui/moghare360-soft-run-release.css">';
+    echo '<link rel="stylesheet" href="assets/css/mirror.css">';
+    echo '<link rel="stylesheet" href="assets/css/moghare360-v1-luxury-ui.css">';
     echo '<link rel="stylesheet" href="assets/css/m360-access-management.css">';
     echo '</head><body class="m360-access-page"><div class="m360-access-wrap">';
     echo '<header class="m360-access-banner"><h1>' . m360_access_mgmt_h($title) . '</h1>';
-    echo '<p>MOGHARE360 V1 — مدیریت دسترسی پرسنل (SQL Server Identity)</p></header>';
+    echo '<p>کنسول مالک و مدیر سیستم برای مدیریت کاربران، نقش‌ها و دسترسی‌ها در SQL Server Identity</p></header>';
     echo '<nav class="m360-access-nav">';
     foreach (m360_access_mgmt_nav() as $link) {
         echo '<a href="' . m360_access_mgmt_h($link['href']) . '">' . m360_access_mgmt_h($link['label']) . '</a>';
     }
     echo '</nav>';
+    return;
 }
 
 function m360_access_mgmt_render_foot(): void
 {
-    echo '<footer class="m360-access-foot"><p>JSON import فقط bootstrap/fallback — مسیر اصلی این UI است.</p></footer>';
+    echo '<footer class="m360-access-foot"><p>مسیر اصلی مدیریت دسترسی همین UI است؛ ایمپورت JSON فقط مسیر اضطراری/راه‌اندازی است.</p></footer>';
+    echo '</div></body></html>';
+    return;
+
+    echo '<footer class="m360-access-foot"><p>ایمپورت JSON فقط مسیر اضطراری است؛ مسیر اصلی همین UI است.</p></footer>';
     echo '</div></body></html>';
 }
 

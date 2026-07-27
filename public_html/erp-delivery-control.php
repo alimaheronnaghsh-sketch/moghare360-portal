@@ -149,7 +149,7 @@ function m30_dc_safe_sql_error($connection): string
 /**
  * @return array<string, mixed>
  */
-function erp_m30_dc_guard_eval($connection, int $userId, string $actionKey): array
+function erp_m30_dc_guard_eval($connection, int $userId, string $actionKey, bool $allowAdminPlaceholder = false): array
 {
     $map = erp_guard_action_map();
 
@@ -168,7 +168,7 @@ function erp_m30_dc_guard_eval($connection, int $userId, string $actionKey): arr
         return ['allowed' => false, 'label' => 'FAIL', 'placeholder' => false];
     }
 
-    if ($userId === ERP_M30_PLATFORM_OWNER_ID) {
+    if ($userId === ERP_M30_PLATFORM_OWNER_ID || $allowAdminPlaceholder) {
         return ['allowed' => true, 'label' => 'PLACEHOLDER_OWNER_ALLOWED', 'placeholder' => true];
     }
 
@@ -268,15 +268,19 @@ function erp_m30_dc_release_delivery($connection, int $userId, int $deliveryCont
 }
 
 try {
-    erp_m30_dc_require_first_existing(erp_m30_dc_helper_candidates('erp-auth-context.php'), 'erp-auth-context.php');
-    erp_m30_dc_require_first_existing(erp_m30_dc_helper_candidates('erp-permission-guard.php'), 'erp-permission-guard.php');
+erp_m30_dc_require_first_existing(erp_m30_dc_helper_candidates('erp-auth-context.php'), 'erp-auth-context.php');
+erp_m30_dc_require_first_existing(erp_m30_dc_helper_candidates('erp-permission-guard.php'), 'erp-permission-guard.php');
+erp_m30_dc_require_first_existing(erp_m30_dc_helper_candidates('m360-staff-home-helper.php'), 'm360-staff-home-helper.php');
+erp_m30_dc_require_first_existing(erp_m30_dc_helper_candidates('m360-case-stage-tree-helper.php'), 'm360-case-stage-tree-helper.php');
+erp_m30_dc_require_first_existing(erp_m30_dc_helper_candidates('m360-case-stage-header.php'), 'm360-case-stage-header.php');
 } catch (Throwable $exception) {
-    echo '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Delivery Error</title></head><body><p>Delivery control page could not be loaded.</p></body></html>';
+    echo '<!DOCTYPE html><html lang="fa" dir="rtl"><head><meta charset="UTF-8"><title>خطای کنترل تحویل</title><link rel="stylesheet" href="assets/css/moghare360-v1-luxury-ui.css"></head><body class="m360-delivery-page"><div class="m360-delivery-wrap"><section class="m360-delivery-card"><p>صفحه کنترل تحویل بارگذاری نشد.</p></section></div></body></html>';
     exit(1);
 }
 
 $phpVersion = PHP_VERSION;
-$userId = ERP_M30_PLATFORM_OWNER_ID;
+$userId = 0;
+$roleCode = 'UNKNOWN';
 $guardViewLabel = 'FAIL';
 $guardReleaseLabel = 'FAIL';
 $errorMessage = '';
@@ -284,38 +288,53 @@ $successMessage = '';
 $deliveryRow = [];
 $historyRows = [];
 $selectedJobcardId = 1;
+$deliveryControlId = 0;
 $canRelease = false;
 $csrfToken = '';
 $connection = false;
+$m360StageTree = m360_case_stage_tree_resolve(false, []);
 
 try {
     erp_auth_context_start();
+    m360_staff_home_require_session();
     m30_dc_csrf_ensure_session();
 
     $connection = erp_auth_create_local_odbc_connection();
 
-    if (erp_auth_current_user_id() !== $userId) {
-        throw new RuntimeException('Access denied.');
+    $sessionUserId = erp_auth_context_session_user_id();
+    if ($sessionUserId === null || $sessionUserId <= 0) {
+        throw new RuntimeException('دسترسی مجاز نیست.');
     }
+    $userId = $sessionUserId;
 
     if (erp_auth_load_current_user($connection) === null) {
-        throw new RuntimeException('Access denied.');
+        throw new RuntimeException('دسترسی مجاز نیست.');
     }
 
-    $guardView = erp_m30_dc_guard_eval($connection, $userId, ERP_M30_VIEW_ACTION);
-    $guardRelease = erp_m30_dc_guard_eval($connection, $userId, ERP_M30_RELEASE_ACTION);
+    $companyId = (int)($_SESSION['erp_company_id'] ?? 1);
+    $roleCode = m360_staff_home_resolve_role_code($connection, $userId, $companyId);
+    $isDeliveryAdmin = in_array($roleCode, ['OWNER', 'SYSTEM_ADMIN'], true)
+        || erp_auth_is_system_owner($connection, $userId);
+
+    if (!$isDeliveryAdmin) {
+        http_response_code(403);
+        throw new RuntimeException('دسترسی مجاز نیست.');
+    }
+
+    $guardView = erp_m30_dc_guard_eval($connection, $userId, ERP_M30_VIEW_ACTION, $isDeliveryAdmin);
+    $guardRelease = erp_m30_dc_guard_eval($connection, $userId, ERP_M30_RELEASE_ACTION, $isDeliveryAdmin);
     $guardViewLabel = (string)($guardView['label'] ?? 'FAIL');
     $guardReleaseLabel = (string)($guardRelease['label'] ?? 'FAIL');
 
     if (empty($guardView['allowed'])) {
-        throw new RuntimeException('Access denied.');
+        throw new RuntimeException('دسترسی مجاز نیست.');
     }
 
     $selectedJobcardId = erp_m30_dc_parse_jobcard_id();
     $resolvedJobcardId = erp_m30_dc_resolve_active_jobcard($connection, $selectedJobcardId);
 
     if ($resolvedJobcardId === null) {
-        throw new RuntimeException('JobCard is not active or does not exist.');
+        throw new RuntimeException('JobCard فعال نیست یا وجود ندارد.');
     }
 
     $selectedJobcardId = $resolvedJobcardId;
@@ -323,11 +342,11 @@ try {
 
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && erp_m30_dc_post_string('action') === 'release') {
         if (empty($guardRelease['allowed'])) {
-            throw new RuntimeException('Access denied.');
+            throw new RuntimeException('دسترسی مجاز نیست.');
         }
 
         if (!m30_dc_csrf_validate(trim((string)($_POST['csrf_token'] ?? '')))) {
-            throw new RuntimeException('Invalid CSRF token.');
+            throw new RuntimeException('توکن امنیتی معتبر نیست.');
         }
 
         $deliveryRows = erp_m30_dc_fetch_rows(
@@ -340,7 +359,7 @@ try {
         );
 
         if ($deliveryRows === []) {
-            throw new RuntimeException('No delivery control record found.');
+            throw new RuntimeException('رکورد کنترل تحویل یافت نشد.');
         }
 
         $deliveryControlId = (int)($deliveryRows[0]['delivery_control_id'] ?? 0);
@@ -348,14 +367,14 @@ try {
         $deliveryAllowed = (int)($deliveryRows[0]['delivery_allowed'] ?? 0);
 
         if ($deliveryAllowed !== 1 || $deliveryStatus !== 'READY') {
-            throw new RuntimeException('Delivery release is not allowed for current status.');
+            throw new RuntimeException('ثبت مجوز تحویل در وضعیت فعلی مجاز نیست.');
         }
 
         /** @var array<string, mixed> */
         $releaseDiagnostic = [];
 
         erp_m30_dc_release_delivery($connection, $userId, $deliveryControlId, $selectedJobcardId, $deliveryStatus, $releaseDiagnostic);
-        $successMessage = 'Delivery Released OK';
+        $successMessage = 'مجوز تحویل ثبت شد.';
     }
 
     $deliveryRows = erp_m30_dc_fetch_rows(
@@ -384,8 +403,13 @@ try {
             && strtoupper((string)($deliveryRow['delivery_status'] ?? '')) === 'READY'
             && !empty($guardRelease['allowed']);
     }
+
+    $m360StageTree = m360_case_stage_tree_resolve($connection, [
+        'jobcard_id' => $selectedJobcardId,
+        'delivery_control_id' => $deliveryControlId,
+    ]);
 } catch (Throwable $exception) {
-    $errorMessage = trim($exception->getMessage()) !== '' ? $exception->getMessage() : 'Delivery control could not be completed.';
+    $errorMessage = trim($exception->getMessage()) !== '' ? $exception->getMessage() : 'کنترل تحویل تکمیل نشد.';
 } finally {
     if ($connection !== false) {
         @odbc_close($connection);
@@ -393,77 +417,71 @@ try {
 }
 ?>
 <!DOCTYPE html>
-<html lang="en">
+<html lang="fa" dir="rtl">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="robots" content="noindex, nofollow">
-    <title>Mission 30 - Delivery Control</title>
-    <style>
-        body { font-family: Arial, sans-serif; margin: 0; background: #f4f6f8; color: #1f2937; line-height: 1.5; }
-        .wrap { max-width: 1000px; margin: 0 auto; padding: 24px; }
-        .banner { background: #7f1d1d; color: #fff; padding: 12px 16px; border-radius: 8px; font-weight: bold; text-align: center; margin-bottom: 16px; }
-        .card { background: #fff; border: 1px solid #d1d5db; border-radius: 8px; padding: 16px; margin-bottom: 16px; }
-        table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
-        th, td { border: 1px solid #d1d5db; padding: 8px 10px; text-align: left; }
-        th { background: #f3f4f6; width: 240px; }
-        .list-table th { width: auto; }
-        .ok { color: #166534; font-weight: bold; }
-        .fail { color: #b91c1c; font-weight: bold; }
-        button { background: #7f1d1d; color: #fff; border: 0; padding: 10px 16px; border-radius: 6px; cursor: pointer; }
-    </style>
+    <title>کنترل تحویل</title>
+    <link rel="stylesheet" href="assets/css/mirror.css">
+    <link rel="stylesheet" href="assets/css/moghare360-v1-luxury-ui.css">
 </head>
-<body>
-<div class="wrap">
-    <div class="banner">DELIVERY CONTROL - CONTROLLED RELEASE ONLY WHEN READY</div>
+<body class="m360-delivery-page">
+<div class="m360-delivery-wrap">
+    <div class="m360-lux-hero"><h1>کنترل تحویل</h1><p>تحویل فقط زمانی مجاز است که QC، وضعیت مالی، تأیید نهایی و درخواست‌های باز بسته شده باشند.</p></div>
 
-    <div class="card">
-        <h1>Delivery Control</h1>
+    <?= m360_render_case_stage_header($m360StageTree) ?>
+
+    <div class="m360-delivery-card">
+        <h2>وضعیت پرونده تحویل</h2>
         <p>
-            <a href="erp-qc-check.php">QC check</a> |
-            <a href="erp-soft-run-readiness.php?jobcard_id=<?= erp_m30_dc_h((string)$selectedJobcardId) ?>">Soft Run readiness</a>
+            <a class="m360-lux-link" href="erp-qc-check.php">بررسی QC</a>
+            <a class="m360-lux-link" href="erp-soft-run-readiness.php?jobcard_id=<?= erp_m30_dc_h((string)$selectedJobcardId) ?>">آمادگی مسیر</a>
         </p>
         <?php if ($successMessage !== ''): ?><p class="ok"><?= erp_m30_dc_h($successMessage) ?></p><?php endif; ?>
         <?php if ($errorMessage !== ''): ?><p class="fail"><?= erp_m30_dc_h($errorMessage) ?></p><?php endif; ?>
-        <p>JobCard ID: <?= erp_m30_dc_h((string)$selectedJobcardId) ?></p>
+        <p>شناسه JobCard: <?= erp_m30_dc_h((string)$selectedJobcardId) ?></p>
     </div>
 
     <?php if ($deliveryRow === []): ?>
-        <div class="card"><p>No delivery control record found. Create a QC check first.</p></div>
+        <div class="m360-delivery-card m360-lux-block"><p>رکورد کنترل تحویل یافت نشد. ابتدا باید QC ثبت شود.</p></div>
     <?php else: ?>
-        <div class="card">
-            <h2>Latest Delivery Control</h2>
+        <div class="m360-delivery-card">
+            <h2>آخرین وضعیت کنترل تحویل</h2>
             <table>
                 <tbody>
-                    <tr><th>Delivery Control ID</th><td><?= erp_m30_dc_display($deliveryRow['delivery_control_id'] ?? '') ?></td></tr>
-                    <tr><th>QC Check ID</th><td><?= erp_m30_dc_display($deliveryRow['qc_check_id'] ?? '') ?></td></tr>
-                    <tr><th>Delivery Status</th><td><?= erp_m30_dc_display($deliveryRow['delivery_status'] ?? '') ?></td></tr>
-                    <tr><th>Delivery Allowed</th><td><?= erp_m30_dc_display($deliveryRow['delivery_allowed'] ?? '') ?></td></tr>
-                    <tr><th>Block Reason</th><td><?= erp_m30_dc_display($deliveryRow['block_reason'] ?? '') ?></td></tr>
-                    <tr><th>Released By</th><td><?= erp_m30_dc_display($deliveryRow['released_by_user_id'] ?? '') ?></td></tr>
-                    <tr><th>Released At</th><td><?= erp_m30_dc_display($deliveryRow['released_at'] ?? '') ?></td></tr>
+                    <tr><th>شناسه کنترل تحویل</th><td><?= erp_m30_dc_display($deliveryRow['delivery_control_id'] ?? '') ?></td></tr>
+                    <tr><th>شناسه QC</th><td><?= erp_m30_dc_display($deliveryRow['qc_check_id'] ?? '') ?></td></tr>
+                    <tr><th>وضعیت تحویل</th><td><?= erp_m30_dc_display($deliveryRow['delivery_status'] ?? '') ?></td></tr>
+                    <tr><th>تحویل مجاز است؟</th><td><?= erp_m30_dc_display($deliveryRow['delivery_allowed'] ?? '') ?></td></tr>
+                    <tr><th>علت انسداد</th><td><?= erp_m30_dc_display($deliveryRow['block_reason'] ?? '') ?></td></tr>
+                    <tr><th>آزادسازی توسط</th><td><?= erp_m30_dc_display($deliveryRow['released_by_user_id'] ?? '') ?></td></tr>
+                    <tr><th>زمان آزادسازی</th><td><?= erp_m30_dc_display($deliveryRow['released_at'] ?? '') ?></td></tr>
                 </tbody>
             </table>
+            <?php if (!$canRelease): ?>
+                <p class="m360-lux-block">تحویل فعلاً مسدود است: تا عبور QC، تسویه/وضعیت مالی، تأیید نهایی و بسته شدن درخواست‌های باز، تحویل مجاز نیست.</p>
+            <?php endif; ?>
 
             <?php if ($canRelease): ?>
                 <form method="post" style="margin-top: 12px;">
                     <input type="hidden" name="csrf_token" value="<?= erp_m30_dc_h($csrfToken) ?>">
                     <input type="hidden" name="action" value="release">
                     <input type="hidden" name="jobcard_id" value="<?= erp_m30_dc_h((string)$selectedJobcardId) ?>">
-                    <button type="submit">Release Delivery</button>
+                    <button type="submit">ثبت مجوز تحویل</button>
                 </form>
             <?php endif; ?>
         </div>
 
-        <div class="card">
-            <h2>Delivery History</h2>
+        <div class="m360-delivery-card">
+            <h2>تاریخچه تحویل</h2>
             <?php if ($historyRows === []): ?>
-                <p>No history rows.</p>
+                <p>رویدادی ثبت نشده است.</p>
             <?php else: ?>
                 <table class="list-table">
                     <thead>
                         <tr>
-                            <th>ID</th><th>Action</th><th>Old</th><th>New</th><th>By</th><th>At</th><th>Note</th>
+                            <th>ID</th><th>اقدام</th><th>قبلی</th><th>جدید</th><th>توسط</th><th>زمان</th><th>یادداشت</th>
                         </tr>
                     </thead>
                     <tbody>

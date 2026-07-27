@@ -4,7 +4,10 @@ declare(strict_types=1);
 require_once __DIR__ . '/inventory-controlled-helpers.php';
 
 inv_require_inventory_access('new');
-ensureSessionStarted();
+
+// The Phase 4 catalog is the canonical inventory item writer.
+header('Location: erp-parts-catalog.php', true, 302);
+exit;
 
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 header('Cache-Control: post-check=0, pre-check=0', false);

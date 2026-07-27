@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-otp-helper.php';
+require_once dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-reception-workbench-helper.php';
 
 m360_otp_json_headers();
 
@@ -26,4 +27,5 @@ if (!$result['ok']) {
 m360_otp_json_ok($result['message'], [
     'verified' => true,
     'token' => $result['token'] ?? '',
+    'redirect_url' => m360_rw_customer_portal_app_root_url('/customer-profile.php'),
 ]);

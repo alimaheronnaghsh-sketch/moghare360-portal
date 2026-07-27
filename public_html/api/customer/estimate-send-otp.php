@@ -12,13 +12,18 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
 
 $body = mogh_api_read_json_body();
 $token = trim((string)($body['token'] ?? $_POST['token'] ?? ''));
-$resolved = m360_estimate_resolve_token($token);
-
-if (!$resolved['ok'] || !is_array($resolved['estimate'])) {
-    mogh_api_fail($resolved['message'], 403);
+$taskId = (int)($body['task_id'] ?? $_POST['task_id'] ?? 0);
+$conn = customer_core_db();
+if ($conn === false) {
+    mogh_api_fail('سرویس در دسترس نیست.', 503);
 }
 
-$result = m360_estimate_send_otp($resolved['estimate']);
+$context = m360_estimate_resolve_customer_context($conn, ['token' => $token, 'task_id' => $taskId]);
+if (!$context['ok']) {
+    mogh_api_fail((string)$context['message'], 403);
+}
+
+$result = m360_estimate_send_otp($context);
 if (!$result['ok']) {
     mogh_api_fail($result['message'], 400);
 }

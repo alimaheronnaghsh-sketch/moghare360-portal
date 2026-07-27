@@ -11,7 +11,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
 }
 
 $body = mogh_api_read_json_body();
-$token = trim((string)($body['token'] ?? ''));
+$token = trim((string)($body['token'] ?? $body['t'] ?? ''));
 $resolved = m360_contract_resolve_token($token);
 
 if (!$resolved['ok'] || !is_array($resolved['contract'])) {
@@ -23,7 +23,10 @@ if (!$result['ok']) {
     mogh_api_fail($result['message'], 400);
 }
 
-$data = [];
+$binding = m360_contract_require_verified_session_mobile_for_contract($resolved['contract']);
+$data = [
+    'masked_mobile' => $binding['ok'] ? m360_contract_mask_mobile($binding['mobile']) : '',
+];
 if (!empty($result['test_mode'])) {
     $data['test_mode'] = true;
 }

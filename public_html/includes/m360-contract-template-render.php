@@ -11,23 +11,256 @@ function m360_contract_h(string $value): string
 }
 
 /**
+ * Display-only thousand separator (English commas). Does not mutate stored values.
+ */
+function m360_format_number($value): string
+{
+    if ($value === null) {
+        return '';
+    }
+    if (is_bool($value)) {
+        return $value ? '1' : '0';
+    }
+    if (is_int($value) || is_float($value)) {
+        if (!is_finite((float)$value)) {
+            return '';
+        }
+        if ((float)$value == floor((float)$value)) {
+            return number_format((int)$value, 0, '.', ',');
+        }
+
+        return number_format((float)$value, 2, '.', ',');
+    }
+
+    $raw = trim((string)$value);
+    if ($raw === '' || $raw === '-' || $raw === '—') {
+        return $raw;
+    }
+
+    // Pure numeric (optional existing commas/spaces).
+    $compact = str_replace([',', ' ', '٬', '،'], '', $raw);
+    if (preg_match('/^-?\d+(\.\d+)?$/', $compact) === 1) {
+        if (str_contains($compact, '.')) {
+            return number_format((float)$compact, 2, '.', ',');
+        }
+
+        return number_format((int)$compact, 0, '.', ',');
+    }
+
+    // Mixed text: format contiguous digit groups of 4+ (money/km scale).
+    $formatted = preg_replace_callback(
+        '/\d{4,}/',
+        static function (array $m): string {
+            return number_format((int)$m[0], 0, '.', ',');
+        },
+        $raw
+    );
+
+    return is_string($formatted) ? $formatted : $raw;
+}
+
+/**
+ * True when a contract display field is an empty placeholder (dash / blank / generic).
+ */
+function m360_contract_is_blank_display($value): bool
+{
+    $raw = trim((string)($value ?? ''));
+    if ($raw === '' || $raw === '-' || $raw === '—' || $raw === 'ثبت نشده') {
+        return true;
+    }
+
+    return m360_contract_is_generic_placeholder($raw);
+}
+
+/**
+ * Generic intake placeholders that must not appear in contract/PDF once structured data exists.
+ */
+function m360_contract_is_generic_placeholder(string $value): bool
+{
+    $raw = trim($value);
+    if ($raw === '') {
+        return false;
+    }
+    $generics = [
+        'مطابق انتخاب پرونده',
+        'مطابق انتخاب پذیرش',
+        'مطابق اعلام پذیرش',
+        'پس از کارشناسی اعلام می‌شود',
+        'ثبت‌شده در پرونده پذیرش',
+    ];
+
+    return in_array($raw, $generics, true);
+}
+
+/**
+ * Normalize agreement/display value for contract/PDF: generics and dashes → empty.
+ */
+function m360_contract_normalize_agreement_display($value): string
+{
+    $raw = trim((string)($value ?? ''));
+    if (m360_contract_is_blank_display($raw)) {
+        return '';
+    }
+
+    return $raw;
+}
+
+/**
+ * Canonical yes/no Persian for contract fields (دارد/ندارد/empty).
+ */
+function m360_contract_agreement_yes_no_display(string $value): string
+{
+    $value = strtolower(trim($value));
+    if ($value === 'yes' || $value === '1' || $value === 'true' || $value === 'دارد') {
+        return 'دارد';
+    }
+    if ($value === 'no' || $value === '0' || $value === 'false' || $value === 'ندارد') {
+        return 'ندارد';
+    }
+    if (function_exists('m360_rw_intake_agreement_yes_no_fa')) {
+        $fa = trim(m360_rw_intake_agreement_yes_no_fa($value));
+        if ($fa === 'دارد' || $fa === 'ندارد') {
+            return $fa;
+        }
+    }
+
+    return m360_contract_normalize_agreement_display($value);
+}
+
+/**
+ * Canonical part-purchase Persian label for contract/PDF.
+ */
+function m360_contract_part_purchase_display(string $value): string
+{
+    $value = trim($value);
+    if ($value === '') {
+        return '';
+    }
+    if (function_exists('m360_rw_intake_part_purchase_authorization_fa')) {
+        $fa = trim(m360_rw_intake_part_purchase_authorization_fa($value));
+        if ($fa !== '' && $fa !== '—') {
+            return m360_contract_normalize_agreement_display($fa);
+        }
+    }
+    $aliases = [
+        'under_500m' => 'زیر 500,000,000 ریال',
+        'up_to_1b' => 'تا 1,000,000,000 ریال',
+        'up_to_2b' => 'تا 2,000,000,000 ریال',
+        'no_limit' => 'بدون سقف',
+        'owner_sms_coord' => 'با هماهنگی مالک پیامکی',
+    ];
+    if (isset($aliases[$value])) {
+        return $aliases[$value];
+    }
+
+    return m360_contract_normalize_agreement_display($value);
+}
+
+/**
+ * Normalize money input to raw digit string (strips commas/spaces). Empty if none.
+ */
+function m360_contract_normalize_money_digits($value): string
+{
+    $digits = preg_replace('/[^\d]/', '', (string)($value ?? '')) ?? '';
+
+    return $digits;
+}
+
+/**
+ * Parse «از X تا Y» (optional ریال/تومان) into digit min/max.
+ *
+ * @return array{min:string,max:string}
+ */
+function m360_contract_parse_cost_range_bounds(string $text): array
+{
+    $text = trim($text);
+    if ($text === '') {
+        return ['min' => '', 'max' => ''];
+    }
+    if (preg_match('/از\s*([\d,٬،\s]+)\s*تا\s*([\d,٬،\s]+)/u', $text, $m) === 1) {
+        return [
+            'min' => m360_contract_normalize_money_digits($m[1]),
+            'max' => m360_contract_normalize_money_digits($m[2]),
+        ];
+    }
+
+    return ['min' => '', 'max' => ''];
+}
+
+/**
+ * Display-only IRR money label. Raw stored value must remain unformatted.
+ * Missing values render as «ثبت نشده» (not a meaningless dash).
+ */
+function m360_format_money_irr($value): string
+{
+    $raw = trim((string)($value ?? ''));
+    if (m360_contract_is_blank_display($raw)) {
+        return 'ثبت نشده';
+    }
+    if (mb_strpos($raw, 'ریال') !== false || mb_strpos($raw, 'تومان') !== false) {
+        return m360_format_number($raw);
+    }
+    $num = m360_format_number($raw);
+    if (m360_contract_is_blank_display($num)) {
+        return 'ثبت نشده';
+    }
+
+    return $num . ' ریال';
+}
+
+function m360_contract_display_mobile(string $mobile): string
+{
+    $digits = preg_replace('/\D+/', '', $mobile) ?? '';
+    if (strlen($digits) < 8) {
+        return trim($mobile) !== '' ? $mobile : '-';
+    }
+
+    return substr($digits, 0, 4) . '***' . substr($digits, -4);
+}
+
+/**
  * @param array<string, mixed> $data
  */
 function m360_contract_render_html(array $data, bool $wrapDocument = true): string
 {
     $customerName = m360_contract_h((string)($data['customer_name'] ?? '-'));
-    $mobile = m360_contract_h((string)($data['mobile'] ?? '-'));
+    $mobile = m360_contract_h(m360_contract_display_mobile((string)($data['mobile'] ?? '-')));
     $vehicle = m360_contract_h((string)($data['vehicle'] ?? '-'));
     $plate = m360_contract_h((string)($data['plate'] ?? '-'));
     $vin = m360_contract_h((string)($data['vin'] ?? '-'));
-    $odometer = m360_contract_h((string)($data['odometer'] ?? '-'));
+    $odometerRaw = trim((string)($data['odometer'] ?? '-'));
+    $odometerFmt = m360_format_number($odometerRaw);
+    $odometer = m360_contract_h($odometerFmt !== '' ? $odometerFmt : $odometerRaw);
+    $fuelLevel = m360_contract_h((string)($data['fuel_level'] ?? '-'));
     $serviceType = m360_contract_h((string)($data['service_type'] ?? '-'));
-    $costRange = m360_contract_h((string)($data['cost_range'] ?? '-'));
-    $prepayment = m360_contract_h((string)($data['prepayment'] ?? '-'));
-    $purchaseLimit = m360_contract_h((string)($data['purchase_limit'] ?? '-'));
-    $testDriveAllowed = m360_contract_h((string)($data['test_drive_allowed'] ?? '-'));
-    $bodyInsuranceStatus = m360_contract_h((string)($data['body_insurance_status'] ?? '-'));
-    $checklistSummary = m360_contract_h((string)($data['checklist_summary'] ?? '-'));
+    $requestDescription = m360_contract_h((string)($data['request_description'] ?? '-'));
+    $costRangeRaw = trim((string)($data['cost_range'] ?? ''));
+    if (m360_contract_is_blank_display($costRangeRaw)) {
+        $costRangeDisplay = 'ثبت نشده';
+    } elseif (preg_match('/^-?[\d,\s٬،]+$/', $costRangeRaw) === 1) {
+        $costRangeDisplay = m360_format_money_irr($costRangeRaw);
+    } else {
+        $costRangeDisplay = m360_format_number($costRangeRaw);
+    }
+    $costRange = m360_contract_h($costRangeDisplay);
+    $prepayment = m360_contract_h(m360_format_number((string)($data['prepayment'] ?? '-')));
+    $purchaseLimitRaw = m360_contract_normalize_agreement_display($data['purchase_limit'] ?? '');
+    $purchaseLimit = m360_contract_h($purchaseLimitRaw !== '' ? m360_format_number($purchaseLimitRaw) : 'ثبت نشده');
+    $testDriveAllowed = m360_contract_h(m360_contract_normalize_agreement_display($data['test_drive_allowed'] ?? '') !== ''
+        ? m360_contract_normalize_agreement_display($data['test_drive_allowed'] ?? '')
+        : 'ثبت نشده');
+    $bodyInsuranceStatus = m360_contract_h(m360_contract_normalize_agreement_display($data['body_insurance_status'] ?? '') !== ''
+        ? m360_contract_normalize_agreement_display($data['body_insurance_status'] ?? '')
+        : 'ثبت نشده');
+    $thirdPartyInsurance = m360_contract_h(m360_contract_normalize_agreement_display($data['third_party_insurance'] ?? '') !== ''
+        ? m360_contract_normalize_agreement_display($data['third_party_insurance'] ?? '')
+        : 'ثبت نشده');
+    $otherAgreementsNoteRaw = m360_contract_normalize_agreement_display($data['other_agreements_note'] ?? '');
+    $otherAgreementsNote = m360_contract_h($otherAgreementsNoteRaw !== '' ? $otherAgreementsNoteRaw : 'ثبت نشده');
+    $serviceCostMin = m360_contract_h(m360_format_money_irr($data['service_cost_min'] ?? ''));
+    $serviceCostMax = m360_contract_h(m360_format_money_irr($data['service_cost_max'] ?? ''));
+    $checklistRaw = m360_contract_normalize_agreement_display($data['checklist_summary'] ?? '');
+    $checklistSummary = m360_contract_h($checklistRaw !== '' ? $checklistRaw : 'ثبت نشده');
     $jobcardId = m360_contract_h((string)($data['jobcard_id'] ?? '-'));
     $onlineRequestId = m360_contract_h((string)($data['online_request_id'] ?? '-'));
     $visitDate = m360_contract_h((string)($data['visit_date'] ?? '-'));
@@ -91,13 +324,33 @@ function m360_contract_render_html(array $data, bool $wrapDocument = true): stri
       </div>
 
       <div class="m360-contract-item">
+        <span>سطح بنزین</span>
+        <strong>{$fuelLevel}</strong>
+      </div>
+
+      <div class="m360-contract-item">
         <span>نوع خدمت</span>
         <strong>{$serviceType}</strong>
       </div>
 
       <div class="m360-contract-item">
-        <span>محدوده هزینه</span>
+        <span>شرح درخواست</span>
+        <strong>{$requestDescription}</strong>
+      </div>
+
+      <div class="m360-contract-item">
+        <span>توافق / محدوده هزینه</span>
         <strong>{$costRange}</strong>
+      </div>
+
+      <div class="m360-contract-item">
+        <span>حداقل هزینه خدمات</span>
+        <strong>{$serviceCostMin}</strong>
+      </div>
+
+      <div class="m360-contract-item">
+        <span>حداکثر هزینه خدمات</span>
+        <strong>{$serviceCostMax}</strong>
       </div>
 
       <div class="m360-contract-item">
@@ -111,13 +364,23 @@ function m360_contract_render_html(array $data, bool $wrapDocument = true): stri
       </div>
 
       <div class="m360-contract-item">
-        <span>تست رانندگی</span>
+        <span>اجازه تست درایو</span>
         <strong>{$testDriveAllowed}</strong>
+      </div>
+
+      <div class="m360-contract-item">
+        <span>بیمه شخص ثالث</span>
+        <strong>{$thirdPartyInsurance}</strong>
       </div>
 
       <div class="m360-contract-item">
         <span>بیمه بدنه</span>
         <strong>{$bodyInsuranceStatus}</strong>
+      </div>
+
+      <div class="m360-contract-item">
+        <span>سایر توافقات</span>
+        <strong>{$otherAgreementsNote}</strong>
       </div>
 
       <div class="m360-contract-item">
@@ -475,4 +738,126 @@ CSS;
 </body>
 </html>
 HTML;
+}
+
+/**
+ * Complete RTL contract HTML for mPDF — same clauses as customer review + signature blocks.
+ *
+ * @param array<string, mixed> $data
+ */
+function m360_contract_render_pdf_html(array $data): string
+{
+    // Normalize agreement fields before canonical clause render.
+    $data['third_party_insurance'] = m360_contract_normalize_agreement_display($data['third_party_insurance'] ?? '');
+    $data['body_insurance_status'] = m360_contract_normalize_agreement_display($data['body_insurance_status'] ?? '');
+    $data['test_drive_allowed'] = m360_contract_normalize_agreement_display($data['test_drive_allowed'] ?? '');
+    $data['purchase_limit'] = m360_contract_normalize_agreement_display($data['purchase_limit'] ?? '');
+    $data['other_agreements_note'] = m360_contract_normalize_agreement_display($data['other_agreements_note'] ?? '');
+    if (m360_contract_is_generic_placeholder((string)($data['cost_range'] ?? ''))) {
+        $data['cost_range'] = '';
+    }
+    if (m360_contract_is_generic_placeholder((string)($data['prepayment'] ?? ''))) {
+        $data['prepayment'] = '';
+    }
+    if (m360_contract_is_generic_placeholder((string)($data['checklist_summary'] ?? ''))) {
+        $data['checklist_summary'] = '';
+    }
+
+    $body = m360_contract_render_html($data, false);
+    $signatures = m360_contract_render_pdf_signature_blocks($data);
+
+    $styles = <<<'CSS'
+div.m360-pdf-root { font-family: dejavusans; direction: rtl; text-align: right; color: #111; font-size: 10.5pt; line-height: 1.7; }
+div.m360-pdf-root h1 { font-size: 15pt; margin: 0 0 8px; color: #0e3d2f; }
+div.m360-pdf-root h2 { font-size: 12pt; margin: 14px 0 6px; color: #0e3d2f; page-break-after: avoid; }
+div.m360-pdf-root p { margin: 6px 0; text-align: justify; }
+div.m360-pdf-root .m360-contract-meta { font-size: 9.5pt; margin: 0 0 12px; }
+div.m360-pdf-root .m360-contract-grid { width: 100%; }
+div.m360-pdf-root .m360-contract-item { margin: 0 0 6px; padding: 4px 0; border-bottom: 1px solid #ddd; }
+div.m360-pdf-root .m360-contract-item span { display: block; font-size: 9pt; color: #444; }
+div.m360-pdf-root .m360-contract-item strong { display: block; font-size: 10.5pt; }
+div.m360-pdf-root .m360-contract-block { margin: 10px 0 12px; page-break-inside: avoid; }
+div.m360-pdf-root .m360-contract-footer-note { margin-top: 12px; font-size: 9pt; color: #333; }
+div.m360-pdf-root .m360-pdf-sign-wrap { margin-top: 18px; page-break-inside: avoid; }
+div.m360-pdf-root .m360-pdf-sign-box { border: 1px solid #999; padding: 10px; margin: 0 0 12px; }
+div.m360-pdf-root .m360-pdf-sign-line { margin-top: 28px; border-bottom: 1px solid #333; height: 28px; }
+div.m360-pdf-root .m360-pdf-stamp-box { margin-top: 12px; border: 1px dashed #666; height: 70px; text-align: center; padding-top: 24px; color: #555; }
+div.m360-pdf-root .m360-pdf-meta-foot { margin-top: 10px; font-size: 8.5pt; color: #444; }
+CSS;
+
+    return '<div class="m360-pdf-root" style="font-family:dejavusans; direction:rtl; text-align:right;">'
+        . '<style>' . $styles . '</style>'
+        . $body
+        . $signatures
+        . '</div>';
+}
+
+/**
+ * Customer + workshop signature/acceptance blocks for contract PDF.
+ *
+ * @param array<string, mixed> $data
+ */
+function m360_contract_render_pdf_signature_blocks(array $data): string
+{
+    $customerName = trim((string)($data['customer_name'] ?? ''));
+    if ($customerName === '' || $customerName === '-') {
+        $customerName = '—';
+    }
+    $mobileMasked = m360_contract_display_mobile((string)($data['mobile'] ?? ''));
+    $statusFa = trim((string)($data['pdf_status_fa'] ?? ''));
+    $acceptance = trim((string)($data['pdf_acceptance_info'] ?? ''));
+    $signed = !empty($data['pdf_customer_signed']);
+    $signedAt = trim((string)($data['pdf_customer_signed_at'] ?? ''));
+    $method = trim((string)($data['pdf_acceptance_method'] ?? ''));
+    if ($method === '') {
+        $method = $signed ? 'OTP / امضای دیجیتال / ثبت سیستمی' : '—';
+    }
+    $customerStatus = $signed
+        ? 'تأیید شده توسط مشتری'
+        : (str_contains($acceptance, 'اصلاح') ? 'برگشت برای اصلاح' : 'در انتظار تأیید و امضای مشتری');
+
+    $hash = trim((string)($data['contract_hash'] ?? ''));
+    $generatedAt = trim((string)($data['pdf_generated_at'] ?? ''));
+    $version = trim((string)($data['contract_version'] ?? M360_CONTRACT_VERSION));
+    $company = M360_CONTRACT_COMPANY;
+
+    $customerExtra = '';
+    if ($signed) {
+        $customerExtra .= '<p><strong>وضعیت:</strong> ' . m360_contract_h($customerStatus) . '</p>';
+        if ($signedAt !== '') {
+            $customerExtra .= '<p><strong>زمان تأیید:</strong> ' . m360_contract_h($signedAt) . '</p>';
+        }
+        $customerExtra .= '<p><strong>روش تأیید:</strong> ' . m360_contract_h($method) . '</p>';
+        $customerExtra .= '<p>تأیید الکترونیکی مشتری ثبت شده است'
+            . ($hash !== '' && $hash !== '-' ? (' — هش: ' . m360_contract_h($hash)) : '')
+            . '</p>';
+    } else {
+        $customerExtra .= '<p><strong>وضعیت پذیرش:</strong> ' . m360_contract_h($customerStatus) . '</p>';
+        $customerExtra .= '<p><strong>روش تأیید (پس از امضا):</strong> OTP / امضای دیجیتال</p>';
+        $customerExtra .= '<p>محل امضا / اثر انگشت مشتری:</p><div class="m360-pdf-sign-line"></div>';
+    }
+
+    return '<div class="m360-pdf-sign-wrap">'
+        . '<h2>پذیرش و امضا</h2>'
+        . '<div class="m360-pdf-sign-box">'
+        . '<h2 style="margin-top:0;">امضای مشتری / مالک خودرو</h2>'
+        . '<p><strong>نام مشتری:</strong> ' . m360_contract_h($customerName) . '</p>'
+        . '<p><strong>موبایل (ماسک‌شده):</strong> ' . m360_contract_h($mobileMasked) . '</p>'
+        . $customerExtra
+        . '</div>'
+        . '<div class="m360-pdf-sign-box">'
+        . '<h2 style="margin-top:0;">امضای مالک یا نماینده مجاز تعمیرگاه</h2>'
+        . '<p><strong>نام مجموعه:</strong> ' . m360_contract_h($company) . '</p>'
+        . '<p><strong>نام مالک / نماینده مجاز:</strong> مالک / نماینده مجاز تعمیرگاه</p>'
+        . '<p><strong>سمت:</strong> مالک / مدیر پذیرش / نماینده مجاز</p>'
+        . '<p>محل امضا:</p><div class="m360-pdf-sign-line"></div>'
+        . '<div class="m360-pdf-stamp-box">محل مهر مجموعه</div>'
+        . '</div>'
+        . '<div class="m360-pdf-meta-foot">'
+        . 'نسخه: ' . m360_contract_h($version)
+        . ' | وضعیت سند: ' . m360_contract_h($statusFa !== '' ? $statusFa : '—')
+        . ' | تولید PDF: ' . m360_contract_h($generatedAt !== '' ? $generatedAt : '—')
+        . ' | هش اسنپ‌شات: ' . m360_contract_h($hash !== '' ? $hash : '—')
+        . '</div>'
+        . '</div>';
 }

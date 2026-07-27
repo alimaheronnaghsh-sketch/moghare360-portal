@@ -1,301 +1,285 @@
 <?php
 declare(strict_types=1);
 
-require_once __DIR__ . '/config.php';
-ensureSessionStarted();
+require_once __DIR__ . '/includes/m360-otp-helper.php';
+require_once __DIR__ . '/includes/mirror-layout.php';
+require_once __DIR__ . '/includes/m360-reception-workbench-helper.php';
 
-function customerFieldMissing($value): bool
-{
-    return trim((string)$value) === '';
+m360_otp_session_start();
+
+if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET' && (string)($_GET['logout'] ?? '') === '1') {
+    if (function_exists('m360_otp_reset_verified')) {
+        m360_otp_reset_verified();
+    }
+    header('Location: ' . m360_rw_customer_portal_app_root_url('/customer-request.php'), true, 302);
+    exit;
 }
 
-function currentCustomerFullName(array $customer): string
-{
-    $firstName = trim((string)($customer['first_name'] ?? ''));
-    $lastName = trim((string)($customer['last_name'] ?? ''));
-    $fullName = trim((string)($customer['full_name'] ?? ''));
-    if ($fullName === '' && ($firstName !== '' || $lastName !== '')) {
-        $fullName = trim($firstName . ' ' . $lastName);
-    }
-    return $fullName;
-}
+$mobile = m360_rw_customer_profile_require_verified_session();
 
-function detectActiveRequest(array $requests): ?array
-{
-    foreach ($requests as $request) {
-        $status = strtoupper(trim((string)($request['request_status'] ?? $request['status'] ?? '')));
-        if ($status === '' || !in_array($status, ['DELIVERED', 'CANCELLED', 'CLOSED', 'DONE'], true)) {
-            return $request;
-        }
-    }
-    return null;
+$conn = customer_core_db();
+if (!is_resource($conn)) {
+    m360_rw_customer_profile_render_error_page('اتصال به سامانه در حال حاضر ممکن نیست. لطفاً بعداً دوباره تلاش کنید.');
 }
 
 try {
-    $mobile = requireCustomerLogin();
-    $customer = getCustomerByMobile($mobile) ?? [];
-    $requests = getServiceRequestsByMobile($mobile);
-    $activeRequest = detectActiveRequest($requests);
-    $fullName = currentCustomerFullName($customer);
+    $dashboard = m360_rw_customer_dashboard_build($conn, $mobile, [
+        'contract_signed' => (string)($_GET['contract_signed'] ?? ''),
+        'request_created' => (string)($_GET['request_created'] ?? ''),
+        'history_page' => (string)($_GET['history_page'] ?? '1'),
+    ]);
+    $identity = is_array($dashboard['identity'] ?? null) ? $dashboard['identity'] : [];
+    $customer = is_array($dashboard['customer'] ?? null) ? $dashboard['customer'] : [];
+    $fullName = (string)($identity['display_name'] ?? 'مشتری');
+    $profileNeedsCompletion = (bool)($identity['needs_completion'] ?? false);
+    $banners = is_array($dashboard['banners'] ?? null) ? $dashboard['banners'] : [];
+    $inbox = is_array($dashboard['inbox'] ?? null) ? $dashboard['inbox'] : [];
+    $activeCases = is_array($dashboard['active_cases'] ?? null) ? $dashboard['active_cases'] : [];
+    $historyCases = is_array($dashboard['history_cases'] ?? null) ? $dashboard['history_cases'] : [];
+    $vehicles = is_array($dashboard['vehicles'] ?? null) ? $dashboard['vehicles'] : [];
+    $financial = is_array($dashboard['financial'] ?? null) ? $dashboard['financial'] : [];
+    $notifications = is_array($dashboard['notifications'] ?? null) ? $dashboard['notifications'] : [];
+    $historyPage = (int)($dashboard['history_page'] ?? 1);
+    $historyPages = (int)($dashboard['history_pages'] ?? 1);
+    $metrics = is_array($dashboard['metrics'] ?? null) ? $dashboard['metrics'] : [];
 
-    $customerCols = getTableColumns('portal_customers_staging');
-    $profilePhotoPath = trim((string)($customer['profile_photo_path'] ?? ''));
-
-    $isProfileComplete = (
-        !customerFieldMissing($customer['first_name'] ?? '')
-        && !customerFieldMissing($customer['last_name'] ?? '')
-        && !customerFieldMissing($fullName)
-        && preg_match('/^[0-9]{10}$/', trim((string)($customer['national_code'] ?? ''))) === 1
-        && !customerFieldMissing($customer['postal_address'] ?? '')
-        && !customerFieldMissing($customer['job_title'] ?? '')
-        && (
-            !customerFieldMissing($customer['birth_date_jalali'] ?? '')
-            || !customerFieldMissing($customer['birth_date'] ?? '')
-        )
-    );
-
-    $mode = (string)($_GET['mode'] ?? ($isProfileComplete ? 'dashboard' : 'complete'));
-    $showForm = (!$isProfileComplete) || in_array($mode, ['complete', 'edit'], true);
-
-    $sessionOld = is_array($_SESSION['customer_profile_old'] ?? null) ? $_SESSION['customer_profile_old'] : [];
-    $sessionErrors = is_array($_SESSION['customer_profile_errors'] ?? null) ? $_SESSION['customer_profile_errors'] : [];
-    unset($_SESSION['customer_profile_old'], $_SESSION['customer_profile_errors']);
-
-    $pickValue = static function (string $field, string $fallback = '') use ($sessionOld, $customer): string {
-        if (array_key_exists($field, $sessionOld)) {
-            return trim((string)$sessionOld[$field]);
-        }
-        return trim((string)($customer[$field] ?? $fallback));
-    };
-
-    $firstName = $pickValue('first_name');
-    $lastName = $pickValue('last_name');
-    $nationalCode = $pickValue('national_code');
-    $postalAddress = $pickValue('postal_address');
-    $jobTitle = $pickValue('job_title');
-    $birthDateJalali = $pickValue('birth_date_jalali', trim((string)($customer['birth_date'] ?? '')));
-
-    $birthYear = '';
-    $birthMonth = '';
-    $birthDay = '';
-    if (preg_match('/^(\d{4})\/(\d{2})\/(\d{2})$/', $birthDateJalali, $matches)) {
-        $birthYear = $matches[1];
-        $birthMonth = ltrim($matches[2], '0');
-        $birthDay = ltrim($matches[3], '0');
-    }
-
-    $monthNames = [
-        1 => 'فروردین',
-        2 => 'اردیبهشت',
-        3 => 'خرداد',
-        4 => 'تیر',
-        5 => 'مرداد',
-        6 => 'شهریور',
-        7 => 'مهر',
-        8 => 'آبان',
-        9 => 'آذر',
-        10 => 'دی',
-        11 => 'بهمن',
-        12 => 'اسفند',
-    ];
-
-    $currentJalaliYear = (int)date('Y') - 621;
-    if ($currentJalaliYear < 1400) {
-        $currentJalaliYear = 1405;
-    }
-
-    $requestStatusLabel = '';
-    $activeRequestNeedsContract = false;
-    if (is_array($activeRequest)) {
-        $requestStatusCode = strtoupper(trim((string)($activeRequest['request_status'] ?? $activeRequest['status'] ?? '')));
-        $requestStatusLabel = trim((string)($activeRequest['request_status'] ?? $activeRequest['status'] ?? 'در حال بررسی پذیرش'));
-        if ($requestStatusLabel === '') {
-            $requestStatusLabel = 'در حال بررسی پذیرش';
-        }
-        $hasContractFlag = array_key_exists('contract_confirmed', $activeRequest);
-        $activeRequestNeedsContract = in_array($requestStatusCode, ['CONTRACT_PENDING', 'INTAKE_SUBMITTED'], true)
-            || ($hasContractFlag && (int)$activeRequest['contract_confirmed'] !== 1);
-    }
-
-    $showPhotoReminder = $isProfileComplete && $profilePhotoPath === '';
-
-    renderHeader('پروفایل مشتری', 'حساب کاربری مشتری');
-    renderFlashes();
+    mirror_render_head('داشبورد مشتری', 'customer');
     ?>
-    <main class="page-grid">
-      <section class="card">
-        <div class="welcome-banner">به مجموعه مقاره موتورز خوش آمدید</div>
-        <h2>خلاصه پرونده مشتری</h2>
-        <div class="profile-box">
-          <div class="avatar"><?= e(initialLetter($fullName !== '' ? $fullName : $mobile)) ?></div>
-          <div>
-            <strong><?= e($fullName !== '' ? $fullName : 'مشتری جدید') ?></strong>
-            <p class="mobile-field"><?= e($mobile) ?></p>
-            <p class="muted"><?= e(trim((string)($customer['postal_address'] ?? 'آدرس ثبت نشده'))) ?></p>
-            <?php if (in_array('sync_status', $customerCols, true)): ?>
-              <span class="pill">وضعیت همگام‌سازی: <?= e((string)($customer['sync_status'] ?? 'Pending')) ?></span>
-            <?php endif; ?>
-          </div>
-        </div>
-      </section>
+<style>
+.m360-dash { max-width: 960px; margin: 0 auto; padding: 0 0 2rem; }
+.m360-dash-hero { padding: 1rem 0 0.5rem; }
+.m360-dash-hero h2 { margin: 0 0 0.25rem; font-size: 1.35rem; color: #ecfdf5; }
+.m360-dash-hero p { margin: 0; color: #a7f3d0; font-size: 0.92rem; }
+.m360-dash-section { background: #0f1f17; border: 1px solid #1f4d3a; border-radius: 14px; padding: 1rem 1.1rem; margin: 0.85rem 0; }
+.m360-dash-section h3 { margin: 0 0 0.65rem; font-size: 1.05rem; color: #ecfdf5; }
+.m360-dash-sub { margin: -0.35rem 0 0.75rem; color: #86efac; font-size: 0.88rem; }
+.m360-dash-banner { background: #14532d; border: 1px solid #22c55e; border-radius: 12px; padding: 0.85rem 1rem; margin-bottom: 0.65rem; position: relative; }
+.m360-dash-banner h4 { margin: 0 0 0.35rem; color: #ecfdf5; font-size: 0.98rem; }
+.m360-dash-banner p { margin: 0; color: #bbf7d0; font-size: 0.88rem; }
+.m360-dash-banner__close { position: absolute; left: 0.65rem; top: 0.55rem; background: transparent; border: 0; color: #86efac; font-size: 1.1rem; cursor: pointer; min-width: 2rem; min-height: 2rem; }
+.m360-dash-card { background: #13261c; border: 1px solid #234d38; border-radius: 12px; padding: 0.85rem; margin-bottom: 0.65rem; }
+.m360-dash-card:last-child { margin-bottom: 0; }
+.m360-dash-card__title { margin: 0 0 0.35rem; color: #f0fdf4; font-size: 0.96rem; }
+.m360-dash-meta { margin: 0.15rem 0; color: #a7f3d0; font-size: 0.84rem; line-height: 1.55; }
+.m360-dash-chip { display: inline-block; padding: 0.15rem 0.55rem; border-radius: 999px; background: #166534; color: #ecfdf5; font-size: 0.78rem; margin-left: 0.35rem; }
+.m360-dash-empty { color: #86efac; font-size: 0.9rem; margin: 0; }
+.m360-dash-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.65rem; }
+.m360-dash-btn { display: inline-flex; align-items: center; justify-content: center; min-height: 2.75rem; padding: 0.55rem 1rem; border-radius: 10px; text-decoration: none; font-size: 0.92rem; border: 1px solid transparent; }
+.m360-dash-btn--primary { background: #16a34a; color: #fff; }
+.m360-dash-btn--secondary { background: transparent; color: #bbf7d0; border-color: #22c55e; }
+.m360-dash-btn--ghost { background: transparent; color: #fca5a5; border-color: #7f1d1d; }
+.m360-dash-grid { display: grid; gap: 0.65rem; }
+@media (min-width: 640px) { .m360-dash-grid--2 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 900px) { .m360-dash-grid--3 { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.m360-dash-account { display: flex; gap: 0.85rem; align-items: flex-start; }
+.m360-dash-avatar { width: 3rem; height: 3rem; border-radius: 999px; background: #166534; color: #ecfdf5; display: flex; align-items: center; justify-content: center; font-weight: 700; flex-shrink: 0; }
+.m360-dash-pager { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.75rem; }
+.m360-dash-pager a { color: #86efac; text-decoration: none; padding: 0.35rem 0.65rem; border: 1px solid #234d38; border-radius: 8px; font-size: 0.85rem; }
+.m360-dash-legacy { color: #fde68a; font-size: 0.82rem; margin-top: 0.35rem; }
+body.m360-public-shell { overflow-x: hidden; }
+</style>
 
-      <section class="card flow-card">
-        <h2>مسیر پذیرش خودرو</h2>
-        <ol class="flow-steps">
-          <li class="<?= $isProfileComplete ? 'done' : 'active' ?>">تکمیل پروفایل</li>
-          <li class="<?= is_array($activeRequest) ? 'active' : '' ?>">ثبت پذیرش خودرو</li>
-          <li class="<?= (is_array($activeRequest) && !$activeRequestNeedsContract) ? 'active' : '' ?>">تایید قرارداد</li>
-          <li>پیگیری JobCard و تحویل</li>
-        </ol>
-      </section>
+<div class="m360-dash">
+    <header class="m360-dash-hero">
+        <h2>داشبورد مشتری</h2>
+        <p>خلاصه پرونده‌ها، اقدامات موردنیاز و حساب کاربری شما</p>
+    </header>
 
-      <?php if ($isProfileComplete && !$showForm): ?>
-        <section class="card">
-          <h2>داشبورد مشتری</h2>
-          <?php if (is_array($activeRequest)): ?>
-            <div class="request-active-card card compact-card">
-              <h3>درخواست فعال شما</h3>
-              <p class="muted">
-                کد پرونده: <?= e((string)($activeRequest['jobcard_code'] ?? ('REQ-' . (string)$activeRequest['id']))) ?>
-                | وضعیت: <?= e($requestStatusLabel) ?>
-              </p>
-              <div class="action-row">
-                <a class="btn primary" href="customer-request-status.php?request_id=<?= e((string)$activeRequest['id']) ?>">ادامه و پیگیری پرونده</a>
-                <?php if ($activeRequestNeedsContract): ?>
-                  <a class="btn secondary" href="customer-contract.php?request_id=<?= e((string)$activeRequest['id']) ?>">تکمیل قرارداد</a>
-                <?php endif; ?>
-              </div>
+    <?php if ($banners !== []): ?>
+    <section class="m360-dash-section" id="m360_dash_banners" aria-label="اعلان‌ها">
+        <?php foreach ($banners as $banner): ?>
+            <div class="m360-dash-banner" data-banner-id="<?= mirror_h((string)($banner['id'] ?? '')) ?>">
+                <button type="button" class="m360-dash-banner__close" aria-label="بستن">×</button>
+                <h4><?= mirror_h((string)($banner['title'] ?? '')) ?></h4>
+                <p><?= mirror_h((string)($banner['message'] ?? '')) ?></p>
             </div>
-          <?php else: ?>
-            <p class="muted">در حال حاضر پرونده فعالی ندارید. با یک کلیک پذیرش جدید ثبت کنید.</p>
-            <div class="action-row">
-              <a class="btn primary" href="customer-service-request.php">شروع پذیرش خودرو</a>
-            </div>
-          <?php endif; ?>
-
-          <div class="action-row">
-            <a class="btn secondary" href="customer-request-status.php">مشاهده درخواست‌های قبلی</a>
-            <a class="btn ghost" href="customer-profile.php?mode=edit">ویرایش اطلاعات</a>
-            <a class="btn ghost" href="./">بازگشت</a>
-            <a class="btn danger" href="customer-logout.php">خروج از حساب کاربری</a>
-          </div>
-        </section>
-      <?php endif; ?>
-
-      <?php if ($showForm): ?>
-        <section class="card" id="profileForm">
-          <h2><?= $isProfileComplete ? 'ویرایش اطلاعات مشتری' : 'تکمیل ثبت‌نام مشتری' ?></h2>
-          <?php if (!$isProfileComplete): ?>
-            <p class="muted">برای ادامه پذیرش خودرو، تکمیل این فرم الزامی است.</p>
-          <?php endif; ?>
-
-          <?php if ($sessionErrors): ?>
-            <div class="notice bad">
-              <strong>لطفاً موارد زیر را اصلاح کنید:</strong>
-              <ul class="error-list">
-                <?php foreach ($sessionErrors as $field => $message): ?>
-                  <li><?= e((string)$message) ?></li>
-                <?php endforeach; ?>
-              </ul>
-            </div>
-          <?php endif; ?>
-
-          <form method="post" action="save-customer-profile.php" class="form-grid" enctype="multipart/form-data">
-            <?= csrfField() ?>
-            <input type="hidden" name="return_mode" value="<?= e($mode) ?>">
-
-            <label>نام *
-              <input name="first_name" required value="<?= e($firstName) ?>">
-            </label>
-
-            <label>نام خانوادگی *
-              <input name="last_name" required value="<?= e($lastName) ?>">
-            </label>
-
-            <label>کد ملی *
-              <input class="national-code-field input-number" name="national_code" required inputmode="numeric" maxlength="10" value="<?= e($nationalCode) ?>">
-            </label>
-
-            <label>شماره موبایل
-              <input class="mobile-field input-number" name="mobile" value="<?= e($mobile) ?>" readonly>
-            </label>
-
-            <label>تصویر پروفایل (اختیاری)
-              <input type="file" name="profile_photo" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp">
-            </label>
-
-            <?php if ($profilePhotoPath !== ''): ?>
-              <label>تصویر فعلی
-                <input value="<?= e($profilePhotoPath) ?>" readonly>
-              </label>
-            <?php endif; ?>
-
-            <label>شغل *
-              <input name="job_title" required value="<?= e($jobTitle) ?>">
-            </label>
-
-            <label>سال تولد *
-              <select name="birth_year" required>
-                <option value="">انتخاب سال</option>
-                <?php for ($year = $currentJalaliYear; $year >= 1300; $year--): ?>
-                  <option value="<?= e((string)$year) ?>" <?= ((string)$year === $birthYear) ? 'selected' : '' ?>><?= e((string)$year) ?></option>
-                <?php endfor; ?>
-              </select>
-            </label>
-
-            <label>ماه تولد *
-              <select name="birth_month" required>
-                <option value="">انتخاب ماه</option>
-                <?php foreach ($monthNames as $monthIndex => $monthLabel): ?>
-                  <option value="<?= e((string)$monthIndex) ?>" <?= ((string)$monthIndex === $birthMonth) ? 'selected' : '' ?>><?= e($monthLabel) ?></option>
-                <?php endforeach; ?>
-              </select>
-            </label>
-
-            <label>روز تولد *
-              <select name="birth_day" required>
-                <option value="">انتخاب روز</option>
-                <?php for ($day = 1; $day <= 31; $day++): ?>
-                  <option value="<?= e((string)$day) ?>" <?= ((string)$day === $birthDay) ? 'selected' : '' ?>><?= e((string)$day) ?></option>
-                <?php endfor; ?>
-              </select>
-            </label>
-
-            <label class="wide">آدرس پستی *
-              <textarea name="postal_address" required><?= e($postalAddress) ?></textarea>
-            </label>
-
-            <div class="action-row wide">
-              <button class="btn primary" type="submit"><?= $isProfileComplete ? 'ذخیره تغییرات' : 'ثبت نام و ورود به پروفایل' ?></button>
-              <?php if ($isProfileComplete): ?>
-                <a class="btn ghost" href="customer-profile.php?mode=dashboard">بازگشت به داشبورد</a>
-              <?php else: ?>
-                <a class="btn ghost" href="./">بازگشت</a>
-              <?php endif; ?>
-              <a class="btn danger" href="customer-logout.php">خروج از حساب کاربری</a>
-            </div>
-          </form>
-        </section>
-      <?php endif; ?>
-    </main>
-
-    <?php if ($showPhotoReminder): ?>
-      <section class="modal-overlay" id="photoReminderModal" aria-hidden="true">
-        <div class="modal-card">
-          <h3>یادآوری تصویر پروفایل</h3>
-          <p>برای شناخت بهتر شما در زمان پذیرش، لطفاً تصویر پروفایل خود را بارگذاری کنید.</p>
-          <div class="action-row">
-            <a class="btn primary" href="customer-profile.php?mode=edit#profileForm" data-photo-reminder-upload>بارگذاری تصویر</a>
-            <button type="button" class="btn ghost" data-photo-reminder-dismiss>فعلاً بعداً</button>
-          </div>
-        </div>
-      </section>
-      <script>
-        window.MOGHARE360_PHOTO_REMINDER = true;
-      </script>
+        <?php endforeach; ?>
+    </section>
     <?php endif; ?>
-    <?php
-    renderFooter();
+
+    <section class="m360-dash-section" aria-labelledby="m360_inbox_title">
+        <h3 id="m360_inbox_title">اقدامات موردنیاز من</h3>
+        <?php if ($inbox === []): ?>
+            <p class="m360-dash-empty">در حال حاضر اقدامی از سوی شما موردنیاز نیست.</p>
+        <?php else: ?>
+            <p class="m360-dash-meta"><span class="m360-dash-chip"><?= mirror_h((string)count($inbox)) ?> مورد فعال</span></p>
+            <?php foreach ($inbox as $task): ?>
+                <article class="m360-dash-card">
+                    <h4 class="m360-dash-card__title"><?= mirror_h((string)($task['title'] ?? '')) ?></h4>
+                    <p class="m360-dash-meta"><?= mirror_h((string)($task['message'] ?? '')) ?></p>
+                    <?php if (trim((string)($task['context'] ?? '')) !== ''): ?>
+                        <p class="m360-dash-meta">پرونده: <?= mirror_h((string)$task['context']) ?></p>
+                    <?php endif; ?>
+                    <p class="m360-dash-meta">وضعیت: <span class="m360-dash-chip"><?= mirror_h((string)($task['status_label'] ?? '')) ?></span></p>
+                    <?php if (trim((string)($task['action_url'] ?? '')) !== ''): ?>
+                        <div class="m360-dash-actions">
+                            <a class="m360-dash-btn m360-dash-btn--primary" href="<?= mirror_h((string)$task['action_url']) ?>">
+                                <?= mirror_h((string)($task['action_label'] ?? 'اقدام')) ?>
+                            </a>
+                        </div>
+                    <?php endif; ?>
+                </article>
+            <?php endforeach; ?>
+        <?php endif; ?>
+    </section>
+
+    <section class="m360-dash-section" aria-labelledby="m360_active_cases_title">
+        <h3 id="m360_active_cases_title">پرونده‌های در جریان</h3>
+        <?php if ($activeCases === []): ?>
+            <p class="m360-dash-empty">پرونده فعالی برای نمایش وجود ندارد.</p>
+        <?php else: ?>
+            <div class="m360-dash-grid m360-dash-grid--2">
+                <?php foreach ($activeCases as $case): ?>
+                    <article class="m360-dash-card">
+                        <h4 class="m360-dash-card__title">پرونده <?= mirror_h((string)($case['reference'] ?? '')) ?></h4>
+                        <p class="m360-dash-meta"><?= mirror_h((string)($case['vehicle_display'] ?? '')) ?><?php if (trim((string)($case['vehicle_plate'] ?? '')) !== ''): ?> — <?= mirror_h((string)$case['vehicle_plate']) ?><?php endif; ?></p>
+                        <p class="m360-dash-meta">نوع خدمت: <?= mirror_h((string)($case['service_type'] ?? '')) ?></p>
+                        <p class="m360-dash-meta">مرحله: <span class="m360-dash-chip"><?= mirror_h((string)($case['stage_label'] ?? '')) ?></span></p>
+                        <p class="m360-dash-meta">مسئول بعدی: <?= mirror_h((string)($case['next_actor'] ?? '')) ?></p>
+                        <p class="m360-dash-meta">اقدام پیشنهادی: <?= mirror_h((string)($case['next_action'] ?? '')) ?></p>
+                        <p class="m360-dash-meta">آخرین به‌روزرسانی: <?= mirror_h((string)($case['last_update'] ?? '—')) ?></p>
+                        <?php if (trim((string)($case['contract_legacy_label'] ?? '')) !== ''): ?>
+                            <p class="m360-dash-legacy"><?= mirror_h((string)$case['contract_legacy_label']) ?></p>
+                        <?php endif; ?>
+                        <?php
+                        $caseReqId = (int)($case['online_request_id'] ?? 0);
+                        $caseContract = ($caseReqId > 0 && is_resource($conn))
+                            ? m360_intake_contract_find_active_for_online_request($conn, $caseReqId)
+                            : null;
+                        if (is_array($caseContract) && (int)($caseContract['contract_id'] ?? 0) > 0) {
+                            $pdfLabel = m360_contract_pdf_download_label($caseContract);
+                            $pdfHref = m360_contract_pdf_download_url((int)$caseContract['contract_id'], 'customer');
+                            echo '<div class="m360-dash-actions"><a class="m360-dash-btn m360-dash-btn--secondary" href="'
+                                . mirror_h($pdfHref) . '">' . mirror_h($pdfLabel) . '</a></div>';
+                        }
+                        ?>
+                        <?php if (trim((string)($case['action_url'] ?? '')) !== ''): ?>
+                            <div class="m360-dash-actions">
+                                <a class="m360-dash-btn m360-dash-btn--secondary" href="<?= mirror_h((string)$case['action_url']) ?>">
+                                    <?= mirror_h((string)($case['action_label'] ?? 'اقدام')) ?>
+                                </a>
+                            </div>
+                        <?php endif; ?>
+                    </article>
+                <?php endforeach; ?>
+            </div>
+        <?php endif; ?>
+    </section>
+
+    <section class="m360-dash-section" aria-labelledby="m360_new_request_title">
+        <h3 id="m360_new_request_title">ثبت درخواست خدمت</h3>
+        <p class="m360-dash-sub">رزرو پذیرش، کارشناسی، سرویس یا تعمیر خودرو</p>
+        <div class="m360-dash-actions">
+            <a class="m360-dash-btn m360-dash-btn--primary" href="customer-request.php?mode=new">ثبت درخواست جدید</a>
+        </div>
+    </section>
+
+    <section class="m360-dash-section" aria-labelledby="m360_vehicles_title">
+        <h3 id="m360_vehicles_title">خودروهای من</h3>
+        <?php if ($vehicles === []): ?>
+            <p class="m360-dash-empty">خودروی ثبت‌شده‌ای یافت نشد.</p>
+        <?php else: ?>
+            <div class="m360-dash-grid m360-dash-grid--2">
+                <?php foreach ($vehicles as $vehicle): ?>
+                    <article class="m360-dash-card">
+                        <h4 class="m360-dash-card__title"><?= mirror_h((string)($vehicle['label'] ?? 'خودرو')) ?></h4>
+                        <?php if (trim((string)($vehicle['plate'] ?? '')) !== ''): ?>
+                            <p class="m360-dash-meta">پلاک: <?= mirror_h((string)$vehicle['plate']) ?></p>
+                        <?php endif; ?>
+                        <p class="m360-dash-meta">پرونده فعال: <?= mirror_h((string)($vehicle['active_case_count'] ?? 0)) ?></p>
+                        <p class="m360-dash-meta">وضعیت: <?= mirror_h((string)($vehicle['status_label'] ?? '')) ?></p>
+                    </article>
+                <?php endforeach; ?>
+            </div>
+        <?php endif; ?>
+    </section>
+
+    <section class="m360-dash-section" aria-labelledby="m360_history_title">
+        <h3 id="m360_history_title">سوابق خدمات</h3>
+        <?php if ($historyCases === []): ?>
+            <p class="m360-dash-empty">سابقه خدمات پایان‌یافته‌ای ثبت نشده است.</p>
+        <?php else: ?>
+            <?php foreach ($historyCases as $case): ?>
+                <article class="m360-dash-card">
+                    <h4 class="m360-dash-card__title">پرونده <?= mirror_h((string)($case['reference'] ?? '')) ?></h4>
+                    <p class="m360-dash-meta"><?= mirror_h((string)($case['vehicle_display'] ?? '')) ?> — <?= mirror_h((string)($case['service_type'] ?? '')) ?></p>
+                    <p class="m360-dash-meta">وضعیت نهایی: <span class="m360-dash-chip"><?= mirror_h((string)($case['status_label'] ?? '—')) ?></span></p>
+                    <p class="m360-dash-meta">تاریخ: <?= mirror_h((string)($case['last_update'] ?? '—')) ?></p>
+                    <?php if (trim((string)($case['contract_legacy_label'] ?? '')) !== ''): ?>
+                        <p class="m360-dash-legacy"><?= mirror_h((string)$case['contract_legacy_label']) ?></p>
+                    <?php endif; ?>
+                </article>
+            <?php endforeach; ?>
+            <?php if ($historyPages > 1): ?>
+                <nav class="m360-dash-pager" aria-label="صفحه‌بندی سوابق">
+                    <?php for ($p = 1; $p <= $historyPages; $p++): ?>
+                        <?php
+                        $qs = http_build_query(array_filter([
+                            'history_page' => $p > 1 ? (string)$p : null,
+                            'contract_signed' => (string)($_GET['contract_signed'] ?? '') === '1' ? '1' : null,
+                            'request_created' => (string)($_GET['request_created'] ?? '') === '1' ? '1' : null,
+                        ]));
+                        ?>
+                        <a href="customer-profile.php<?= $qs !== '' ? '?' . mirror_h($qs) : '' ?>"><?= mirror_h((string)$p) ?></a>
+                    <?php endfor; ?>
+                </nav>
+            <?php endif; ?>
+        <?php endif; ?>
+    </section>
+
+    <section class="m360-dash-section" aria-labelledby="m360_financial_title">
+        <h3 id="m360_financial_title">صورتحساب‌ها و پرداخت‌ها</h3>
+        <p class="m360-dash-empty"><?= mirror_h((string)($financial['message'] ?? 'صورتحساب باز یا پرداخت معوقی برای شما ثبت نشده است.')) ?></p>
+    </section>
+
+    <section class="m360-dash-section" aria-labelledby="m360_notifications_title">
+        <h3 id="m360_notifications_title">پیام‌ها و اعلان‌ها</h3>
+        <p class="m360-dash-empty"><?= mirror_h((string)($notifications['message'] ?? 'پیام یا اعلان جدیدی ثبت نشده است.')) ?></p>
+    </section>
+
+    <section class="m360-dash-section" aria-labelledby="m360_account_title">
+        <h3 id="m360_account_title">حساب و اطلاعات من</h3>
+        <div class="m360-dash-account">
+            <div class="m360-dash-avatar" aria-hidden="true"><?= mirror_h(m360_rw_customer_profile_initial_letter($fullName !== '' ? $fullName : $mobile)) ?></div>
+            <div>
+                <h4 class="m360-dash-card__title"><?= mirror_h($fullName) ?></h4>
+                <p class="m360-dash-meta mobile-field"><?= mirror_h($mobile) ?></p>
+                <?php if ($profileNeedsCompletion): ?>
+                    <p class="m360-dash-meta">برای استفاده کامل از خدمات، اطلاعات حساب خود را تکمیل کنید.</p>
+                <?php else: ?>
+                    <p class="m360-dash-meta">پروفایل شما تکمیل است.</p>
+                <?php endif; ?>
+                <?php
+                $cityDisplay = (string)($identity['city'] ?? $customer['city'] ?? '');
+                $addressDisplay = (string)($identity['address'] ?? $customer['address'] ?? '');
+                ?>
+                <?php if ($addressDisplay !== ''): ?>
+                    <p class="m360-dash-meta"><?= mirror_h($addressDisplay) ?></p>
+                <?php endif; ?>
+                <?php if ($cityDisplay !== ''): ?>
+                    <p class="m360-dash-meta"><?= mirror_h($cityDisplay) ?></p>
+                <?php endif; ?>
+            </div>
+        </div>
+        <div class="m360-dash-actions">
+            <a class="m360-dash-btn m360-dash-btn--secondary" href="customer-request.php?mode=new">تکمیل یا ویرایش اطلاعات حساب</a>
+            <a class="m360-dash-btn m360-dash-btn--ghost" href="customer-profile.php?logout=1">خروج از حساب</a>
+        </div>
+    </section>
+</div>
+
+<script>
+(function () {
+    document.querySelectorAll('.m360-dash-banner__close').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var banner = btn.closest('.m360-dash-banner');
+            if (banner) banner.remove();
+        });
+    });
+})();
+</script>
+<?php
+    mirror_render_foot();
 } catch (Throwable $e) {
-    showErrorPage('خطا در نمایش پروفایل مشتری.', $e->getMessage());
+    m360_rw_customer_profile_render_error_page('خطا در نمایش داشبورد مشتری.');
 }

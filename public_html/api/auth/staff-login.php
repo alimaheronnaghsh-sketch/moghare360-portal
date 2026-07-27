@@ -57,6 +57,8 @@ try {
     mogh_saas_require_file('erp-csrf.php');
     $csrf = erp_csrf_create_token('staff_login');
 
+    $redirectUrl = !empty($row['is_system_owner']) ? 'erp-product-home.php' : 'erp-staff-home.php';
+
     mogh_api_log_request($conn, $tenant['company_id'], $endpoint, 'POST', 200, 'staff_login_ok');
     mogh_api_ok('ورود پرسنل موفق بود.', [
         'user_id' => (int)$row['user_id'],
@@ -65,7 +67,7 @@ try {
         'company_id' => $tenant['company_id'],
         'session_token' => session_id(),
         'csrf_token' => $csrf,
-        'redirect_url' => 'erp-staff-home.php',
+        'redirect_url' => $redirectUrl,
     ]);
 } catch (Throwable) {
     mogh_api_fail('ورود ناموفق بود.', 500);

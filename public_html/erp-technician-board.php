@@ -7,6 +7,12 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/includes/erp-operation-engine-helper.php';
 
+erp_auth_context_start();
+if (erp_auth_context_session_user_id() === null) {
+    header('Location: staff-login.php');
+    exit;
+}
+
 $filterStatus = strtoupper(operation_engine_get_string('status'));
 $connection = false;
 $errorMessage = '';

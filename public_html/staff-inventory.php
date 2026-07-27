@@ -1,24 +1,37 @@
 <?php
 declare(strict_types=1);
 require_once __DIR__ . '/inventory-helpers.php';
-ensureSessionStarted();
 
 try {
-    $staff = requireStaffLogin();
-    if (!meetingCanAccessStaffModule($staff, 'inventory')) {
-        showErrorPage('دسترسی شما به کارتابل انبار فعال نیست.');
-    }
+    $staff = inv_require_inventory_access('view');
     renderHeader('کارتابل انبار', 'MOGHARE360 StockCenter');
     renderFlashes();
     inventoryHeaderActions('dashboard');
 
     $total = inventoryCount();
-    $value = 0;
-    $low = 0;
-    try {
-        $value = (float)getPdo()->query('SELECT COALESCE(SUM(COALESCE(quantity, initial_stock, 0) * COALESCE(purchase_price_rial, purchase_price, 0)), 0) FROM inventory_items_staging')->fetchColumn();
-        $low = (int)getPdo()->query('SELECT COUNT(*) FROM inventory_items_staging WHERE COALESCE(quantity, initial_stock, 0) <= COALESCE(minimum_stock, 0) AND COALESCE(minimum_stock, 0) > 0')->fetchColumn();
-    } catch (Throwable $ignored) {}
+    $stockSql = "SELECT ISNULL(SUM(CASE
+                    WHEN m.movement_type IN (N'OUTBOUND', N'JOB_CARD_CONSUMPTION') THEN -ABS(m.movement_qty)
+                    WHEN m.movement_type = N'COUNT_ADJUSTMENT' THEN m.movement_qty
+                    ELSE ABS(m.movement_qty)
+                END), 0)
+                FROM dbo.erp_inventory_stock_movements m
+                WHERE m.movement_status = N'RECORDED'";
+    $stockQty = (float)(inv_scalar($stockSql) ?? 0);
+    $low = (int)(inv_scalar(
+        "SELECT COUNT(*) FROM (
+            SELECT i.inventory_item_id, i.min_stock_qty,
+                ISNULL(SUM(CASE
+                    WHEN m.movement_type IN (N'OUTBOUND', N'JOB_CARD_CONSUMPTION') THEN -ABS(m.movement_qty)
+                    WHEN m.movement_type = N'COUNT_ADJUSTMENT' THEN m.movement_qty
+                    ELSE ABS(m.movement_qty)
+                END), 0) AS current_qty
+            FROM dbo.erp_inventory_items i
+            LEFT JOIN dbo.erp_inventory_stock_movements m
+              ON m.inventory_item_id = i.inventory_item_id AND m.movement_status = N'RECORDED'
+            WHERE i.is_active = 1
+            GROUP BY i.inventory_item_id, i.min_stock_qty
+        ) s WHERE s.min_stock_qty > 0 AND s.current_qty <= s.min_stock_qty"
+    ) ?? 0);
 ?>
 <main class="auth-wrap wide-auth inventory-page">
   <section class="card inventory-headline stockcenter-hero">
@@ -33,7 +46,7 @@ try {
   <section class="inventory-kpis">
     <div class="kpi-card"><span>کل کالاهای ثبت‌شده</span><strong class="numeric-badge"><?= e((string)$total) ?></strong></div>
     <div class="kpi-card"><span>کالاهای کم‌موجودی</span><strong class="numeric-badge"><?= e((string)$low) ?></strong></div>
-    <div class="kpi-card"><span>ارزش ریالی تقریبی</span><strong class="numeric-badge"><?= e(inventoryMoney((string)$value)) ?></strong></div>
+    <div class="kpi-card"><span>موجودی خالص ثبت‌شده</span><strong class="numeric-badge"><?= e((string)$stockQty) ?></strong></div>
   </section>
 
   <section class="module-grid inventory-action-grid">

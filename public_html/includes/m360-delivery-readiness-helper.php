@@ -54,20 +54,40 @@ function m360_delivery_readiness_mark($conn, int $jobcardId, int $qcCheckId, int
     }
 
     if (customer_core_table_exists($conn, M360_DEL_READINESS_TABLE)) {
-        customer_core_execute(
+        $existing = (int)(customer_core_scalar(
             $conn,
-            'INSERT INTO dbo.' . M360_DEL_READINESS_TABLE . ' (jobcard_id, qc_check_id, readiness_status, readiness_note, ready_at, created_by_user_id) VALUES (?, ?, ?, ?, SYSUTCDATETIME(), ?)',
-            [$jobcardId, $qcCheckId > 0 ? $qcCheckId : null, M360_DEL_READY_STATUS, $note, $userId]
-        );
+            'SELECT COUNT(*) FROM dbo.' . M360_DEL_READINESS_TABLE . ' WHERE jobcard_id = ? AND readiness_status = ?',
+            [$jobcardId, M360_DEL_READY_STATUS]
+        ) ?? 0);
+        if ($existing === 0) {
+            $inserted = customer_core_execute(
+                $conn,
+                'INSERT INTO dbo.' . M360_DEL_READINESS_TABLE . ' (jobcard_id, qc_check_id, readiness_status, readiness_note, ready_at, created_by_user_id) VALUES (?, ?, ?, ?, SYSUTCDATETIME(), ?)',
+                [$jobcardId, $qcCheckId > 0 ? $qcCheckId : null, M360_DEL_READY_STATUS, $note, $userId]
+            );
+            if ($inserted === false) {
+                return ['ok' => false, 'message' => 'ثبت آمادگی تحویل انجام نشد.'];
+            }
+        }
     }
 
     if (customer_core_table_exists($conn, M360_DEL_CONTROLS_TABLE)) {
-        customer_core_execute(
+        $existingControl = (int)(customer_core_scalar(
             $conn,
-            "INSERT INTO dbo." . M360_DEL_CONTROLS_TABLE . " (jobcard_id, qc_check_id, delivery_status, delivery_allowed, released_at, created_at, is_active)
-             VALUES (?, ?, N'READY', 1, NULL, SYSUTCDATETIME(), 1)",
-            [$jobcardId, $qcCheckId > 0 ? $qcCheckId : null]
-        );
+            'SELECT COUNT(*) FROM dbo.' . M360_DEL_CONTROLS_TABLE . ' WHERE jobcard_id = ? AND is_active = 1',
+            [$jobcardId]
+        ) ?? 0);
+        if ($existingControl === 0) {
+            $controlInserted = customer_core_execute(
+                $conn,
+                "INSERT INTO dbo." . M360_DEL_CONTROLS_TABLE . " (jobcard_id, qc_check_id, delivery_status, delivery_allowed, released_at, created_at, is_active)
+                 VALUES (?, ?, N'READY', 1, NULL, SYSUTCDATETIME(), 1)",
+                [$jobcardId, $qcCheckId > 0 ? $qcCheckId : null]
+            );
+            if ($controlInserted === false) {
+                return ['ok' => false, 'message' => 'ثبت کنترل تحویل انجام نشد.'];
+            }
+        }
     }
 
     return ['ok' => true, 'message' => 'آمادگی تحویل ثبت شد.'];

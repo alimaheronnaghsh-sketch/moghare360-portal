@@ -45,6 +45,30 @@ if (!function_exists('erp_csrf_create_token')) {
     }
 }
 
+if (!function_exists('erp_csrf_get_or_create_token')) {
+    function erp_csrf_get_or_create_token(string $form_key): string
+    {
+        erp_csrf_start_session_if_needed();
+
+        $form_key = trim($form_key);
+
+        if ($form_key === '') {
+            throw new RuntimeException('CSRF form key is required.');
+        }
+
+        if (!isset($_SESSION['erp_csrf_tokens']) || !is_array($_SESSION['erp_csrf_tokens'])) {
+            $_SESSION['erp_csrf_tokens'] = [];
+        }
+
+        $existing = $_SESSION['erp_csrf_tokens'][$form_key] ?? '';
+        if (is_string($existing) && $existing !== '') {
+            return $existing;
+        }
+
+        return erp_csrf_create_token($form_key);
+    }
+}
+
 if (!function_exists('erp_csrf_validate_token')) {
     function erp_csrf_validate_token(string $form_key, string $token): bool
     {

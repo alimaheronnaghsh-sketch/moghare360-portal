@@ -1,10 +1,6 @@
 <?php
 declare(strict_types=1);
 
-/**
- * MOGHARE360 P3 — Technical operation board (read-only GET).
- */
-
 header('Content-Type: text/html; charset=UTF-8');
 header('X-Robots-Tag: noindex, nofollow');
 
@@ -28,7 +24,6 @@ if ($dbOk) {
         150
     );
 }
-
 ?>
 <!DOCTYPE html>
 <html lang="fa" dir="rtl">
@@ -39,31 +34,28 @@ if ($dbOk) {
     <title>برد عملیات فنی</title>
     <link rel="stylesheet" href="assets/moghare360-ui/moghare360-soft-run-release.css">
     <link rel="stylesheet" href="<?= m360_operational_shell_h(m360_operational_shell_css_href()) ?>">
+    <link rel="stylesheet" href="assets/css/mirror.css">
+    <link rel="stylesheet" href="assets/css/moghare360-v1-luxury-ui.css">
     <style>
         .p3-tech-wrap { max-width: 1260px; margin: 0 auto; }
         .p3-tech-filters { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 0.65rem; }
-        .p3-tech-filters a { padding: 0.38rem 0.75rem; border-radius: 999px; border: 1px solid #d4d4d8; text-decoration: none; color: #27272a; font-size: 0.84rem; background: #fff; }
-        .p3-tech-filters a.active { background: #1e3a8a; color: #fff; border-color: #1e3a8a; }
-        .p3-tech-filters .label { width: 100%; font-size: 0.78rem; color: #71717a; margin-top: 0.4rem; }
+        .p3-tech-filters .label { width: 100%; font-size: 0.78rem; margin-top: 0.4rem; }
         .p3-tech-table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
-        .p3-tech-table th, .p3-tech-table td { padding: 0.55rem 0.4rem; border-bottom: 1px solid #e5e7eb; text-align: right; vertical-align: top; }
-        .p3-tech-table th { background: #f8fafc; font-weight: 600; color: #475569; }
-        .p3-tech-badge { display: inline-block; padding: 0.16rem 0.48rem; border-radius: 999px; font-size: 0.74rem; background: #f1f5f9; }
-        .p3-tech-btn { display: inline-block; padding: 0.3rem 0.65rem; border-radius: 0.4rem; background: #1e3a8a; color: #fff; text-decoration: none; font-size: 0.8rem; }
-        .p3-tech-alert { padding: 0.8rem; border-radius: 0.45rem; margin-bottom: 1rem; background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
-        .p3-tech-empty { padding: 2rem; text-align: center; color: #71717a; }
+        .p3-tech-badge { display: inline-block; padding: 0.16rem 0.48rem; border-radius: 999px; background: rgba(34,197,94,.12); }
+        .p3-tech-alert { padding: 0.8rem; border-radius: 0.45rem; margin-bottom: 1rem; }
+        .p3-tech-empty { padding: 2rem; text-align: center; }
     </style>
 </head>
-<body style="background:#f8fafc;margin:0;padding:1.25rem;color:#0f172a;">
+<body class="m360-lux-page">
 <div class="w1c-wrap p3-tech-wrap">
     <?php m360_operational_shell_render_board('technical_board'); ?>
     <header class="w1c-banner">
         <h1>برد عملیات فنی</h1>
-        <p>پرونده‌های آماده فنی — عیب‌یابی و اجرای سرویس</p>
+        <p>پرونده‌های آماده فنی، عیب‌یابی، تخصیص تکنسین و کنترل گیت قرارداد.</p>
     </header>
 
     <?php if ($p15Missing): ?>
-        <div class="p3-tech-alert">P1.5 Gate missing — کنترل قرارداد فعال نیست.</div>
+        <div class="p3-tech-alert m360-lux-warn">گیت قرارداد فعال نیست؛ کنترل قرارداد باید قبل از شروع کار روشن باشد.</div>
     <?php endif; ?>
 
     <?php if (!$dbOk): ?>
@@ -101,19 +93,8 @@ if ($dbOk) {
                     <table class="p3-tech-table">
                         <thead>
                         <tr>
-                            <th>شناسه</th>
-                            <th>تاریخ</th>
-                            <th>مشتری</th>
-                            <th>موبایل</th>
-                            <th>خودرو</th>
-                            <th>پلاک</th>
-                            <th>پذیرش</th>
-                            <th>فنی</th>
-                            <th>قرارداد</th>
-                            <th>تکنسین</th>
-                            <th>آماده فنی</th>
-                            <th>آخرین رویداد</th>
-                            <th></th>
+                            <th>شناسه</th><th>تاریخ</th><th>مشتری</th><th>موبایل</th><th>خودرو</th><th>پلاک</th>
+                            <th>پذیرش</th><th>فنی</th><th>قرارداد</th><th>تکنسین</th><th>آماده فنی</th><th>آخرین رویداد</th><th>اقدام</th>
                         </tr>
                         </thead>
                         <tbody>
@@ -133,7 +114,7 @@ if ($dbOk) {
                                 <td><?= m360_technical_h((string)($jc['assigned_technician_user_id'] ?? '-') ?: '-') ?></td>
                                 <td><?= m360_technical_h(substr((string)($jc['ready_for_technical_at'] ?? ''), 0, 16) ?: '-') ?></td>
                                 <td><?= m360_technical_h((string)($jc['last_technical_action'] ?? '-')) ?></td>
-                                <td><a class="p3-tech-btn" href="erp-technical-jobcard-detail.php?jobcard_id=<?= (int)$jc['jobcard_id'] ?>">جزئیات</a></td>
+                                <td><a class="p3-tech-btn m360-lux-link" href="erp-technical-jobcard-detail.php?jobcard_id=<?= (int)$jc['jobcard_id'] ?>">جزئیات</a></td>
                             </tr>
                         <?php endforeach; ?>
                         </tbody>
