@@ -786,15 +786,7 @@ function m360_rw_intake_resolve_vehicle_field_display(
         : [];
 
     $candidates = [];
-    foreach ($keys as $key) {
-        $candidates[] = ['value' => trim((string)($draft[$key] ?? '')), 'source_key' => 'reception_intake'];
-    }
-    foreach ($keys as $key) {
-        $candidates[] = ['value' => trim((string)($payload[$key] ?? '')), 'source_key' => 'payload'];
-    }
-    foreach ($keys as $key) {
-        $candidates[] = ['value' => trim((string)($requestRow[$key] ?? '')), 'source_key' => 'online_request'];
-    }
+    // Canonical priority: erp_vehicles → request row → payload → reception draft.
     if (is_array($erpVehicle)) {
         $erpKeyMap = [
             'plate' => ['plate_number', 'plate', 'vehicle_plate'],
@@ -807,9 +799,14 @@ function m360_rw_intake_resolve_vehicle_field_display(
             'vehicle_brand' => ['brand', 'vehicle_brand'],
             'model' => ['model', 'vehicle_model'],
             'vehicle_model' => ['model', 'vehicle_model'],
+            'car_model' => ['model', 'vehicle_model'],
             'vehicle_class' => ['model', 'vehicle_model', 'vehicle_class'],
+            'class_name' => ['model', 'vehicle_model'],
+            'class_code' => ['model', 'vehicle_model'],
+            'model_class' => ['model', 'vehicle_model'],
             'mileage' => ['mileage', 'odometer_km', 'odometer'],
             'odometer_km' => ['mileage', 'odometer_km', 'odometer'],
+            'odometer' => ['mileage', 'odometer_km', 'odometer'],
             'production_year' => ['model_year', 'production_year', 'year'],
             'year' => ['model_year', 'production_year', 'year'],
             'color' => ['color'],
@@ -818,6 +815,7 @@ function m360_rw_intake_resolve_vehicle_field_display(
             'transmission_type' => ['transmission_type', 'transmission'],
             'engine_number' => ['engine_number', 'engine_no'],
             'chassis_number' => ['chassis_number', 'chassis_no'],
+            'chassis' => ['chassis_number', 'chassis_no'],
         ];
         foreach ($keys as $key) {
             $erpKeys = $erpKeyMap[$key] ?? [$key];
@@ -829,6 +827,15 @@ function m360_rw_intake_resolve_vehicle_field_display(
             }
         }
     }
+    foreach ($keys as $key) {
+        $candidates[] = ['value' => trim((string)($requestRow[$key] ?? '')), 'source_key' => 'online_request'];
+    }
+    foreach ($keys as $key) {
+        $candidates[] = ['value' => trim((string)($payload[$key] ?? '')), 'source_key' => 'payload'];
+    }
+    foreach ($keys as $key) {
+        $candidates[] = ['value' => trim((string)($draft[$key] ?? '')), 'source_key' => 'reception_intake'];
+    }
 
     $picked = m360_rw_pick_clean_display_text($candidates, $fieldLabelFa, $guardMojibake);
     $result = m360_rw_field_result($picked['value'], $picked['source_key'], $missingFa);
@@ -836,6 +843,13 @@ function m360_rw_intake_resolve_vehicle_field_display(
     $result['mojibake'] = !empty($picked['mojibake']);
     if ($result['value'] === '' && $result['warning'] !== '') {
         $result['missing_label'] = $result['warning'];
+    }
+    // Soften type/class missing label when master vehicle brand/model already exists.
+    if ($result['value'] === '' && is_array($erpVehicle)) {
+        $hasMaster = trim((string)($erpVehicle['brand'] ?? '')) !== '' || trim((string)($erpVehicle['model'] ?? '')) !== '';
+        if ($hasMaster && ($fieldLabelFa === 'نوع خودرو' || $fieldLabelFa === 'کلاس خودرو')) {
+            $result['missing_label'] = 'ثبت نشده';
+        }
     }
 
     return $result;
@@ -3505,6 +3519,32 @@ function m360_rw_intake_apply_action(array $payload, string $actionType, array $
             if (!$saved['ok']) {
                 return ['ok' => false, 'error' => $saved['error'], 'payload' => $payload, 'column_updates' => []];
             }
+            $vaultBlobId = 0;
+            $vaultSha = '';
+            $connPhoto = customer_core_db();
+            if ($connPhoto !== false && m360_vault_table_exists($connPhoto)) {
+                $absPhoto = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'storage' . DIRECTORY_SEPARATOR
+                    . str_replace('/', DIRECTORY_SEPARATOR, $saved['relative_path']);
+                $photoBytes = is_file($absPhoto) ? (string)@file_get_contents($absPhoto) : '';
+                if ($photoBytes !== '') {
+                    $custId = (int)($post['_rw_request_customer_id'] ?? $payload['customer_id'] ?? 0);
+                    $vehId = (int)($post['_rw_request_vehicle_id'] ?? $payload['vehicle_id'] ?? 0);
+                    $vaultPhoto = m360_vault_store_intake_photo(
+                        $connPhoto,
+                        $reqId,
+                        $slot,
+                        $photoBytes,
+                        $saved['relative_path'],
+                        $custId > 0 ? $custId : null,
+                        $vehId > 0 ? $vehId : null,
+                        (int)(erp_auth_current_user_id() ?? ERP_PHASE1_PLATFORM_OWNER_ID)
+                    );
+                    if ($vaultPhoto['ok']) {
+                        $vaultBlobId = (int)$vaultPhoto['blob_id'];
+                        $vaultSha = (string)$vaultPhoto['sha256'];
+                    }
+                }
+            }
             $payload = m360_rw_intake_ensure_nested($payload);
             $userId = erp_auth_current_user_id() ?? ERP_PHASE1_PLATFORM_OWNER_ID;
             $canonical = m360_rw_intake_photos_canonical($payload);
@@ -3515,6 +3555,8 @@ function m360_rw_intake_apply_action(array $payload, string $actionType, array $
                 'captured_at' => $now,
                 'captured_by' => (string)$userId,
                 'data_key' => $saved['relative_path'],
+                'vault_blob_id' => $vaultBlobId > 0 ? (string)$vaultBlobId : '',
+                'sha256_hash' => $vaultSha,
             ];
             $canonical = m360_rw_intake_photos_recalculate($canonical);
             $payload = m360_rw_intake_photos_sync_to_payload($payload, $canonical);
@@ -3865,6 +3907,36 @@ function m360_rw_intake_process_save_inner($conn, int $requestId, string $action
         if (!$saved['ok']) {
             return ['ok' => false, 'message' => $saved['error'], 'history_written' => false];
         }
+        $vaultBlobId = 0;
+        $vaultSha = '';
+        if (m360_vault_table_exists($conn)) {
+            $absDoc = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'storage' . DIRECTORY_SEPARATOR
+                . str_replace('/', DIRECTORY_SEPARATOR, (string)$saved['relative_path']);
+            $docBytes = is_file($absDoc) ? (string)@file_get_contents($absDoc) : '';
+            if ($docBytes !== '') {
+                $vaultDoc = m360_vault_store_intake_document(
+                    $conn,
+                    $requestId,
+                    $docType,
+                    $docBytes,
+                    (string)($saved['original_name'] ?? ''),
+                    (string)($saved['mime_type'] ?? 'application/pdf'),
+                    (string)$saved['relative_path'],
+                    null,
+                    (int)(erp_auth_current_user_id() ?? ERP_PHASE1_PLATFORM_OWNER_ID)
+                );
+                if ($vaultDoc['ok']) {
+                    $vaultBlobId = (int)$vaultDoc['blob_id'];
+                    $vaultSha = (string)$vaultDoc['sha256'];
+                } elseif (!empty($vaultDoc['owner_decision_required'])) {
+                    return [
+                        'ok' => false,
+                        'message' => 'OWNER_DECISION_REQUIRED: ' . $vaultDoc['message'],
+                        'history_written' => false,
+                    ];
+                }
+            }
+        }
         $existing = m360_rw_intake_ensure_nested($existing);
         if (!isset($existing['reception_intake']['documents']) || !is_array($existing['reception_intake']['documents'])) {
             $existing['reception_intake']['documents'] = [];
@@ -3904,6 +3976,8 @@ function m360_rw_intake_process_save_inner($conn, int $requestId, string $action
             'status' => 'ACTIVE',
             'note' => $note,
             'description' => $note,
+            'vault_blob_id' => $vaultBlobId > 0 ? (string)$vaultBlobId : '',
+            'sha256_hash' => $vaultSha,
         ];
         $existing['reception_intake']['documents']['files'] = $filesList;
         // Legacy pointer = latest diagnostic/scanner only (does not remove older files[] entries).
@@ -9304,29 +9378,87 @@ function m360_rw_intake_reception_photo_status(array $payload): array
     $docs = is_array($payload['reception_intake']['documents'] ?? null) ? $payload['reception_intake']['documents'] : [];
     $legacyFile = trim((string)($docs['photo_file'] ?? ''));
     $slots = [];
+    $requestId = 0;
+    foreach ([
+        $payload['online_request_id'] ?? null,
+        $payload['reception_intake']['online_request_id'] ?? null,
+    ] as $rid) {
+        if ((int)$rid > 0) {
+            $requestId = (int)$rid;
+            break;
+        }
+    }
 
     foreach ($slotDefs as $key => $label) {
         $cs = is_array($canonical['slots'][$key] ?? null) ? $canonical['slots'][$key] : [];
         $file = trim((string)($cs['data_key'] ?? ''));
-        $saved = ($cs['status'] ?? '') === 'captured' && $file !== '';
+        $blobId = trim((string)($cs['vault_blob_id'] ?? ''));
+        if ($file === '' && $requestId > 0) {
+            $disk = m360_rw_intake_find_disk_photo_for_slot($requestId, $key);
+            if ($disk !== '') {
+                $file = $disk;
+                $cs['status'] = 'captured';
+            }
+        }
+        $saved = (($cs['status'] ?? '') === 'captured' && $file !== '') || $blobId !== '';
         $slots[$key] = [
             'label' => $label,
             'file' => $file,
             'saved' => $saved,
             'saved_at' => (string)($cs['captured_at'] ?? ''),
+            'vault_blob_id' => $blobId,
         ];
     }
 
+    $savedCount = 0;
+    foreach ($slots as $slot) {
+        if (!empty($slot['saved'])) {
+            $savedCount++;
+        }
+    }
+
     return [
-        'count' => $canonical['completed_count'],
+        'count' => max($canonical['completed_count'], $savedCount),
         'min_required' => $canonical['required_count'],
-        'complete' => m360_rw_intake_photos_complete($payload),
-        'missing_labels' => $canonical['missing_labels'],
+        'complete' => $savedCount >= $canonical['required_count'] || m360_rw_intake_photos_complete($payload),
+        'missing_labels' => array_values(array_map(
+            static fn(array $s): string => (string)$s['label'],
+            array_filter($slots, static fn(array $s): bool => empty($s['saved']))
+        )),
         'slots' => $slots,
         'legacy_file' => $legacyFile,
-        'legacy_only' => $legacyFile !== '' && $canonical['completed_count'] === 0,
+        'legacy_only' => $legacyFile !== '' && $savedCount === 0,
         'canonical' => $canonical,
     ];
+}
+
+/** Latest disk photo relative path for a reception slot, if present. */
+function m360_rw_intake_find_disk_photo_for_slot(int $onlineRequestId, string $slotKey): string
+{
+    $slotKey = preg_replace('/[^a-z_]/', '', strtolower($slotKey)) ?? '';
+    if ($onlineRequestId < 1 || $slotKey === '') {
+        return '';
+    }
+    $dirs = [
+        dirname(__DIR__) . DIRECTORY_SEPARATOR . 'storage' . DIRECTORY_SEPARATOR . 'reception-intake' . DIRECTORY_SEPARATOR . $onlineRequestId,
+        'C:\\xampp\\htdocs\\moghare360\\storage\\reception-intake\\' . $onlineRequestId,
+    ];
+    $latest = '';
+    $latestMtime = 0;
+    foreach ($dirs as $dir) {
+        if (!is_dir($dir)) {
+            continue;
+        }
+        foreach (glob($dir . DIRECTORY_SEPARATOR . 'photo_' . $slotKey . '_*.{jpg,jpeg,png}', GLOB_BRACE) ?: [] as $abs) {
+            $mtime = (int)@filemtime($abs);
+            if ($mtime >= $latestMtime) {
+                $latestMtime = $mtime;
+                $latest = 'reception-intake/' . $onlineRequestId . '/' . basename($abs);
+            }
+        }
+    }
+
+    return $latest;
 }
 
 function m360_rw_intake_reception_photo_missing_message(array $photoStatus): string
@@ -10763,6 +10895,10 @@ function m360_rw_intake_render_reception_photos_section(
         ? m360_rw_intake_stepper_section_ui_state('camera_photo', $activeStep, $payloadData, $request, $formValues, $editSection)
         : m360_rw_intake_section_ui_state('camera_photo', $payloadData, $request, $formValues, $editSection);
     $photoStatus = m360_rw_intake_reception_photo_status($payloadData);
+    if ($onlineRequestId > 0) {
+        $payloadData['online_request_id'] = (string)$onlineRequestId;
+        $photoStatus = m360_rw_intake_reception_photo_status($payloadData);
+    }
     if (!$stepperMode) {
         echo '<section class="m360-rw-section-block" id="section-camera-photo">';
         echo '<h2 class="m360-rw-section-title">عکس‌های پذیرش خودرو</h2>';
@@ -10803,7 +10939,9 @@ function m360_rw_intake_render_reception_photos_section(
             echo '<span class="m360-rw-photo-card__label">' . m360_rw_h((string)$slot['label']) . '</span>';
             echo '<span class="m360-rw-photo-card__status">' . m360_rw_h($st) . '</span>';
             if (!empty($slot['saved'])) {
-                echo '<img class="m360-rw-photo-card__thumb" src="storage/' . m360_rw_h($slot['file']) . '" alt="">';
+                $blobId = (int)($slot['vault_blob_id'] ?? 0);
+                $src = m360_vault_media_src($blobId > 0 ? $blobId : null, (string)($slot['file'] ?? ''));
+                echo '<img class="m360-rw-photo-card__thumb" src="' . m360_rw_h($src) . '" alt="">';
                 echo '<p class="m360-rw-flash is-ok m360-rw-photo-saved-label">عکس ذخیره شد.</p>';
             } else {
                 echo '<img class="m360-rw-photo-card__thumb" id="m360_rw_preview_' . m360_rw_h($slotKey) . '" alt="" style="display:none;">';

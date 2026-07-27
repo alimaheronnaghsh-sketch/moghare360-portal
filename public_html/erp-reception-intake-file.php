@@ -91,6 +91,9 @@ $prevAmendStep = ($request !== null)
 $canShowStepForm = m360_rw_intake_can_show_operational_step_forms($request, $payloadData);
 $csrfInputHtml = $canShowStepForm ? $csrfTokenHtml : '';
 $csrfConvertHtml = ($canAct && !empty($gate['can_show_convert'])) ? $csrfTokenHtml : '';
+if ($onlineRequestId > 0) {
+    $payloadData['online_request_id'] = (string)$onlineRequestId;
+}
 $photoStatus = m360_rw_intake_reception_photo_status($payloadData);
 $wizardStepDef = m360_rw_intake_stepper_definition()[$activeStep] ?? ['label' => '', 'num' => 0];
 $wizardStepState = ($request !== null)
@@ -103,10 +106,34 @@ $signoffStatus = ($request !== null)
 function m360_rw_intake_field(string $label, string $value): void
 {
     $display = $value;
-    if ($value !== '' && $value !== '—' && function_exists('m360_format_number') && preg_match('/^\d{4,}$/', $value) === 1) {
-        $display = m360_format_number($value);
-    } elseif ($value !== '' && $value !== '—' && function_exists('m360_format_number') && preg_match('/\d{4,}/', $value) === 1 && (str_contains($label, 'هزینه') || str_contains($label, 'مبلغ') || str_contains($label, 'توافق') || str_contains($label, 'کیلومتر'))) {
-        $display = m360_format_number($value);
+    $labelFa = $label;
+    $isMoney = str_contains($labelFa, 'هزینه') || str_contains($labelFa, 'مبلغ') || str_contains($labelFa, 'توافق')
+        || str_contains($labelFa, 'پیش‌پرداخت') || str_contains($labelFa, 'پیش پرداخت') || str_contains($labelFa, 'ریال');
+    $isMileage = str_contains($labelFa, 'کیلومتر') || str_contains($labelFa, 'کارکرد');
+    $isIdentity = str_contains($labelFa, 'موبایل') || str_contains($labelFa, 'کد ملی') || str_contains($labelFa, 'ملی')
+        || str_contains($labelFa, 'VIN') || str_contains($labelFa, 'vin') || str_contains($labelFa, 'شاسی')
+        || str_contains($labelFa, 'پلاک') || str_contains($labelFa, 'کد پرونده') || str_contains($labelFa, 'شناسه');
+
+    if ($value !== '' && $value !== '—' && !$isIdentity) {
+        if ($isMileage && function_exists('m360_format_mileage')) {
+            $display = m360_format_mileage($value);
+        } elseif ($isMoney && function_exists('m360_format_money_irr')) {
+            $display = m360_format_money_irr($value);
+        } elseif ($isMoney && function_exists('m360_format_number') && preg_match('/\d{4,}/', $value) === 1) {
+            $display = m360_format_number($value);
+        }
+    }
+    if ($isIdentity && function_exists('m360_format_plain_digits')) {
+        if (str_contains($labelFa, 'موبایل') && function_exists('m360_format_masked_mobile')) {
+            // Staff intake may show exact mobile; avoid money commas only.
+            $display = m360_format_plain_digits(preg_replace('/\D+/', '', $value) ?: $value);
+        } elseif (str_contains($labelFa, 'ملی') && function_exists('m360_format_national_code')) {
+            $display = m360_format_national_code($value);
+        } elseif ((str_contains($labelFa, 'VIN') || str_contains($labelFa, 'vin') || str_contains($labelFa, 'شاسی')) && function_exists('m360_format_vin')) {
+            $display = m360_format_vin($value);
+        } else {
+            $display = m360_format_plain_digits($value);
+        }
     }
     echo '<div class="m360-rw-field"><span class="m360-rw-field-lbl">' . m360_rw_h($label) . '</span>';
     echo '<span class="m360-rw-field-val">' . m360_rw_h($display !== '' ? $display : '—') . '</span></div>';
