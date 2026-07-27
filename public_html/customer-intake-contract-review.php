@@ -7,6 +7,7 @@ require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-contract-signature-helper.php';
 
 $rawToken = trim((string)($_GET['t'] ?? $_GET['token'] ?? $_POST['t'] ?? $_POST['token'] ?? ''));
+$taskId = (int)($_GET['task_id'] ?? $_POST['task_id'] ?? 0);
 $flashMsg = trim((string)($_GET['msg'] ?? ''));
 $flashOk = (string)($_GET['ok'] ?? '') === '1';
 $isAjax = (string)($_POST['ajax'] ?? '') === '1'
@@ -20,6 +21,8 @@ $contractRow = null;
 $otpVerified = false;
 $accepted = false;
 $workflow = [];
+$entryMode = '';
+$readOnly = false;
 $invalidMessage = 'مأموریت قرارداد مشتری یافت نشد یا منقضی شده است.';
 
 function m360_contract_review_json_response(array $payload, int $status = 200): never
@@ -32,107 +35,219 @@ function m360_contract_review_json_response(array $payload, int $status = 200): 
     exit;
 }
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && $rawToken !== '') {
+function m360_contract_review_return_url(string $entryMode, int $taskId, string $rawToken): string
+{
+    if ($entryMode === M360_CONTRACT_ENTRY_TASK && $taskId > 0) {
+        return 'customer-intake-contract-review.php?task_id=' . (string)$taskId;
+    }
+    if ($rawToken !== '') {
+        return 'customer-intake-contract-review.php?t=' . rawurlencode($rawToken);
+    }
+
+    return 'customer-profile.php';
+}
+
+$conn = customer_core_db();
+$contextInput = ['token' => $rawToken, 'task_id' => $taskId];
+
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($taskId > 0 || $rawToken !== '')) {
     $action = trim((string)($_POST['workflow_action'] ?? ''));
-    $resolved = m360_contract_resolve_token($rawToken);
-    if (!$resolved['ok'] || !is_array($resolved['contract'])) {
+    if ($conn === false) {
         if ($isAjax) {
             m360_contract_review_json_response([
                 'ok' => false,
-                'message' => $resolved['message'],
-                'error_code' => 'token_invalid',
-                'workflow_state' => 'CONTRACT_OPEN',
-                'signature_locked' => false,
-                'otp_send_status' => 'not_requested',
-                'masked_destination' => '',
-            ], 403);
+                'message' => 'خطا در اتصال به سامانه.',
+                'error_code' => 'db_unavailable',
+            ], 503);
         }
-        header('Location: customer-intake-contract-review.php?t=' . rawurlencode($rawToken) . '&msg=' . rawurlencode($resolved['message']) . '&ok=0');
-        exit;
-    }
-    $contractRowPost = $resolved['contract'];
-    $result = ['ok' => false, 'message' => 'عملیات نامعتبر است.'];
-    $otpResult = null;
+        $error = 'اتصال به پایگاه داده برقرار نشد.';
+    } else {
+        $context = m360_contract_resolve_customer_context($conn, $contextInput);
+        if (!empty($context['redirect_login'])) {
+            header('Location: ' . m360_rw_customer_profile_unauthenticated_redirect_url(), true, 302);
+            exit;
+        }
+        if (!$context['ok'] || !is_array($context['contract'])) {
+            if ($isAjax) {
+                m360_contract_review_json_response([
+                    'ok' => false,
+                    'message' => $context['message'],
+                    'error_code' => 'context_invalid',
+                    'workflow_state' => 'CONTRACT_OPEN',
+                    'signature_locked' => false,
+                    'otp_send_status' => 'not_requested',
+                    'masked_destination' => '',
+                ], (int)($context['http_status'] ?? 403));
+            }
+            $returnUrl = m360_contract_review_return_url(
+                (string)($context['entry_mode'] ?? ''),
+                (int)($context['task_id'] ?? $taskId),
+                (string)($context['raw_token'] ?? $rawToken)
+            );
+            header('Location: ' . $returnUrl . '&msg=' . rawurlencode((string)$context['message']) . '&ok=0');
+            exit;
+        }
 
-    if ($action === 'confirm_review_and_consent') {
-        $consentChecked = isset($_POST['customer_consent']) && (string)$_POST['customer_consent'] === '1';
-        if (!$consentChecked) {
-            $result = ['ok' => false, 'message' => 'پذیرش صریح متن قرارداد الزامی است.'];
-        } else {
-            $result = m360_contract_confirm_review_and_consent($contractRowPost);
-        }
-    } elseif ($action === 'confirm_signature') {
-        $result = m360_contract_confirm_signature_locked($contractRowPost, trim((string)($_POST['signature_data'] ?? '')));
-        if ($result['ok']) {
-            $contractRowPost = m360_intake_contract_fetch_by_id(customer_core_db(), (int)($contractRowPost['contract_id'] ?? 0)) ?? $contractRowPost;
+        $entryMode = (string)$context['entry_mode'];
+        $taskId = (int)($context['task_id'] ?? $taskId);
+        $rawToken = (string)($context['raw_token'] ?? $rawToken);
+        $contractRowPost = $context['contract'];
+        $result = ['ok' => false, 'message' => 'عملیات نامعتبر است.'];
+        $otpResult = null;
+
+        if (!empty($context['read_only'])) {
+            $result = ['ok' => false, 'message' => 'قرارداد قبلاً امضا شده است.'];
+        } elseif ($action === 'confirm_review_and_consent') {
+            $consentChecked = isset($_POST['customer_consent']) && (string)$_POST['customer_consent'] === '1';
+            if (!$consentChecked) {
+                $result = ['ok' => false, 'message' => 'پذیرش صریح متن قرارداد الزامی است.'];
+            } else {
+                $result = m360_contract_confirm_review_and_consent($contractRowPost);
+            }
+        } elseif ($action === 'request_correction') {
+            $corrNote = trim((string)($_POST['correction_note'] ?? ''));
+            $payloadForCorr = is_array($context['payload'] ?? null) ? $context['payload'] : [];
+            $requestForCorr = is_array($context['request'] ?? null) ? $context['request'] : null;
+            $corr = m360_contract_request_correction(
+                $conn,
+                $contractRowPost,
+                $requestForCorr,
+                $payloadForCorr,
+                $corrNote,
+                $taskId
+            );
+            $result = ['ok' => !empty($corr['ok']), 'message' => (string)($corr['message'] ?? '')];
+            if ($result['ok']) {
+                if ($isAjax) {
+                    m360_contract_review_json_response([
+                        'ok' => true,
+                        'message' => $result['message'],
+                        'redirect' => 'customer-profile.php?contract_correction=1',
+                    ]);
+                }
+                header('Location: customer-profile.php?contract_correction=1&msg=' . rawurlencode($result['message']) . '&ok=1', true, 302);
+                exit;
+            }
+        } elseif ($action === 'confirm_signature') {
+            $result = m360_contract_confirm_signature_locked($contractRowPost, trim((string)($_POST['signature_data'] ?? '')));
+            if ($result['ok']) {
+                $contractRowPost = m360_intake_contract_fetch_by_id($conn, (int)($contractRowPost['contract_id'] ?? 0)) ?? $contractRowPost;
+                $otpResult = m360_contract_send_otp($contractRowPost);
+            }
+        } elseif ($action === 'send_otp') {
             $otpResult = m360_contract_send_otp($contractRowPost);
-        }
-    } elseif ($action === 'legacy_accept') {
-        $conn = customer_core_db();
-        if ($conn !== false) {
+            $result = [
+                'ok' => !empty($otpResult['ok']),
+                'message' => (string)($otpResult['message'] ?? ''),
+            ];
+        } elseif ($action === 'complete_signature') {
+            $result = m360_contract_complete_signature(
+                $contractRowPost,
+                $rawToken,
+                trim((string)($_POST['signature_data'] ?? '')),
+                true,
+                true,
+                true,
+                trim((string)($_POST['otp_code'] ?? ''))
+            );
+            if ($result['ok']) {
+                m360_contract_clear_task_context();
+                if ($isAjax) {
+                    m360_contract_review_json_response([
+                        'ok' => true,
+                        'message' => $result['message'],
+                        'redirect' => 'customer-profile.php?contract_signed=1',
+                    ]);
+                }
+                header('Location: customer-profile.php?contract_signed=1', true, 302);
+                exit;
+            }
+        } elseif ($action === 'legacy_accept' && $rawToken !== '') {
             $result = m360_rw_intake_process_customer_contract_accept($conn, $rawToken, $_POST, $_SERVER);
         }
-    }
 
-    if ($isAjax) {
-        $contractRowPost = m360_intake_contract_fetch_by_id(customer_core_db(), (int)($contractRowPost['contract_id'] ?? 0)) ?? $contractRowPost;
-        $ajaxPayload = m360_contract_review_ajax_payload($result, $otpResult, $contractRowPost, $action);
-        $httpStatus = !empty($result['ok']) ? 200 : 400;
-        m360_contract_review_json_response($ajaxPayload, $httpStatus);
-    }
+        if ($isAjax) {
+            $contractRowPost = m360_intake_contract_fetch_by_id($conn, (int)($contractRowPost['contract_id'] ?? 0)) ?? $contractRowPost;
+            $ajaxPayload = m360_contract_review_ajax_payload($result, $otpResult, $contractRowPost, $action);
+            $httpStatus = !empty($result['ok']) ? 200 : 400;
+            m360_contract_review_json_response($ajaxPayload, $httpStatus);
+        }
 
-    $redirect = 'customer-intake-contract-review.php?t=' . rawurlencode($rawToken);
-    header('Location: ' . $redirect . '&msg=' . rawurlencode((string)$result['message']) . '&ok=' . (!empty($result['ok']) ? '1' : '0'));
-    exit;
+        $redirect = m360_contract_review_return_url($entryMode, $taskId, $rawToken);
+        header('Location: ' . $redirect . '&msg=' . rawurlencode((string)$result['message']) . '&ok=' . (!empty($result['ok']) ? '1' : '0'));
+        exit;
+    }
 }
 
 header('Content-Type: text/html; charset=UTF-8');
 
-if ($rawToken !== '') {
-    $requestId = m360_rw_intake_contract_parse_review_token($rawToken);
-    $conn = customer_core_db();
-    if ($conn === false) {
-        $error = 'اتصال به پایگاه داده برقرار نشد.';
-    } elseif ($requestId < 1) {
-        $error = $invalidMessage;
+if ($conn === false) {
+    $error = 'اتصال به پایگاه داده برقرار نشد.';
+} elseif ($taskId < 1 && $rawToken === '') {
+    $error = $invalidMessage;
+} else {
+    $context = m360_contract_resolve_customer_context($conn, $contextInput);
+    if (!empty($context['redirect_login'])) {
+        header('Location: ' . m360_rw_customer_profile_unauthenticated_redirect_url(), true, 302);
+        exit;
+    }
+    if (!$context['ok'] || !is_array($context['contract'])) {
+        if ((int)($context['http_status'] ?? 403) === 403 && !headers_sent()) {
+            http_response_code(403);
+        }
+        $error = (string)$context['message'];
     } else {
-        $request = m360_online_req_fetch_by_id($conn, $requestId);
-        if ($request === null) {
-            $error = $invalidMessage;
-        } else {
-            $payload = m360_online_req_parse_payload($request['request_payload_json'] ?? null);
-            $payload = m360_rw_intake_payload_for_recovery($payload);
-            $tokenCheck = m360_rw_intake_contract_validate_review_token($payload, $requestId, $rawToken);
-            if (!$tokenCheck['ok']) {
-                $error = $tokenCheck['error'];
-            } else {
+        $entryMode = (string)$context['entry_mode'];
+        $taskId = (int)($context['task_id'] ?? $taskId);
+        $rawToken = (string)($context['raw_token'] ?? $rawToken);
+        $contractRow = $context['contract'];
+        $request = is_array($context['request'] ?? null) ? $context['request'] : null;
+        $payload = is_array($context['payload'] ?? null) ? $context['payload'] : [];
+        $readOnly = !empty($context['read_only']);
+
+        if ($entryMode === M360_CONTRACT_ENTRY_TOKEN && $rawToken !== '' && $request !== null) {
+            $resolved = m360_contract_resolve_token($rawToken);
+            if (!$resolved['ok'] || !is_array($resolved['contract'])) {
+                m360_rw_intake_ensure_db_contract_for_cartable(
+                    $conn,
+                    (int)($request['online_request_id'] ?? 0),
+                    $request,
+                    $payload,
+                    $rawToken
+                );
+                $request = m360_online_req_fetch_by_id($conn, (int)($request['online_request_id'] ?? 0)) ?? $request;
+                $payload = m360_online_req_parse_payload($request['request_payload_json'] ?? null);
+                $payload = m360_rw_intake_payload_for_recovery($payload);
                 $resolved = m360_contract_resolve_token($rawToken);
-                if (!$resolved['ok'] || !is_array($resolved['contract'])) {
-                    m360_rw_intake_ensure_db_contract_for_cartable($conn, $requestId, $request, $payload, $rawToken);
-                    $request = m360_online_req_fetch_by_id($conn, $requestId) ?? $request;
-                    $payload = m360_online_req_parse_payload($request['request_payload_json'] ?? null);
-                    $payload = m360_rw_intake_payload_for_recovery($payload);
-                    $resolved = m360_contract_resolve_token($rawToken);
-                }
-                if (!$resolved['ok'] || !is_array($resolved['contract'])) {
-                    $error = $resolved['message'];
-                } else {
+                if ($resolved['ok'] && is_array($resolved['contract'])) {
                     $contractRow = $resolved['contract'];
-                    if ($conn !== false) {
-                        m360_intake_contract_mark_viewed($conn, (int)$contractRow['contract_id']);
-                    }
-                    $summary = m360_rw_intake_contract_review_summary($payload, $request);
-                    $snapshot = m360_intake_contract_snapshot_from_row($contractRow);
-                    $contractHtml = m360_contract_render_html($snapshot, true);
-                    $workflow = m360_intake_contract_get_workflow_meta($contractRow);
-                    $otpVerified = m360_online_req_payload_otp_verified($request);
-                    $accepted = m360_rw_intake_contract_customer_accepted($payload) || m360_intake_contract_is_signed($contractRow);
                 }
             }
         }
+
+        if (is_array($contractRow)) {
+            m360_intake_contract_mark_viewed($conn, (int)$contractRow['contract_id']);
+            if ($entryMode === M360_CONTRACT_ENTRY_TASK && $taskId > 0 && !$readOnly) {
+                m360_cartable_mark_opened($conn, $taskId, 'CUSTOMER', null);
+            }
+            if ($request === null && (int)($contractRow['online_request_id'] ?? 0) > 0) {
+                $request = m360_online_req_fetch_by_id($conn, (int)$contractRow['online_request_id']);
+                if (is_array($request)) {
+                    $payload = m360_rw_intake_payload_for_recovery(m360_online_req_parse_payload($request['request_payload_json'] ?? null));
+                }
+            }
+            $summary = m360_rw_intake_contract_review_summary($payload, is_array($request) ? $request : []);
+            $snapshot = m360_intake_contract_snapshot_from_row($contractRow);
+            $contractHtml = m360_contract_render_html($snapshot, true);
+            $workflow = m360_intake_contract_get_workflow_meta($contractRow);
+            $sessionBindingEarly = m360_contract_require_verified_session_mobile_for_contract($contractRow);
+            $otpVerified = (is_array($request) && m360_online_req_payload_otp_verified($request))
+                || !empty($sessionBindingEarly['ok']);
+            $accepted = m360_rw_intake_contract_customer_accepted($payload) || m360_intake_contract_is_signed($contractRow);
+        } else {
+            $error = $invalidMessage;
+        }
     }
-} else {
-    $error = $invalidMessage;
 }
 
 $reviewDone = trim((string)($workflow['review_completed_at'] ?? '')) !== '';
@@ -142,8 +257,13 @@ $signatureConfirmed = m360_contract_workflow_signature_confirmed(is_array($contr
 $signed = is_array($contractRow) && m360_intake_contract_is_signed($contractRow);
 $sessionBinding = is_array($contractRow) ? m360_contract_require_verified_session_mobile_for_contract($contractRow) : ['ok' => false, 'mobile' => ''];
 $maskedMobile = $sessionBinding['ok'] ? m360_contract_mask_mobile((string)$sessionBinding['mobile']) : '';
+$snapshotMobile = is_array($contractRow) ? m360_cartable_normalize_mobile((string)($contractRow['mobile'] ?? '')) : '';
+$snapshotMaskedMobile = $snapshotMobile !== '' ? m360_contract_mask_mobile($snapshotMobile) : '';
 $taskTitle = M360_RW_INTAKE_CARTABLE_TASK_TITLE_FA;
 $taskMessage = M360_RW_INTAKE_CARTABLE_TASK_MESSAGE_FA;
+$formActionUrl = m360_contract_review_return_url($entryMode, $taskId, $rawToken);
+$jsTaskId = $entryMode === M360_CONTRACT_ENTRY_TASK ? $taskId : 0;
+$jsToken = $entryMode === M360_CONTRACT_ENTRY_TOKEN ? $rawToken : '';
 
 ?>
 <!DOCTYPE html>
@@ -155,12 +275,71 @@ $taskMessage = M360_RW_INTAKE_CARTABLE_TASK_MESSAGE_FA;
     <link rel="stylesheet" href="assets/css/moghare360-v1-luxury-ui.css">
     <link rel="stylesheet" href="assets/css/m360-contract.css">
     <style>
-        .m360-contract-review-panel.is-collapsed .m360-contract-scroll-host { display: none; }
-        .m360-contract-review-panel.is-collapsed .m360-contract-review-actions { display: none; }
-        .m360-contract-consent-anchor { margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid #e4e4e7; }
+        .m360-contract-review-panel.is-collapsed .m360-contract-doc-host,
+        .m360-contract-review-panel.is-collapsed .m360-contract-review-actions,
+        .m360-contract-review-panel.is-collapsed .m360-contract-consent-anchor,
+        .m360-contract-review-panel.is-collapsed .m360-contract-correction-box { display: none; }
+        .m360-contract-doc-host {
+            width: 100%;
+            max-width: 100%;
+            overflow-x: hidden;
+            overflow-y: visible;
+            margin: 1rem 0;
+            padding: 1.25rem 1rem;
+            border: 1px solid #d4d4d8;
+            border-radius: 14px;
+            background: #fff;
+            color: #18181b;
+        }
+        .m360-contract-doc-host .m360-contract-sheet { max-width: 100%; }
+        .m360-contract-consent-anchor {
+            margin-top: 1.25rem;
+            padding: 1rem 1.1rem;
+            border: 1px solid #cbd5e1;
+            border-radius: 12px;
+            background: #f8fafc;
+        }
+        .m360-contract-consent-label {
+            display: flex;
+            align-items: flex-start;
+            gap: 0.75rem;
+            font-size: 1.05rem;
+            line-height: 1.8;
+            color: #0f172a;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .m360-contract-consent-label input[type="checkbox"] {
+            width: 1.25rem;
+            height: 1.25rem;
+            min-width: 1.25rem;
+            margin-top: 0.3rem;
+            accent-color: #166534;
+        }
+        .m360-contract-correction-box {
+            margin-top: 1.25rem;
+            padding: 1rem;
+            border: 1px dashed #94a3b8;
+            border-radius: 12px;
+            background: #fff;
+        }
+        .m360-contract-correction-box textarea {
+            width: 100%;
+            margin: 0.5rem 0 0.75rem;
+            padding: 0.65rem 0.75rem;
+            border: 1px solid #cbd5e1;
+            border-radius: 10px;
+            font-family: inherit;
+            font-size: 0.95rem;
+        }
         .m360-contract-step { margin: 1.25rem 0; padding: 1rem; border: 1px solid #e4e4e7; border-radius: 12px; background: #fff; }
         .m360-contract-step.is-locked canvas { pointer-events: none; opacity: 0.85; }
         .m360-contract-step.is-hidden { display: none; }
+        .m360-contract-page { max-width: 1100px; }
+        @media (max-width: 720px) {
+            .m360-contract-doc-host { padding: 1rem 0.75rem; }
+            .m360-contract-consent-label { font-size: 1rem; }
+        }
     </style>
 </head>
 <body class="m360-public-shell m360-rw-page">
@@ -176,38 +355,70 @@ $taskMessage = M360_RW_INTAKE_CARTABLE_TASK_MESSAGE_FA;
 
     <?php if ($error !== ''): ?>
         <section class="m360-rw-alert"><?= m360_rw_h($error) ?></section>
+        <p class="m360-action-row"><a class="m360-rw-btn" href="customer-profile.php">بازگشت به داشبورد مشتری</a></p>
     <?php else: ?>
         <section class="m360-rw-wizard-page-card">
             <div class="m360-rw-field-grid">
                 <div class="m360-rw-field"><span class="m360-rw-field-lbl">مشتری</span><span class="m360-rw-field-val"><?= m360_rw_h($summary['customer_name'] ?? '—') ?></span></div>
                 <div class="m360-rw-field"><span class="m360-rw-field-lbl">پلاک</span><span class="m360-rw-field-val"><?= m360_rw_h($summary['plate'] ?? '—') ?></span></div>
                 <div class="m360-rw-field"><span class="m360-rw-field-lbl">خودرو</span><span class="m360-rw-field-val"><?= m360_rw_h($summary['brand_model'] ?? '—') ?></span></div>
-                <div class="m360-rw-field"><span class="m360-rw-field-lbl">نسخه قرارداد</span><span class="m360-rw-field-val"><?= m360_rw_h(M360_CONTRACT_VERSION) ?></span></div>
+                <?php if ($maskedMobile !== ''): ?>
+                    <div class="m360-rw-field"><span class="m360-rw-field-lbl">شماره تأیید پیامکی</span><span class="m360-rw-field-val"><?= m360_rw_h($maskedMobile) ?></span></div>
+                <?php endif; ?>
+                <?php if ($snapshotMaskedMobile !== '' && $snapshotMaskedMobile !== $maskedMobile): ?>
+                    <div class="m360-rw-field"><span class="m360-rw-field-lbl">شماره ثبت اولیه</span><span class="m360-rw-field-val"><?= m360_rw_h($snapshotMaskedMobile) ?></span></div>
+                <?php endif; ?>
+                <div class="m360-rw-field"><span class="m360-rw-field-lbl">نوع خدمت</span><span class="m360-rw-field-val"><?= m360_rw_h($summary['service_type_fa'] ?? $summary['service_route'] ?? '—') ?></span></div>
+                <div class="m360-rw-field"><span class="m360-rw-field-lbl">کیلومتر</span><span class="m360-rw-field-val"><?= m360_rw_h($summary['mileage'] ?? '—') ?></span></div>
+                <div class="m360-rw-field"><span class="m360-rw-field-lbl">سطح بنزین</span><span class="m360-rw-field-val"><?= m360_rw_h($summary['fuel_level'] ?? '—') ?></span></div>
             </div>
 
             <?php if ($signed || $accepted): ?>
                 <p class="m360-rw-flash is-ok">قرارداد پذیرش با امضای دیجیتال و OTP تأیید شد.</p>
+                <?php
+                m360_contract_pdf_render_download_button(
+                    is_array($contractRow) ? $contractRow : null,
+                    'customer',
+                    $entryMode === M360_CONTRACT_ENTRY_TOKEN ? $rawToken : '',
+                    'm360-rw-btn'
+                );
+                ?>
                 <p class="m360-action-row"><a class="m360-rw-btn" href="customer-profile.php">بازگشت به داشبورد مشتری</a></p>
             <?php elseif (!$otpVerified): ?>
                 <p class="m360-rw-warn">ابتدا احراز هویت موبایل مشتری باید توسط OTP پذیرش تکمیل شود.</p>
+                <p class="m360-action-row"><a class="m360-rw-btn" href="customer-profile.php">بازگشت به داشبورد مشتری</a></p>
             <?php else: ?>
+                <?php
+                m360_contract_pdf_render_download_button(
+                    is_array($contractRow) ? $contractRow : null,
+                    'customer',
+                    $entryMode === M360_CONTRACT_ENTRY_TOKEN ? $rawToken : '',
+                    'm360-rw-btn m360-rw-btn-secondary'
+                );
+                ?>
                 <div id="m360_review_panel" class="m360-contract-review-panel m360-contract-step <?= $reviewConsentDone ? 'is-collapsed' : '' ?>">
                     <h2 class="m360-rw-section-title">مطالعه قرارداد</h2>
                     <?php if ($reviewConsentDone): ?>
                         <p class="m360-rw-flash is-ok">مطالعه و پذیرش قرارداد ثبت شد.</p>
                     <?php else: ?>
-                        <div id="m360_contract_scroll" class="m360-contract-scroll-host" style="max-height:60vh;overflow-y:auto;border:1px solid #cbd5e1;border-radius:12px;padding:1rem;margin:1rem 0;background:#fff;">
+                        <div id="m360_contract_scroll" class="m360-contract-doc-host">
                             <?= $contractHtml ?>
-                            <div class="m360-contract-consent-anchor">
-                                <label class="m360-rw-check-label m360-rw-confirm-check">
-                                    <input type="checkbox" id="m360_consent_check" value="1" disabled>
-                                    <?= m360_rw_h(M360_CONTRACT_CONSENT_TEXT_FA) ?>
-                                </label>
-                            </div>
                         </div>
-                        <p id="m360_scroll_hint" class="m360-rw-muted">برای فعال شدن پذیرش، متن قرارداد را تا انتها مطالعه کنید.</p>
+                        <div class="m360-contract-consent-anchor">
+                            <label class="m360-contract-consent-label" for="m360_consent_check">
+                                <input type="checkbox" id="m360_consent_check" value="1">
+                                <span><?= m360_rw_h(M360_CONTRACT_CONSENT_TEXT_FA) ?></span>
+                            </label>
+                        </div>
+                        <p id="m360_scroll_hint" class="m360-rw-muted">پس از مطالعه، گزینه پذیرش را علامت بزنید تا دکمه تأیید فعال شود.</p>
                         <div class="m360-contract-review-actions">
-                            <button type="button" class="m360-rw-btn m360-rw-btn-secondary" id="m360_review_confirm_btn" style="display:none" disabled>تأیید مطالعه و پذیرش قرارداد</button>
+                            <button type="button" class="m360-rw-btn" id="m360_review_confirm_btn" disabled>تأیید مطالعه و پذیرش قرارداد</button>
+                        </div>
+                        <div class="m360-contract-correction-box">
+                            <label for="m360_correction_note" class="m360-rw-muted">اگر اطلاعات قرارداد نادرست است:</label>
+                            <textarea id="m360_correction_note" rows="2" maxlength="500" placeholder="مثلاً مبلغ توافق‌شده متفاوت است / نوع خدمت اشتباه است"></textarea>
+                            <button type="button" class="m360-rw-btn m360-rw-btn-secondary" id="m360_request_correction_btn">نیاز به اصلاح دارد</button>
+                            <p id="m360_correction_status" class="m360-rw-muted" role="status"></p>
                         </div>
                     <?php endif; ?>
                 </div>
@@ -229,10 +440,15 @@ $taskMessage = M360_RW_INTAKE_CARTABLE_TASK_MESSAGE_FA;
                 <div id="m360_otp_panel" class="m360-contract-step <?= ($signatureConfirmed && !$signed) ? '' : 'is-hidden' ?>">
                     <h2 class="m360-rw-section-title">تأیید نهایی با OTP قرارداد</h2>
                     <?php if ($maskedMobile !== ''): ?>
-                        <p class="m360-rw-muted">کد تأیید به شماره <?= m360_rw_h($maskedMobile) ?> ارسال می‌شود.</p>
+                        <p class="m360-rw-muted">کد تأیید به شماره تأیید پیامکی <?= m360_rw_h($maskedMobile) ?> ارسال می‌شود.</p>
                     <?php endif; ?>
-                    <form id="m360_sign_form" method="post" action="api/customer/contract-sign.php">
-                        <input type="hidden" name="token" value="<?= m360_rw_h($rawToken) ?>">
+                    <form id="m360_sign_form" method="post" action="<?= m360_rw_h($formActionUrl) ?>">
+                        <?php if ($jsTaskId > 0): ?>
+                            <input type="hidden" name="task_id" value="<?= (int)$jsTaskId ?>">
+                        <?php elseif ($jsToken !== ''): ?>
+                            <input type="hidden" name="token" value="<?= m360_rw_h($jsToken) ?>">
+                        <?php endif; ?>
+                        <input type="hidden" name="workflow_action" value="complete_signature">
                         <input type="hidden" name="signature_data" id="m360_signature_data_final" value="">
                         <input type="hidden" name="confirm_read" value="1">
                         <div class="m360-contract-otp-row">
@@ -250,7 +466,9 @@ $taskMessage = M360_RW_INTAKE_CARTABLE_TASK_MESSAGE_FA;
 <?php if ($error === '' && !$accepted && !$signed && $otpVerified): ?>
 <script>
 (function () {
-    var token = <?= json_encode($rawToken, JSON_UNESCAPED_UNICODE) ?>;
+    var token = <?= json_encode($jsToken, JSON_UNESCAPED_UNICODE) ?>;
+    var taskId = <?= (int)$jsTaskId ?>;
+    var postUrl = <?= json_encode($formActionUrl, JSON_UNESCAPED_UNICODE) ?>;
     var reviewConsentDone = <?= $reviewConsentDone ? 'true' : 'false' ?>;
     var signatureConfirmed = <?= $signatureConfirmed ? 'true' : 'false' ?>;
     var scrollHost = document.getElementById('m360_contract_scroll');
@@ -272,6 +490,15 @@ $taskMessage = M360_RW_INTAKE_CARTABLE_TASK_MESSAGE_FA;
     var hasInk = false;
     var signatureLocked = signatureConfirmed;
     var signatureData = '';
+
+    function appendAuth(body) {
+        if (taskId > 0) {
+            body.set('task_id', String(taskId));
+        } else if (token) {
+            body.set('t', token);
+        }
+        return body;
+    }
 
     function parseJsonResponse(r) {
         return r.text().then(function (text) {
@@ -303,41 +530,35 @@ $taskMessage = M360_RW_INTAKE_CARTABLE_TASK_MESSAGE_FA;
     }
 
     function atScrollEnd() {
-        if (!scrollHost) return false;
-        return scrollHost.scrollTop + scrollHost.clientHeight >= scrollHost.scrollHeight - 8;
+        return true;
     }
 
     function updateScrollGate() {
+        // Consent is available without nested scroll trap; customer must still check the box.
         if (reviewConsentDone || !consentCheck) return;
-        if (atScrollEnd()) {
-            consentCheck.disabled = false;
-            if (scrollHint) scrollHint.style.display = 'none';
-        }
+        consentCheck.disabled = false;
+        if (scrollHint) scrollHint.style.display = '';
     }
 
-    if (scrollHost && !reviewConsentDone) {
-        scrollHost.addEventListener('scroll', updateScrollGate, { passive: true });
+    if (!reviewConsentDone) {
         updateScrollGate();
     }
 
     if (consentCheck && reviewConfirmBtn && !reviewConsentDone) {
         consentCheck.addEventListener('change', function () {
             if (consentCheck.checked) {
-                reviewConfirmBtn.style.display = 'inline-block';
                 reviewConfirmBtn.disabled = false;
             } else {
-                reviewConfirmBtn.style.display = 'none';
                 reviewConfirmBtn.disabled = true;
             }
         });
         reviewConfirmBtn.addEventListener('click', function () {
             reviewConfirmBtn.disabled = true;
-            var body = new URLSearchParams();
-            body.set('t', token);
+            var body = appendAuth(new URLSearchParams());
             body.set('workflow_action', 'confirm_review_and_consent');
             body.set('customer_consent', consentCheck.checked ? '1' : '0');
             body.set('ajax', '1');
-            fetch('customer-intake-contract-review.php', {
+            fetch(postUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json' },
                 credentials: 'same-origin',
@@ -355,6 +576,41 @@ $taskMessage = M360_RW_INTAKE_CARTABLE_TASK_MESSAGE_FA;
             }).catch(function (err) {
                 alert((err && err.message) ? err.message : 'خطا در ارتباط با سرور.');
                 reviewConfirmBtn.disabled = false;
+            });
+        });
+    }
+
+    var correctionBtn = document.getElementById('m360_request_correction_btn');
+    var correctionNote = document.getElementById('m360_correction_note');
+    var correctionStatus = document.getElementById('m360_correction_status');
+    if (correctionBtn && !reviewConsentDone) {
+        correctionBtn.addEventListener('click', function () {
+            if (!window.confirm('قرارداد امضا نمی‌شود و برای اصلاح به پذیرش بازمی‌گردد. ادامه می‌دهید؟')) {
+                return;
+            }
+            correctionBtn.disabled = true;
+            var body = appendAuth(new URLSearchParams());
+            body.set('workflow_action', 'request_correction');
+            body.set('correction_note', correctionNote ? String(correctionNote.value || '') : '');
+            body.set('ajax', '1');
+            fetch(postUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json' },
+                credentials: 'same-origin',
+                body: body.toString()
+            }).then(parseJsonResponse).then(function (data) {
+                if (!data.ok) {
+                    if (correctionStatus) correctionStatus.textContent = data.message || 'ثبت درخواست اصلاح ناموفق بود.';
+                    correctionBtn.disabled = false;
+                    return;
+                }
+                if (correctionStatus) correctionStatus.textContent = data.message || 'درخواست اصلاح ثبت شد.';
+                if (data.redirect) {
+                    window.location.href = data.redirect;
+                }
+            }).catch(function (err) {
+                if (correctionStatus) correctionStatus.textContent = (err && err.message) ? err.message : 'خطا در ارتباط با سرور.';
+                correctionBtn.disabled = false;
             });
         });
     }
@@ -417,7 +673,7 @@ $taskMessage = M360_RW_INTAKE_CARTABLE_TASK_MESSAGE_FA;
             e.preventDefault();
         }
 
-        function onUp(e) {
+        function onUp() {
             if (!drawing) return;
             drawing = false;
             if (hasInk) {
@@ -455,12 +711,11 @@ $taskMessage = M360_RW_INTAKE_CARTABLE_TASK_MESSAGE_FA;
                 }
                 confirmSigBtn.disabled = true;
                 if (sigStatus) sigStatus.textContent = 'در حال ثبت امضا...';
-                var body = new URLSearchParams();
-                body.set('t', token);
+                var body = appendAuth(new URLSearchParams());
                 body.set('workflow_action', 'confirm_signature');
                 body.set('signature_data', signatureData);
                 body.set('ajax', '1');
-                fetch('customer-intake-contract-review.php', {
+                fetch(postUrl, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json' },
                     credentials: 'same-origin',
@@ -502,15 +757,18 @@ $taskMessage = M360_RW_INTAKE_CARTABLE_TASK_MESSAGE_FA;
         if (!sendBtn) return;
         sendBtn.disabled = true;
         if (otpStatus) otpStatus.textContent = 'در حال ارسال...';
-        fetch('api/customer/contract-send-otp.php', {
+        var body = appendAuth(new URLSearchParams());
+        body.set('workflow_action', 'send_otp');
+        body.set('ajax', '1');
+        fetch(postUrl, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json' },
             credentials: 'same-origin',
-            body: JSON.stringify({ token: token })
-        }).then(function (r) { return parseJsonResponse(r); }).then(function (data) {
+            body: body.toString()
+        }).then(parseJsonResponse).then(function (data) {
             var msg = data.message || (data.ok ? 'کد ارسال شد.' : 'خطا');
-            if (data.data && data.data.masked_mobile) {
-                msg += ' (' + data.data.masked_mobile + ')';
+            if (data.masked_destination) {
+                msg += ' (' + data.masked_destination + ')';
             }
             if (otpStatus) otpStatus.textContent = msg;
             sendBtn.disabled = false;
@@ -526,9 +784,6 @@ $taskMessage = M360_RW_INTAKE_CARTABLE_TASK_MESSAGE_FA;
 
     if (signatureConfirmed && otpPanel) {
         otpPanel.classList.remove('is-hidden');
-        if (!otpStatus || otpStatus.textContent === '') {
-            sendOtp();
-        }
     }
 
     if (signForm) {

@@ -11,8 +11,350 @@ require_once __DIR__ . DIRECTORY_SEPARATOR . 'm360-customer-cartable-helper.php'
 
 const M360_CONTRACT_OTP_TTL = 120;
 const M360_CONTRACT_OTP_RESEND = 60;
-const M360_CONTRACT_CONSENT_TEXT_FA = 'متن قرارداد را به‌طور کامل مطالعه کردم و مفاد آن را می‌پذیرم.';
+const M360_CONTRACT_CONSENT_TEXT_FA = 'متن قرارداد را کامل مطالعه کردم و مفاد آن را می‌پذیرم.';
 const M360_CONTRACT_OTP_PURPOSE = 'CONTRACT_CONFIRMATION';
+const M360_CONTRACT_TASK_CONTEXT_SESSION = 'm360_contract_task_context';
+const M360_CONTRACT_ENTRY_TASK = 'TASK_CARTABLE';
+const M360_CONTRACT_ENTRY_TOKEN = 'SECURE_TOKEN';
+
+/**
+ * @return array{
+ *   task_id:int,
+ *   contract_id:int,
+ *   online_request_id:int,
+ *   customer_id:int,
+ *   mobile:string,
+ *   contract_body_hash:string,
+ *   issued_at:int
+ * }|null
+ */
+function m360_contract_get_task_context(): ?array
+{
+    m360_contract_sig_session_start();
+    $bag = $_SESSION[M360_CONTRACT_TASK_CONTEXT_SESSION] ?? null;
+    if (!is_array($bag)) {
+        return null;
+    }
+    $issuedAt = (int)($bag['issued_at'] ?? 0);
+    if ($issuedAt < 1 || (time() - $issuedAt) > 7200) {
+        unset($_SESSION[M360_CONTRACT_TASK_CONTEXT_SESSION]);
+
+        return null;
+    }
+
+    return $bag;
+}
+
+/**
+ * @param array{
+ *   task_id:int,
+ *   contract_id:int,
+ *   online_request_id:int,
+ *   customer_id:int,
+ *   mobile:string,
+ *   contract_body_hash:string
+ * } $context
+ */
+function m360_contract_store_task_context(array $context): void
+{
+    m360_contract_sig_session_start();
+    $_SESSION[M360_CONTRACT_TASK_CONTEXT_SESSION] = [
+        'task_id' => (int)($context['task_id'] ?? 0),
+        'contract_id' => (int)($context['contract_id'] ?? 0),
+        'online_request_id' => (int)($context['online_request_id'] ?? 0),
+        'customer_id' => (int)($context['customer_id'] ?? 0),
+        'mobile' => m360_cartable_normalize_mobile((string)($context['mobile'] ?? '')),
+        'contract_body_hash' => trim((string)($context['contract_body_hash'] ?? '')),
+        'issued_at' => time(),
+    ];
+}
+
+function m360_contract_clear_task_context(): void
+{
+    m360_contract_sig_session_start();
+    unset($_SESSION[M360_CONTRACT_TASK_CONTEXT_SESSION]);
+}
+
+/**
+ * @param array{token?:string,task_id?:int} $input
+ * @return array{
+ *   ok:bool,
+ *   message:string,
+ *   http_status:int,
+ *   entry_mode:string,
+ *   contract:?array,
+ *   task:?array,
+ *   request:?array,
+ *   payload:array,
+ *   raw_token:string,
+ *   task_id:int,
+ *   read_only:bool,
+ *   redirect_login:bool
+ * }
+ */
+function m360_contract_resolve_customer_context($conn, array $input): array
+{
+    $empty = [
+        'ok' => false,
+        'message' => 'مأموریت قرارداد مشتری یافت نشد یا منقضی شده است.',
+        'http_status' => 403,
+        'entry_mode' => '',
+        'contract' => null,
+        'task' => null,
+        'request' => null,
+        'payload' => [],
+        'raw_token' => '',
+        'task_id' => 0,
+        'read_only' => false,
+        'redirect_login' => false,
+    ];
+    if (!is_resource($conn)) {
+        return array_merge($empty, ['message' => 'خطا در اتصال به سامانه.', 'http_status' => 503]);
+    }
+
+    $taskId = (int)($input['task_id'] ?? 0);
+    $rawToken = trim((string)($input['token'] ?? ''));
+
+    if ($taskId > 0) {
+        if (!function_exists('m360_rw_customer_profile_resolve_verified_session_mobile')) {
+            require_once __DIR__ . DIRECTORY_SEPARATOR . 'm360-reception-workbench-helper.php';
+        }
+        $session = m360_rw_customer_profile_resolve_verified_session_mobile();
+        if (!$session['ok']) {
+            return array_merge($empty, [
+                'message' => 'ابتدا احراز هویت موبایل مشتری باید تکمیل شود.',
+                'http_status' => 401,
+                'redirect_login' => true,
+                'entry_mode' => M360_CONTRACT_ENTRY_TASK,
+                'task_id' => $taskId,
+            ]);
+        }
+        $sessionMobile = m360_cartable_normalize_mobile($session['mobile']);
+        $task = m360_cartable_fetch_task_by_id($conn, $taskId);
+        if ($task === null || (string)($task['task_type'] ?? '') !== M360_CARTABLE_TASK_TYPE_CONTRACT_SIGNATURE) {
+            return array_merge($empty, [
+                'message' => 'وظیفه قرارداد معتبر یافت نشد.',
+                'entry_mode' => M360_CONTRACT_ENTRY_TASK,
+                'task_id' => $taskId,
+            ]);
+        }
+        $taskStatus = strtoupper((string)($task['status'] ?? ''));
+        $isActive = (int)($task['is_active'] ?? 0) === 1;
+        $contractId = (int)($task['contract_id'] ?? 0);
+        if ($contractId < 1) {
+            return array_merge($empty, [
+                'message' => 'قرارداد مرتبط با وظیفه یافت نشد.',
+                'entry_mode' => M360_CONTRACT_ENTRY_TASK,
+                'task_id' => $taskId,
+                'task' => $task,
+            ]);
+        }
+        $contract = m360_intake_contract_fetch_by_id($conn, $contractId);
+        if ($contract === null) {
+            return array_merge($empty, [
+                'message' => 'قرارداد یافت نشد.',
+                'entry_mode' => M360_CONTRACT_ENTRY_TASK,
+                'task_id' => $taskId,
+                'task' => $task,
+            ]);
+        }
+        $contractStatus = strtoupper((string)($contract['contract_status'] ?? ''));
+        if (in_array($contractStatus, [M360_CONTRACT_STATUS_CANCELLED, M360_CONTRACT_STATUS_EXPIRED], true)) {
+            return array_merge($empty, [
+                'message' => 'این قرارداد دیگر قابل اقدام نیست.',
+                'entry_mode' => M360_CONTRACT_ENTRY_TASK,
+                'task_id' => $taskId,
+                'task' => $task,
+                'contract' => $contract,
+            ]);
+        }
+        $signed = m360_intake_contract_is_signed($contract);
+        if (!$signed) {
+            if (!$isActive || !in_array($taskStatus, [M360_CARTABLE_STATUS_PENDING, M360_CARTABLE_STATUS_OPENED], true)) {
+                return array_merge($empty, [
+                    'message' => 'این وظیفه دیگر فعال نیست.',
+                    'entry_mode' => M360_CONTRACT_ENTRY_TASK,
+                    'task_id' => $taskId,
+                    'task' => $task,
+                    'contract' => $contract,
+                ]);
+            }
+        }
+        $customerId = (int)($task['customer_id'] ?? 0);
+        if ($customerId < 1) {
+            $customerId = (int)($contract['customer_id'] ?? 0);
+        }
+        if (!m360_cartable_task_belongs_to_customer($task, $customerId > 0 ? $customerId : null, $sessionMobile)) {
+            return array_merge($empty, [
+                'message' => 'دسترسی به این وظیفه مجاز نیست.',
+                'http_status' => 403,
+                'entry_mode' => M360_CONTRACT_ENTRY_TASK,
+                'task_id' => $taskId,
+            ]);
+        }
+        $canonicalMobile = m360_contract_resolve_canonical_customer_mobile($conn, $contract);
+        if (!$canonicalMobile['ok']) {
+            return array_merge($empty, [
+                'message' => $canonicalMobile['message'],
+                'http_status' => 403,
+                'entry_mode' => M360_CONTRACT_ENTRY_TASK,
+                'task_id' => $taskId,
+            ]);
+        }
+        if ($sessionMobile === '' || !hash_equals($sessionMobile, $canonicalMobile['mobile'])) {
+            return array_merge($empty, [
+                'message' => 'هویت موبایل تأییدشده با شماره تأیید پیامکی قرارداد مطابقت ندارد.',
+                'http_status' => 403,
+                'entry_mode' => M360_CONTRACT_ENTRY_TASK,
+                'task_id' => $taskId,
+            ]);
+        }
+        $requestId = (int)($task['online_request_id'] ?? ($contract['online_request_id'] ?? 0));
+        $request = $requestId > 0 && function_exists('m360_online_req_fetch_by_id')
+            ? m360_online_req_fetch_by_id($conn, $requestId)
+            : null;
+        if ($requestId > 0 && is_array($request)) {
+            $requestCustomerId = (int)($request['customer_id'] ?? 0);
+            if ($requestCustomerId > 0 && $customerId > 0 && $requestCustomerId !== $customerId) {
+                return array_merge($empty, [
+                    'message' => 'مالکیت پرونده با قرارداد مطابقت ندارد.',
+                    'entry_mode' => M360_CONTRACT_ENTRY_TASK,
+                    'task_id' => $taskId,
+                ]);
+            }
+        }
+        $tokenHash = trim((string)($task['action_token_hash'] ?? ''));
+        $contractTokenHash = trim((string)($contract['secure_token_hash'] ?? ''));
+        if ($tokenHash !== '' && $contractTokenHash !== '' && !hash_equals($contractTokenHash, $tokenHash)) {
+            return array_merge($empty, [
+                'message' => 'ارجاع امنیتی وظیفه با قرارداد مطابقت ندارد.',
+                'entry_mode' => M360_CONTRACT_ENTRY_TASK,
+                'task_id' => $taskId,
+            ]);
+        }
+        $payload = [];
+        if (is_array($request) && function_exists('m360_online_req_parse_payload')) {
+            $payload = m360_online_req_parse_payload($request['request_payload_json'] ?? null);
+            if (function_exists('m360_rw_intake_payload_for_recovery')) {
+                $payload = m360_rw_intake_payload_for_recovery($payload);
+            }
+        }
+        m360_contract_store_task_context([
+            'task_id' => $taskId,
+            'contract_id' => $contractId,
+            'online_request_id' => $requestId,
+            'customer_id' => $customerId,
+            'mobile' => $sessionMobile,
+            'contract_body_hash' => (string)($contract['contract_body_hash'] ?? ''),
+        ]);
+
+        return [
+            'ok' => true,
+            'message' => '',
+            'http_status' => 200,
+            'entry_mode' => M360_CONTRACT_ENTRY_TASK,
+            'contract' => $contract,
+            'task' => $task,
+            'request' => $request,
+            'payload' => is_array($payload) ? $payload : [],
+            'raw_token' => '',
+            'task_id' => $taskId,
+            'read_only' => $signed,
+            'redirect_login' => false,
+        ];
+    }
+
+    if ($rawToken === '') {
+        return $empty;
+    }
+
+    $resolved = m360_contract_resolve_token($rawToken);
+    if (!$resolved['ok'] || !is_array($resolved['contract'])) {
+        return array_merge($empty, [
+            'message' => (string)$resolved['message'],
+            'entry_mode' => M360_CONTRACT_ENTRY_TOKEN,
+            'raw_token' => $rawToken,
+        ]);
+    }
+    $contract = $resolved['contract'];
+    $requestId = 0;
+    if (function_exists('m360_rw_intake_contract_parse_review_token')) {
+        $requestId = m360_rw_intake_contract_parse_review_token($rawToken);
+    }
+    if ($requestId < 1) {
+        $requestId = (int)($contract['online_request_id'] ?? 0);
+    }
+    $request = null;
+    $payload = [];
+    if ($requestId > 0 && function_exists('m360_online_req_fetch_by_id')) {
+        $request = m360_online_req_fetch_by_id($conn, $requestId);
+        if ($request === null) {
+            return array_merge($empty, [
+                'message' => 'مأموریت قرارداد مشتری یافت نشد یا منقضی شده است.',
+                'entry_mode' => M360_CONTRACT_ENTRY_TOKEN,
+                'raw_token' => $rawToken,
+            ]);
+        }
+        $payload = function_exists('m360_online_req_parse_payload')
+            ? m360_online_req_parse_payload($request['request_payload_json'] ?? null)
+            : [];
+        if (function_exists('m360_rw_intake_payload_for_recovery')) {
+            $payload = m360_rw_intake_payload_for_recovery($payload);
+        }
+        if (function_exists('m360_rw_intake_contract_validate_review_token')) {
+            $tokenCheck = m360_rw_intake_contract_validate_review_token($payload, $requestId, $rawToken);
+            if (!$tokenCheck['ok']) {
+                return array_merge($empty, [
+                    'message' => (string)($tokenCheck['error'] ?? $empty['message']),
+                    'entry_mode' => M360_CONTRACT_ENTRY_TOKEN,
+                    'raw_token' => $rawToken,
+                ]);
+            }
+        }
+    }
+
+    if (!function_exists('m360_rw_customer_profile_resolve_verified_session_mobile')) {
+        require_once __DIR__ . DIRECTORY_SEPARATOR . 'm360-reception-workbench-helper.php';
+    }
+    $session = m360_rw_customer_profile_resolve_verified_session_mobile();
+    if ($session['ok']) {
+        $sessionMobile = m360_cartable_normalize_mobile($session['mobile']);
+        $canonicalMobile = m360_contract_resolve_canonical_customer_mobile($conn, $contract);
+        if (!$canonicalMobile['ok']) {
+            return array_merge($empty, [
+                'message' => $canonicalMobile['message'],
+                'http_status' => 403,
+                'entry_mode' => M360_CONTRACT_ENTRY_TOKEN,
+                'raw_token' => $rawToken,
+                'contract' => $contract,
+            ]);
+        }
+        if ($sessionMobile !== '' && !hash_equals($sessionMobile, $canonicalMobile['mobile'])) {
+            return array_merge($empty, [
+                'message' => 'هویت موبایل تأییدشده با شماره تأیید پیامکی قرارداد مطابقت ندارد.',
+                'http_status' => 403,
+                'entry_mode' => M360_CONTRACT_ENTRY_TOKEN,
+                'raw_token' => $rawToken,
+                'contract' => $contract,
+            ]);
+        }
+    }
+
+    return [
+        'ok' => true,
+        'message' => '',
+        'http_status' => 200,
+        'entry_mode' => M360_CONTRACT_ENTRY_TOKEN,
+        'contract' => $contract,
+        'task' => null,
+        'request' => $request,
+        'payload' => is_array($payload) ? $payload : [],
+        'raw_token' => $rawToken,
+        'task_id' => 0,
+        'read_only' => m360_intake_contract_is_signed($contract),
+        'redirect_login' => false,
+    ];
+}
 
 function m360_contract_workflow_review_completed(array $contractRow): bool
 {
@@ -45,15 +387,80 @@ function m360_contract_workflow_signature_confirmed(array $contractRow): bool
 function m360_contract_mask_mobile(string $mobile): string
 {
     $digits = preg_replace('/\D+/', '', $mobile) ?? '';
-    if (strlen($digits) < 4) {
+    if (strlen($digits) < 8) {
         return '***';
     }
 
-    return '***' . substr($digits, -4);
+    return substr($digits, 0, 4) . '***' . substr($digits, -4);
 }
 
 /**
- * @return array{ok:bool,mobile:string,message:string}
+ * @return array{ok:bool,mobile:string,source:string,message:string}
+ */
+function m360_contract_resolve_canonical_customer_mobile($conn, array $contractRow): array
+{
+    if (!is_resource($conn)) {
+        $conn = customer_core_db();
+    }
+    if (!is_resource($conn)) {
+        return ['ok' => false, 'mobile' => '', 'source' => '', 'message' => 'خطا در اتصال به سامانه.'];
+    }
+
+    $customerId = (int)($contractRow['customer_id'] ?? 0);
+    $requestId = (int)($contractRow['online_request_id'] ?? 0);
+    if ($customerId < 1 && $requestId > 0 && function_exists('m360_online_req_fetch_by_id')) {
+        $request = m360_online_req_fetch_by_id($conn, $requestId);
+        $customerId = is_array($request) ? (int)($request['customer_id'] ?? 0) : 0;
+    }
+    if ($customerId < 1) {
+        return ['ok' => false, 'mobile' => '', 'source' => '', 'message' => 'شناسه مشتری قرارداد معتبر نیست.'];
+    }
+
+    if (customer_core_table_exists($conn, 'erp_customer_phones')) {
+        $phones = customer_core_fetch_rows(
+            $conn,
+            "SELECT phone_number, is_primary, do_not_contact, lifecycle_state
+             FROM dbo.erp_customer_phones
+             WHERE customer_id = ?
+               AND phone_type = N'MOBILE'
+               AND lifecycle_state = N'ACTIVE'
+               AND ISNULL(do_not_contact, 0) = 0
+             ORDER BY is_primary DESC, phone_id ASC",
+            [$customerId]
+        );
+        foreach ($phones as $phone) {
+            $mobile = m360_cartable_normalize_mobile((string)($phone['phone_number'] ?? ''));
+            if (preg_match('/^09\d{9}$/', $mobile) === 1) {
+                return [
+                    'ok' => true,
+                    'mobile' => $mobile,
+                    'source' => 'erp_customer_phones',
+                    'message' => '',
+                ];
+            }
+        }
+    }
+
+    $primary = customer_core_scalar(
+        $conn,
+        "SELECT TOP 1 primary_mobile FROM dbo.erp_customers WHERE customer_id = ? AND lifecycle_state = N'ACTIVE'",
+        [$customerId]
+    );
+    $mobile = m360_cartable_normalize_mobile((string)($primary ?? ''));
+    if (preg_match('/^09\d{9}$/', $mobile) === 1) {
+        return [
+            'ok' => true,
+            'mobile' => $mobile,
+            'source' => 'erp_customers.primary_mobile',
+            'message' => '',
+        ];
+    }
+
+    return ['ok' => false, 'mobile' => '', 'source' => '', 'message' => 'شماره موبایل فعال و قابل استفاده برای مشتری قرارداد یافت نشد.'];
+}
+
+/**
+ * @return array{ok:bool,mobile:string,message:string,source?:string}
  */
 function m360_contract_require_verified_session_mobile_for_contract(array $contractRow): array
 {
@@ -65,12 +472,15 @@ function m360_contract_require_verified_session_mobile_for_contract(array $contr
         return ['ok' => false, 'mobile' => '', 'message' => 'ابتدا احراز هویت موبایل مشتری باید تکمیل شود.'];
     }
     $sessionMobile = m360_cartable_normalize_mobile($resolved['mobile']);
-    $contractMobile = m360_cartable_normalize_mobile((string)($contractRow['mobile'] ?? ''));
-    if ($sessionMobile === '' || $contractMobile === '' || !hash_equals($sessionMobile, $contractMobile)) {
-        return ['ok' => false, 'mobile' => '', 'message' => 'هویت موبایل تأییدشده با قرارداد مطابقت ندارد.'];
+    $canonical = m360_contract_resolve_canonical_customer_mobile(customer_core_db(), $contractRow);
+    if (!$canonical['ok']) {
+        return ['ok' => false, 'mobile' => '', 'message' => $canonical['message'], 'source' => $canonical['source']];
+    }
+    if ($sessionMobile === '' || !hash_equals($sessionMobile, $canonical['mobile'])) {
+        return ['ok' => false, 'mobile' => '', 'message' => 'هویت موبایل تأییدشده با شماره تأیید پیامکی قرارداد مطابقت ندارد.', 'source' => $canonical['source']];
     }
 
-    return ['ok' => true, 'mobile' => $sessionMobile, 'message' => ''];
+    return ['ok' => true, 'mobile' => $canonical['mobile'], 'message' => '', 'source' => $canonical['source']];
 }
 
 /** @return array{ok:bool,message:string} */
@@ -142,6 +552,104 @@ function m360_contract_confirm_review_and_consent(array $contractRow): array
     }
 
     return ['ok' => true, 'message' => 'مطالعه و پذیرش قرارداد ثبت شد.'];
+}
+
+/**
+ * Customer returns contract for correction without signing.
+ * Uses existing cartable event + request payload flags (no schema change).
+ *
+ * @param resource|false $conn
+ * @param array<string, mixed> $contractRow
+ * @param array<string, mixed>|null $request
+ * @param array<string, mixed> $payload
+ * @return array{ok:bool,message:string,payload:array<string,mixed>}
+ */
+function m360_contract_request_correction($conn, array $contractRow, ?array $request, array $payload, string $note = '', int $taskId = 0): array
+{
+    if (!is_resource($conn)) {
+        return ['ok' => false, 'message' => 'اتصال به پایگاه داده برقرار نشد.', 'payload' => $payload];
+    }
+    if (m360_intake_contract_is_signed($contractRow)) {
+        return ['ok' => false, 'message' => 'قرارداد امضاشده قابل برگشت برای اصلاح نیست.', 'payload' => $payload];
+    }
+
+    $payload = m360_rw_intake_ensure_nested($payload);
+    $now = gmdate('Y-m-d\TH:i:s\Z');
+    $note = trim(mb_substr($note, 0, 500));
+    if (!isset($payload['reception_intake']['contract']) || !is_array($payload['reception_intake']['contract'])) {
+        $payload['reception_intake']['contract'] = [];
+    }
+    $payload['reception_intake']['contract']['customer_correction_requested'] = true;
+    $payload['reception_intake']['contract']['customer_correction_status'] = 'RETURNED_FOR_CORRECTION';
+    $payload['reception_intake']['contract']['customer_correction_at'] = $now;
+    $payload['reception_intake']['contract']['customer_correction_note'] = $note !== ''
+        ? $note
+        : 'مشتری اعلام کرد اطلاعات قرارداد نیاز به اصلاح دارد.';
+    $payload['reception_intake']['contract']['status'] = 'RETURNED_FOR_CORRECTION';
+    $payload['contract_status'] = 'RETURNED_FOR_CORRECTION';
+
+    if (!isset($payload['reception_intake']['customer_cartable']) || !is_array($payload['reception_intake']['customer_cartable'])) {
+        $payload['reception_intake']['customer_cartable'] = [];
+    }
+    $task = m360_rw_intake_contract_cartable_task($payload);
+    $payload['reception_intake']['customer_cartable']['contract_task'] = array_merge($task, [
+        'status' => 'RETURNED_FOR_CORRECTION',
+        'returned_at' => $now,
+        'is_active' => false,
+    ]);
+
+    if ($taskId < 1) {
+        $taskId = (int)($task['task_id'] ?? 0);
+    }
+    if ($taskId > 0 && function_exists('m360_cartable_cancel_task')) {
+        m360_cartable_cancel_task(
+            $conn,
+            $taskId,
+            'CUSTOMER',
+            null,
+            [
+                'reason' => 'customer_requested_correction',
+                'note' => $payload['reception_intake']['contract']['customer_correction_note'],
+            ]
+        );
+        if (defined('M360_CARTABLE_EVENT_CUSTOMER_CORRECTION_REQUESTED')) {
+            m360_cartable_append_event(
+                $conn,
+                $taskId,
+                M360_CARTABLE_EVENT_CUSTOMER_CORRECTION_REQUESTED,
+                'CUSTOMER',
+                null,
+                (string)($task['status'] ?? M360_CARTABLE_STATUS_OPENED),
+                M360_CARTABLE_STATUS_CANCELLED,
+                ['note' => $payload['reception_intake']['contract']['customer_correction_note']]
+            );
+        }
+    }
+
+    $contractId = (int)($contractRow['contract_id'] ?? 0);
+    if ($contractId > 0) {
+        m360_intake_contract_record_event(
+            $conn,
+            $contractId,
+            'CUSTOMER_CORRECTION_REQUESTED',
+            $payload['reception_intake']['contract']['customer_correction_note'],
+            null
+        );
+    }
+
+    $requestId = (int)($request['online_request_id'] ?? $contractRow['online_request_id'] ?? 0);
+    if ($requestId > 0) {
+        $persist = m360_rw_intake_persist_payload($conn, $requestId, $payload, []);
+        if (!$persist['ok']) {
+            return ['ok' => false, 'message' => (string)($persist['message'] ?? 'ذخیره وضعیت اصلاح ناموفق بود.'), 'payload' => $payload];
+        }
+    }
+
+    return [
+        'ok' => true,
+        'message' => 'درخواست اصلاح ثبت شد. پذیرش پرونده را بازبینی می‌کند.',
+        'payload' => $payload,
+    ];
 }
 
 /** @return array{ok:bool,message:string} */

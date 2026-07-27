@@ -59,3 +59,263 @@
 }
 .m360-contract-flash.ok { background: #dcfce7; color: #166534; }
 .m360-contract-flash.err { background: #fee2e2; color: #991b1b; }
+
+.m360-contract-detail-shell,
+.m360-contract-detail-shell * {
+  box-sizing: border-box;
+}
+
+.m360-contract-detail-shell .m360-contract-page {
+  max-width: 1120px;
+  color: var(--m360-text);
+}
+
+.m360-contract-detail-shell .m360-contract-summary-card,
+.m360-contract-detail-shell .m360-contract-body-card,
+.m360-contract-detail-shell .m360-contract-events-card {
+  margin-bottom: 1rem;
+  overflow: hidden;
+}
+
+.m360-contract-detail-shell .m360-contract-summary-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+  padding-bottom: 0.85rem;
+  border-bottom: 1px solid var(--m360-border);
+}
+
+.m360-contract-detail-shell .m360-contract-summary-head h2 {
+  margin: 0;
+  color: var(--m360-gold);
+  font-size: 1.3rem;
+}
+
+.m360-contract-detail-shell .m360-contract-eyebrow {
+  margin: 0 0 0.2rem;
+  color: var(--m360-muted);
+  font-size: 0.78rem;
+}
+
+.m360-contract-detail-shell .m360-contract-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin: 0;
+}
+
+.m360-contract-detail-shell .m360-contract-summary-grid div {
+  min-width: 0;
+  padding: 0.75rem;
+  border: 1px solid var(--m360-border);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.16);
+}
+
+.m360-contract-detail-shell .m360-contract-summary-grid dt {
+  margin-bottom: 0.35rem;
+  color: var(--m360-muted);
+  font-size: 0.78rem;
+}
+
+.m360-contract-detail-shell .m360-contract-summary-grid dd {
+  margin: 0;
+  color: var(--m360-text);
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.m360-contract-detail-shell .m360-contract-hash-cell dd,
+.m360-contract-detail-shell .m360-contract-tech-value {
+  direction: ltr;
+  text-align: left;
+  unicode-bidi: plaintext;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.m360-contract-detail-shell .m360-contract-help {
+  margin: 0.35rem 0 0;
+  color: var(--m360-muted);
+  font-size: 0.88rem;
+}
+
+.m360-contract-detail-shell .m360-contract-tech-value {
+  display: block;
+  padding: 0.65rem;
+  border-radius: 8px;
+  border: 1px solid var(--m360-border);
+  background: rgba(0, 0, 0, 0.2);
+  color: #d1fae5;
+  font-size: 0.78rem;
+}
+
+.m360-contract-detail-shell .m360-contract-sheet {
+  max-width: 100%;
+  margin: 0;
+  padding: 0;
+  color: var(--m360-text);
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+
+.m360-contract-detail-shell .m360-contract-sheet h1 {
+  margin: 0 0 1rem;
+  color: var(--m360-gold);
+  font-size: 1.45rem;
+  line-height: 1.8;
+}
+
+.m360-contract-detail-shell .m360-contract-sheet h2 {
+  margin: 0 0 0.75rem;
+  color: var(--m360-gold);
+  font-size: 1.05rem;
+  line-height: 1.8;
+}
+
+.m360-contract-detail-shell .m360-contract-sheet p {
+  margin: 0.55rem 0;
+  color: var(--m360-text);
+  line-height: 2.05;
+  text-align: justify;
+}
+
+.m360-contract-detail-shell .m360-contract-meta {
+  color: var(--m360-muted);
+  overflow-wrap: anywhere;
+}
+
+.m360-contract-detail-shell .m360-contract-block {
+  margin-top: 1rem;
+  padding: 1rem;
+  border: 1px solid var(--m360-border);
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.14);
+}
+
+.m360-contract-detail-shell .m360-contract-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.m360-contract-detail-shell .m360-contract-item {
+  min-width: 0;
+  padding: 0.75rem;
+  border: 1px solid var(--m360-border);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.m360-contract-detail-shell .m360-contract-item span {
+  display: block;
+  margin-bottom: 0.25rem;
+  color: var(--m360-muted);
+  font-size: 0.78rem;
+}
+
+.m360-contract-detail-shell .m360-contract-item strong {
+  color: var(--m360-text);
+  overflow-wrap: anywhere;
+}
+
+.m360-contract-detail-shell .m360-contract-footer-note {
+  margin-top: 1.2rem;
+  color: var(--m360-muted);
+  font-size: 0.88rem;
+}
+
+.m360-contract-detail-shell .m360-contract-events {
+  display: grid;
+  gap: 0.6rem;
+  margin: 1rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.m360-contract-detail-shell .m360-contract-events li {
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.75rem;
+  border: 1px solid var(--m360-border);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.14);
+}
+
+.m360-contract-detail-shell .m360-contract-events strong {
+  color: var(--m360-text);
+}
+
+.m360-contract-detail-shell .m360-contract-events span,
+.m360-contract-detail-shell .m360-contract-events small {
+  color: var(--m360-muted);
+  font-size: 0.78rem;
+}
+
+@media (max-width: 920px) {
+  .m360-contract-detail-shell .m360-contract-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 680px) {
+  .m360-contract-detail-shell .m360-contract-summary-grid,
+  .m360-contract-detail-shell .m360-contract-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Process spine — customer contract readability (no nested horizontal scroll) */
+.m360-contract-page {
+  max-width: 1100px;
+  overflow-x: hidden;
+}
+.m360-contract-doc-host,
+.m360-contract-sheet,
+.m360-contract-grid {
+  max-width: 100%;
+  overflow-x: hidden;
+  box-sizing: border-box;
+}
+.m360-contract-sheet {
+  width: 100%;
+  padding: 0.25rem 0;
+  color: #18181b;
+  background: transparent;
+}
+.m360-contract-sheet h1 {
+  font-size: clamp(1.15rem, 2.4vw, 1.55rem);
+  line-height: 1.7;
+  margin: 0 0 1rem;
+}
+.m360-contract-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.75rem 1rem;
+}
+.m360-contract-item {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.m360-contract-item span {
+  display: block;
+  color: #52525b;
+  font-size: 0.86rem;
+  margin-bottom: 0.2rem;
+}
+.m360-contract-item strong {
+  display: block;
+  color: #18181b;
+  font-size: 1rem;
+  line-height: 1.7;
+}
+.m360-rw-btn:disabled,
+.m360-contract-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}

@@ -95,6 +95,40 @@ function m360_intake_contract_sign_url(string $rawToken): string
     return m360_intake_contract_public_base_url() . '/customer-intake-contract-sign.php?token=' . rawurlencode($rawToken);
 }
 
+function m360_intake_contract_service_type_fa(string $requestType, string $route = ''): string
+{
+    $requestType = strtolower(trim($requestType));
+    $route = strtolower(trim($route));
+    $map = [
+        'diagnostic_inspection' => 'عیب‌یابی',
+        'diagnostic' => 'عیب‌یابی',
+        'diag' => 'عیب‌یابی',
+        'buy_sell_inspection' => 'کارشناسی خرید/فروش',
+        'inspection' => 'بازدید / کارشناسی',
+        'trade' => 'کارشناسی خرید/فروش',
+        'periodic_service' => 'سرویس دوره‌ای',
+        'periodic' => 'سرویس دوره‌ای',
+        'repair' => 'تعمیر',
+        'option_add' => 'افزودن آپشن',
+        'options' => 'افزودن آپشن',
+        'other' => 'سایر',
+    ];
+    if ($requestType !== '' && isset($map[$requestType])) {
+        return $map[$requestType];
+    }
+    if ($route !== '' && isset($map[$route])) {
+        return $map[$route];
+    }
+    if ($requestType !== '' && !preg_match('/^[a-z0-9_\-]+$/i', $requestType)) {
+        return $requestType;
+    }
+    if ($route !== '' && !preg_match('/^[a-z0-9_\-]+$/i', $route)) {
+        return $route;
+    }
+
+    return 'نامشخص';
+}
+
 /**
  * @return array<string, mixed>
  */
@@ -107,13 +141,19 @@ function m360_intake_contract_build_snapshot($conn, ?int $jobcardId, ?int $onlin
         'plate' => '-',
         'vin' => '-',
         'odometer' => '-',
+        'fuel_level' => '-',
         'service_type' => '-',
-        'cost_range' => 'پس از کارشناسی اعلام می‌شود',
-        'prepayment' => 'مطابق اعلام پذیرش',
-        'purchase_limit' => 'مطابق انتخاب پذیرش',
-        'test_drive_allowed' => 'مطابق انتخاب پرونده',
-        'body_insurance_status' => 'مطابق انتخاب پرونده',
-        'checklist_summary' => 'ثبت‌شده در پرونده پذیرش',
+        'request_description' => '-',
+        'cost_range' => '',
+        'prepayment' => '',
+        'purchase_limit' => '',
+        'test_drive_allowed' => '',
+        'body_insurance_status' => '',
+        'third_party_insurance' => '',
+        'other_agreements_note' => '',
+        'service_cost_min' => '',
+        'service_cost_max' => '',
+        'checklist_summary' => '',
         'jobcard_id' => $jobcardId !== null ? (string)$jobcardId : '-',
         'online_request_id' => $onlineRequestId !== null ? (string)$onlineRequestId : '-',
         'visit_date' => date('Y-m-d H:i'),
@@ -138,7 +178,6 @@ function m360_intake_contract_build_snapshot($conn, ?int $jobcardId, ?int $onlin
                 $data['plate'] = trim((string)($row['plate_number'] ?? '')) ?: '-';
                 $data['vin'] = trim((string)($row['vin'] ?? '')) ?: '-';
                 $data['odometer'] = trim((string)($row['intake_mileage'] ?? '')) ?: '-';
-                $data['service_type'] = trim((string)($row['customer_complaint'] ?? '')) ?: '-';
                 $data['reception_date'] = substr((string)($row['reception_at'] ?? date('Y-m-d')), 0, 10);
                 $data['jobcard_id'] = (string)$jobcardId;
             }
@@ -149,37 +188,236 @@ function m360_intake_contract_build_snapshot($conn, ?int $jobcardId, ?int $onlin
         $req = m360_online_req_fetch_by_id($conn, $onlineRequestId);
         if ($req !== null) {
             $payload = m360_online_req_parse_payload($req['request_payload_json'] ?? null);
-            if ($data['customer_name'] === '-') {
-                $data['customer_name'] = (string)($req['customer_name'] ?? '-');
-            }
-            if ($data['mobile'] === '-') {
-                $data['mobile'] = (string)($req['mobile'] ?? '-');
-            }
-            if ($data['plate'] === '-') {
-                $data['plate'] = (string)($req['vehicle_plate'] ?? '-');
-            }
-            if ($data['visit_date'] === date('Y-m-d H:i')) {
-                $visit = trim((string)($req['visit_date'] ?? ($payload['visit_date'] ?? '')));
-                if ($visit !== '') {
-                    $data['visit_date'] = $visit;
+            $ri = is_array($payload['reception_intake'] ?? null) ? $payload['reception_intake'] : [];
+            $vehicle = is_array($ri['vehicle'] ?? null) ? $ri['vehicle'] : [];
+            $service = is_array($ri['service_classification'] ?? null) ? $ri['service_classification'] : [];
+            $docs = is_array($ri['documents'] ?? null) ? $ri['documents'] : [];
+            $condition = is_array($ri['condition'] ?? null) ? $ri['condition'] : [];
+
+            $customerName = trim((string)($req['customer_name'] ?? $payload['customer_name'] ?? $payload['full_name'] ?? ''));
+            if ($customerName === '' && is_resource($conn) && (int)($req['customer_id'] ?? 0) > 0 && customer_core_table_exists($conn, 'erp_customers')) {
+                $cRows = customer_core_fetch_rows(
+                    $conn,
+                    'SELECT TOP 1 full_name, primary_mobile FROM dbo.erp_customers WHERE customer_id = ?',
+                    [(int)$req['customer_id']]
+                );
+                if (is_array($cRows[0] ?? null)) {
+                    $customerName = trim((string)($cRows[0]['full_name'] ?? ''));
+                    if ($data['mobile'] === '-' || $data['mobile'] === '') {
+                        $data['mobile'] = trim((string)($cRows[0]['primary_mobile'] ?? '')) ?: $data['mobile'];
+                    }
                 }
             }
-            $data['online_request_id'] = (string)$onlineRequestId;
+            if ($customerName !== '') {
+                $data['customer_name'] = $customerName;
+            }
+
+            $mobile = trim((string)($req['mobile'] ?? $payload['mobile'] ?? $payload['normalized_mobile'] ?? ''));
+            if ($mobile !== '') {
+                $data['mobile'] = $mobile;
+            }
+
+            $brand = trim((string)($vehicle['brand'] ?? $payload['brand'] ?? $payload['vehicle_brand'] ?? ''));
+            $model = trim((string)($vehicle['model'] ?? $vehicle['vehicle_class'] ?? $payload['model'] ?? $payload['vehicle_model'] ?? ''));
+            if ($brand !== '' || $model !== '') {
+                $data['vehicle'] = trim($brand . ' ' . $model);
+            }
+            if (is_resource($conn) && (int)($req['vehicle_id'] ?? 0) > 0 && ($data['vehicle'] === '-' || $data['plate'] === '-') && customer_core_table_exists($conn, 'erp_vehicles')) {
+                $vRows = customer_core_fetch_rows(
+                    $conn,
+                    'SELECT TOP 1 brand, model, plate_number, vin FROM dbo.erp_vehicles WHERE vehicle_id = ?',
+                    [(int)$req['vehicle_id']]
+                );
+                if (is_array($vRows[0] ?? null)) {
+                    if ($data['vehicle'] === '-') {
+                        $data['vehicle'] = trim(trim((string)($vRows[0]['brand'] ?? '')) . ' ' . trim((string)($vRows[0]['model'] ?? ''))) ?: '-';
+                    }
+                    if ($data['plate'] === '-') {
+                        $data['plate'] = trim((string)($vRows[0]['plate_number'] ?? '')) ?: '-';
+                    }
+                    if ($data['vin'] === '-') {
+                        $data['vin'] = trim((string)($vRows[0]['vin'] ?? '')) ?: '-';
+                    }
+                }
+            }
+
+            $plate = trim((string)($vehicle['plate'] ?? $vehicle['plate_number'] ?? $vehicle['plate_display'] ?? $req['vehicle_plate'] ?? $payload['plate_display'] ?? ''));
+            if ($plate !== '') {
+                $data['plate'] = $plate;
+            }
+            $vin = trim((string)($vehicle['vin'] ?? $payload['vin'] ?? ''));
+            if ($vin !== '') {
+                $data['vin'] = $vin;
+            }
+            $odometer = trim((string)($vehicle['odometer_km'] ?? $vehicle['mileage'] ?? $payload['odometer_km'] ?? $payload['mileage'] ?? ''));
+            if ($odometer !== '') {
+                $data['odometer'] = $odometer;
+            }
+            $fuel = trim((string)($vehicle['fuel_level'] ?? $payload['fuel_level'] ?? ''));
+            if ($fuel !== '') {
+                $data['fuel_level'] = $fuel;
+            }
+
+            $requestType = trim((string)($req['request_type'] ?? $payload['request_type'] ?? $service['request_type'] ?? ''));
+            $route = trim((string)($service['route'] ?? $service['main'] ?? $payload['service_route'] ?? ''));
+            $data['service_type'] = m360_intake_contract_service_type_fa($requestType, $route);
+
+            $desc = trim((string)($service['description'] ?? $service['customer_complaint'] ?? $payload['request_description'] ?? $payload['service_description'] ?? ''));
+            if ($desc !== '') {
+                $data['request_description'] = $desc;
+            }
+
+            $cost = trim((string)($docs['cost_agreement'] ?? $payload['cost_agreement'] ?? ''));
+            if ($cost !== '') {
+                $data['cost_range'] = $cost;
+            }
+            $costNote = trim((string)($docs['cost_agreement_note'] ?? $payload['cost_agreement_note'] ?? ''));
+            if ($costNote !== '') {
+                $data['prepayment'] = $costNote;
+            }
+
+            $agreements = is_array($ri['agreements'] ?? null) ? $ri['agreements'] : [];
+            if ($agreements !== []) {
+                $thirdFa = trim((string)($agreements['third_party_insurance_fa'] ?? ''));
+                if ($thirdFa === '' || $thirdFa === '—') {
+                    $thirdFa = function_exists('m360_contract_agreement_yes_no_display')
+                        ? m360_contract_agreement_yes_no_display((string)($agreements['third_party_insurance'] ?? ''))
+                        : (function_exists('m360_rw_intake_agreement_yes_no_fa')
+                            ? m360_rw_intake_agreement_yes_no_fa((string)($agreements['third_party_insurance'] ?? ''))
+                            : '');
+                }
+                $bodyFa = trim((string)($agreements['body_insurance_fa'] ?? ''));
+                if ($bodyFa === '' || $bodyFa === '—') {
+                    $bodyFa = function_exists('m360_contract_agreement_yes_no_display')
+                        ? m360_contract_agreement_yes_no_display((string)($agreements['body_insurance'] ?? ''))
+                        : (function_exists('m360_rw_intake_agreement_yes_no_fa')
+                            ? m360_rw_intake_agreement_yes_no_fa((string)($agreements['body_insurance'] ?? ''))
+                            : '');
+                }
+                $testFa = trim((string)($agreements['test_drive_permission_fa'] ?? ''));
+                if ($testFa === '' || $testFa === '—') {
+                    $testFa = function_exists('m360_contract_agreement_yes_no_display')
+                        ? m360_contract_agreement_yes_no_display((string)($agreements['test_drive_permission'] ?? ''))
+                        : (function_exists('m360_rw_intake_agreement_yes_no_fa')
+                            ? m360_rw_intake_agreement_yes_no_fa((string)($agreements['test_drive_permission'] ?? ''))
+                            : '');
+                }
+                $purchaseFa = trim((string)($agreements['part_purchase_authorization_fa'] ?? ''));
+                if ($purchaseFa === '' || $purchaseFa === '—') {
+                    $purchaseFa = function_exists('m360_contract_part_purchase_display')
+                        ? m360_contract_part_purchase_display((string)($agreements['part_purchase_authorization'] ?? ''))
+                        : (function_exists('m360_rw_intake_part_purchase_authorization_fa')
+                            ? m360_rw_intake_part_purchase_authorization_fa((string)($agreements['part_purchase_authorization'] ?? ''))
+                            : '');
+                }
+
+                // Always map min/max independently of range FA (comma-safe digit normalize).
+                $min = function_exists('m360_contract_normalize_money_digits')
+                    ? m360_contract_normalize_money_digits($agreements['service_cost_min'] ?? '')
+                    : preg_replace('/[^\d]/', '', (string)($agreements['service_cost_min'] ?? '')) ?? '';
+                $max = function_exists('m360_contract_normalize_money_digits')
+                    ? m360_contract_normalize_money_digits($agreements['service_cost_max'] ?? '')
+                    : preg_replace('/[^\d]/', '', (string)($agreements['service_cost_max'] ?? '')) ?? '';
+                if ($min !== '') {
+                    $data['service_cost_min'] = $min;
+                }
+                if ($max !== '') {
+                    $data['service_cost_max'] = $max;
+                }
+
+                $rangeFa = trim((string)($agreements['service_cost_range_fa'] ?? ''));
+                if ($rangeFa === '' && $min !== '' && $max !== '') {
+                    $rangeFa = 'از ' . m360_format_number((int)$min) . ' تا ' . m360_format_number((int)$max) . ' ریال';
+                }
+                // Legacy: parse «از X تا Y» from cost_agreement / range text when min/max keys missing.
+                if (($min === '' || $max === '') && function_exists('m360_contract_parse_cost_range_bounds')) {
+                    $parsed = m360_contract_parse_cost_range_bounds($rangeFa !== '' ? $rangeFa : (string)($data['cost_range'] ?? ''));
+                    if ($min === '' && $parsed['min'] !== '') {
+                        $min = $parsed['min'];
+                        $data['service_cost_min'] = $min;
+                    }
+                    if ($max === '' && $parsed['max'] !== '') {
+                        $max = $parsed['max'];
+                        $data['service_cost_max'] = $max;
+                    }
+                }
+                $otherNote = trim((string)($agreements['other_agreements_note'] ?? ''));
+
+                $data['third_party_insurance'] = function_exists('m360_contract_normalize_agreement_display')
+                    ? m360_contract_normalize_agreement_display($thirdFa)
+                    : (($thirdFa !== '' && $thirdFa !== '—') ? $thirdFa : '');
+                $data['body_insurance_status'] = function_exists('m360_contract_normalize_agreement_display')
+                    ? m360_contract_normalize_agreement_display($bodyFa)
+                    : (($bodyFa !== '' && $bodyFa !== '—') ? $bodyFa : '');
+                $data['test_drive_allowed'] = function_exists('m360_contract_normalize_agreement_display')
+                    ? m360_contract_normalize_agreement_display($testFa)
+                    : (($testFa !== '' && $testFa !== '—') ? $testFa : '');
+                $data['purchase_limit'] = function_exists('m360_contract_normalize_agreement_display')
+                    ? m360_contract_normalize_agreement_display($purchaseFa)
+                    : (($purchaseFa !== '' && $purchaseFa !== '—') ? $purchaseFa : '');
+                if ($rangeFa !== '' && !(function_exists('m360_contract_is_generic_placeholder') && m360_contract_is_generic_placeholder($rangeFa))) {
+                    $data['cost_range'] = $rangeFa;
+                }
+                $data['other_agreements_note'] = $otherNote;
+            } elseif (function_exists('m360_contract_parse_cost_range_bounds')) {
+                // No agreements object yet: still try to recover min/max from legacy cost_agreement text.
+                $parsed = m360_contract_parse_cost_range_bounds((string)($data['cost_range'] ?? ''));
+                if ($parsed['min'] !== '') {
+                    $data['service_cost_min'] = $parsed['min'];
+                }
+                if ($parsed['max'] !== '') {
+                    $data['service_cost_max'] = $parsed['max'];
+                }
+            }
+
             if (isset($payload['estimated_cost_range'])) {
-                $data['cost_range'] = (string)$payload['estimated_cost_range'];
+                $est = trim((string)$payload['estimated_cost_range']);
+                if ($est !== '' && !(function_exists('m360_contract_is_generic_placeholder') && m360_contract_is_generic_placeholder($est))) {
+                    $data['cost_range'] = $est;
+                }
             }
             if (isset($payload['prepayment_amount'])) {
                 $data['prepayment'] = (string)$payload['prepayment_amount'];
             }
-            if (isset($payload['purchase_limit'])) {
-                $data['purchase_limit'] = (string)$payload['purchase_limit'];
+            if (isset($payload['purchase_limit']) && trim((string)($data['purchase_limit'] ?? '')) === '') {
+                $purchaseRaw = trim((string)$payload['purchase_limit']);
+                $data['purchase_limit'] = function_exists('m360_contract_part_purchase_display')
+                    ? m360_contract_part_purchase_display($purchaseRaw)
+                    : (function_exists('m360_rw_intake_part_purchase_authorization_fa')
+                        ? m360_rw_intake_part_purchase_authorization_fa($purchaseRaw)
+                        : $purchaseRaw);
             }
-            if (isset($payload['test_drive_allowed'])) {
-                $data['test_drive_allowed'] = (string)$payload['test_drive_allowed'];
+            if (isset($payload['test_drive_allowed']) && trim((string)($data['test_drive_allowed'] ?? '')) === '') {
+                $data['test_drive_allowed'] = function_exists('m360_contract_agreement_yes_no_display')
+                    ? m360_contract_agreement_yes_no_display((string)$payload['test_drive_allowed'])
+                    : (string)$payload['test_drive_allowed'];
             }
-            if (isset($payload['body_insurance_status'])) {
-                $data['body_insurance_status'] = (string)$payload['body_insurance_status'];
+            if (isset($payload['body_insurance_status']) && trim((string)($data['body_insurance_status'] ?? '')) === '') {
+                $data['body_insurance_status'] = function_exists('m360_contract_agreement_yes_no_display')
+                    ? m360_contract_agreement_yes_no_display((string)$payload['body_insurance_status'])
+                    : (string)$payload['body_insurance_status'];
             }
+
+            // Final sanitize: never leave generic placeholders in snapshot agreement fields.
+            foreach (['third_party_insurance', 'body_insurance_status', 'test_drive_allowed', 'purchase_limit', 'other_agreements_note', 'cost_range', 'prepayment', 'checklist_summary'] as $agreeKey) {
+                if (function_exists('m360_contract_normalize_agreement_display')) {
+                    $data[$agreeKey] = m360_contract_normalize_agreement_display($data[$agreeKey] ?? '');
+                }
+            }
+
+            $trunk = trim((string)($condition['trunk_belongings_note'] ?? ''));
+            $damage = trim((string)($condition['damage_zones_note'] ?? ''));
+            $checklist = trim($trunk . ($trunk !== '' && $damage !== '' ? ' | ' : '') . $damage);
+            if ($checklist !== '') {
+                $data['checklist_summary'] = $checklist;
+            }
+
+            $visit = trim((string)($req['visit_date'] ?? $vehicle['visit_date'] ?? $payload['visit_date'] ?? ''));
+            if ($visit !== '') {
+                $data['visit_date'] = $visit;
+                $data['reception_date'] = substr($visit, 0, 10);
+            }
+            $data['online_request_id'] = (string)$onlineRequestId;
         }
     }
 
@@ -336,11 +574,112 @@ function m360_intake_contract_generate_for_online_request(
             return ['ok' => false, 'message' => 'قرارداد این درخواست قبلاً امضا شده است.', 'contract_id' => (int)$existing['contract_id'], 'reused' => true];
         }
 
-        return ['ok' => true, 'message' => 'قرارداد فعال موجود استفاده شد.', 'contract_id' => (int)$existing['contract_id'], 'reused' => true];
+        // Revision/resend: refresh unsigned contract snapshot + token without new schema/version table.
+        $contractId = (int)($existing['contract_id'] ?? 0);
+        $priorSnapshots = [];
+        $oldJsonRaw = trim((string)($existing['contract_data_json'] ?? ''));
+        if ($oldJsonRaw !== '') {
+            $oldDecoded = json_decode($oldJsonRaw, true);
+            if (is_array($oldDecoded)) {
+                $priorSnapshots = is_array($oldDecoded['prior_snapshots'] ?? null) ? $oldDecoded['prior_snapshots'] : [];
+                $priorSnapshots[] = [
+                    'snapshot_hash' => (string)($existing['contract_body_hash'] ?? $oldDecoded['contract_hash'] ?? ''),
+                    'contract_version' => defined('M360_CONTRACT_VERSION') ? M360_CONTRACT_VERSION : 'MOGHARE360-INTAKE-V1',
+                    'service_cost_min' => (string)($oldDecoded['service_cost_min'] ?? ''),
+                    'service_cost_max' => (string)($oldDecoded['service_cost_max'] ?? ''),
+                    'cost_range' => (string)($oldDecoded['cost_range'] ?? ''),
+                    'superseded_at' => gmdate('c'),
+                    'status' => 'SUPERSEDED',
+                    'source' => 'CONTRACT_SNAPSHOT',
+                    'pdf_type' => 'none',
+                ];
+                if (count($priorSnapshots) > 20) {
+                    $priorSnapshots = array_slice($priorSnapshots, -20);
+                }
+            }
+        }
+        $snapshot = m360_intake_contract_build_snapshot($conn, null, $onlineRequestId);
+        // Overlay only non-blank bootstrap fields so empty dash placeholders cannot wipe agreements.
+        foreach ($snapshotData as $k => $v) {
+            if (is_string($v) || is_int($v) || is_float($v)) {
+                $blank = function_exists('m360_contract_is_blank_display')
+                    ? m360_contract_is_blank_display($v)
+                    : (trim((string)$v) === '' || trim((string)$v) === '-' || trim((string)$v) === '—');
+                if ($blank) {
+                    continue;
+                }
+            }
+            $snapshot[$k] = $v;
+        }
+        $snapshot['online_request_id'] = (string)$onlineRequestId;
+        $snapshot['revision_at'] = gmdate('c');
+        $snapshot['revision_note'] = 'قرارداد برای ارسال مجدد/اصلاح به‌روزرسانی شد.';
+        $snapshot['prior_snapshots'] = $priorSnapshots;
+        $html = m360_contract_render_html($snapshot, true);
+        $bodyHash = m360_intake_contract_hash($html);
+        $snapshot['contract_hash'] = $bodyHash;
+        $snapshot['workflow'] = [
+            'review_completed_at' => '',
+            'consent_at' => '',
+            'consent_text' => '',
+            'signature_draft_hash' => '',
+            'signature_draft_at' => '',
+            'superseded_prior_customer_approval' => true,
+        ];
+        $json = json_encode($snapshot, JSON_UNESCAPED_UNICODE);
+        if ($json === false) {
+            $json = '{}';
+        }
+        $tokenHash = m360_intake_contract_hash(trim($rawToken));
+        $expires = trim($tokenExpiresAt) !== '' ? $tokenExpiresAt : gmdate('Y-m-d H:i:s', time() + M360_CONTRACT_TOKEN_TTL_SECONDS);
+        $mobileNorm = trim($mobile);
+        if ($mobileNorm === '' || $mobileNorm === '-') {
+            $mobileNorm = trim((string)($existing['mobile'] ?? ''));
+        }
+        $ok = customer_core_execute(
+            $conn,
+            'UPDATE dbo.' . M360_CONTRACT_TABLE . '
+             SET contract_status = ?,
+                 contract_body_hash = ?,
+                 contract_data_json = ?,
+                 secure_token_hash = ?,
+                 secure_token_expires_at = ?,
+                 mobile = COALESCE(NULLIF(?, N\'\'), mobile),
+                 viewed_at = NULL,
+                 updated_at = SYSUTCDATETIME()
+             WHERE contract_id = ? AND contract_status NOT IN (?, ?)',
+            [
+                M360_CONTRACT_STATUS_SENT,
+                $bodyHash,
+                $json,
+                $tokenHash,
+                $expires,
+                $mobileNorm,
+                $contractId,
+                M360_CONTRACT_STATUS_SIGNED,
+                M360_CONTRACT_STATUS_OVERRIDDEN,
+            ]
+        );
+        if ($ok === false) {
+            return ['ok' => false, 'message' => 'به‌روزرسانی قرارداد برای ارسال مجدد ناموفق بود.', 'contract_id' => $contractId, 'reused' => true];
+        }
+        m360_intake_contract_record_event($conn, $contractId, 'CONTRACT_REVISED_FOR_RESEND', 'snapshot_refreshed', null);
+
+        return ['ok' => true, 'message' => 'قرارداد برای ارسال مجدد به‌روزرسانی شد.', 'contract_id' => $contractId, 'reused' => true];
     }
 
     $snapshot = m360_intake_contract_build_snapshot($conn, null, $onlineRequestId);
-    $snapshot = array_merge($snapshot, $snapshotData);
+    foreach ($snapshotData as $k => $v) {
+        if (is_string($v) || is_int($v) || is_float($v)) {
+            $blank = function_exists('m360_contract_is_blank_display')
+                ? m360_contract_is_blank_display($v)
+                : (trim((string)$v) === '' || trim((string)$v) === '-' || trim((string)$v) === '—');
+            if ($blank) {
+                continue;
+            }
+        }
+        $snapshot[$k] = $v;
+    }
     $snapshot['online_request_id'] = (string)$onlineRequestId;
     $html = m360_contract_render_html($snapshot, true);
     $bodyHash = m360_intake_contract_hash($html);
@@ -366,13 +705,14 @@ function m360_intake_contract_generate_for_online_request(
         return ['ok' => false, 'message' => 'شماره موبایل مشتری برای قرارداد یافت نشد.', 'contract_id' => null, 'reused' => false];
     }
 
-    $insertOk = customer_core_execute(
+    $statement = customer_core_execute(
         $conn,
         'INSERT INTO dbo.' . M360_CONTRACT_TABLE . ' (
             contract_version, online_request_id, jobcard_id, customer_id, vehicle_id, mobile,
             contract_status, contract_title, contract_body_hash, contract_data_json,
             secure_token_hash, secure_token_expires_at, created_by_user_id
-        ) VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        ) OUTPUT INSERTED.contract_id
+          VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
         [
             M360_CONTRACT_VERSION,
             $onlineRequestId,
@@ -389,13 +729,16 @@ function m360_intake_contract_generate_for_online_request(
         ]
     );
 
-    if ($insertOk === false) {
+    if ($statement === false || @odbc_fetch_row($statement) !== true) {
         return ['ok' => false, 'message' => 'ثبت قرارداد ناموفق بود.', 'contract_id' => null, 'reused' => false];
     }
 
-    $contractId = (int)(customer_core_scope_identity($conn) ?? 0);
-    m360_intake_contract_record_event($conn, $contractId, 'CONTRACT_ISSUED', 'online_request #' . $onlineRequestId, $userId);
-    m360_intake_contract_record_event($conn, $contractId, 'CUSTOMER_SIGNATURE_TASK_CREATED', null, $userId);
+    $newContractId = @odbc_result($statement, 1);
+    $contractId = $newContractId === false || $newContractId === null ? 0 : (int)$newContractId;
+    if ($contractId > 0) {
+        m360_intake_contract_record_event($conn, $contractId, 'CONTRACT_ISSUED', 'online_request #' . $onlineRequestId, $userId);
+        m360_intake_contract_record_event($conn, $contractId, 'CUSTOMER_SIGNATURE_TASK_CREATED', null, $userId);
+    }
 
     if ($contractId > 0 && function_exists('m360_rw_intake_ensure_canonical_contract_cartable_task')) {
         $requestRow = function_exists('m360_online_req_fetch_by_id')
@@ -661,13 +1004,14 @@ function m360_intake_contract_generate_for_jobcard(int $jobcardId, ?int $onlineR
         return ['ok' => false, 'message' => 'شماره موبایل مشتری برای قرارداد یافت نشد.', 'contract_id' => null, 'raw_token' => null, 'reused' => false];
     }
 
-    $insertOk = customer_core_execute(
+    $statement = customer_core_execute(
         $conn,
         'INSERT INTO dbo.' . M360_CONTRACT_TABLE . ' (
             contract_version, online_request_id, jobcard_id, customer_id, vehicle_id, mobile,
             contract_status, contract_title, contract_body_hash, contract_data_json,
             secure_token_hash, secure_token_expires_at, created_by_user_id
-        ) VALUES (?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?, ?, ?)',
+        ) OUTPUT INSERTED.contract_id
+          VALUES (?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?, ?, ?)',
         [
             M360_CONTRACT_VERSION,
             $onlineRequestId,
@@ -683,12 +1027,15 @@ function m360_intake_contract_generate_for_jobcard(int $jobcardId, ?int $onlineR
         ]
     );
 
-    if ($insertOk === false) {
+    if ($statement === false || @odbc_fetch_row($statement) !== true) {
         return ['ok' => false, 'message' => 'ثبت قرارداد ناموفق بود.', 'contract_id' => null, 'raw_token' => null, 'reused' => false];
     }
 
-    $contractId = (int)(customer_core_scope_identity($conn) ?? 0);
-    m360_intake_contract_record_event($conn, $contractId, 'CONTRACT_GENERATED', 'JobCard #' . $jobcardId, $userId);
+    $newContractId = @odbc_result($statement, 1);
+    $contractId = $newContractId === false || $newContractId === null ? 0 : (int)$newContractId;
+    if ($contractId > 0) {
+        m360_intake_contract_record_event($conn, $contractId, 'CONTRACT_GENERATED', 'JobCard #' . $jobcardId, $userId);
+    }
 
     return ['ok' => true, 'message' => 'قرارداد پذیرش تولید شد.', 'contract_id' => $contractId, 'raw_token' => $token['raw'], 'reused' => false];
 }
@@ -862,14 +1209,419 @@ function m360_intake_contract_apply_manager_override($conn, int $contractId, str
 
 function m360_intake_contract_snapshot_from_row(array $row): array
 {
-    $data = m360_intake_contract_build_snapshot(customer_core_db(), (int)($row['jobcard_id'] ?? 0), (int)($row['online_request_id'] ?? 0) ?: null);
+    $live = m360_intake_contract_build_snapshot(customer_core_db(), (int)($row['jobcard_id'] ?? 0), (int)($row['online_request_id'] ?? 0) ?: null);
+    $data = $live;
     $json = trim((string)($row['contract_data_json'] ?? ''));
     if ($json !== '') {
         $decoded = json_decode($json, true);
         if (is_array($decoded)) {
-            $data = array_merge($data, $decoded);
+            $data = array_merge($live, $decoded);
+            // Unsigned: do not let frozen dash placeholders hide live agreements min/max.
+            if (!m360_intake_contract_is_signed($row)) {
+                $preferLiveKeys = [
+                    'service_cost_min',
+                    'service_cost_max',
+                    'cost_range',
+                    'third_party_insurance',
+                    'body_insurance_status',
+                    'test_drive_allowed',
+                    'purchase_limit',
+                    'other_agreements_note',
+                ];
+                foreach ($preferLiveKeys as $key) {
+                    $frozen = $decoded[$key] ?? null;
+                    $fromLive = $live[$key] ?? null;
+                    $frozenBlank = function_exists('m360_contract_is_blank_display')
+                        ? m360_contract_is_blank_display($frozen)
+                        : (trim((string)$frozen) === '' || trim((string)$frozen) === '-' || trim((string)$frozen) === '—');
+                    $liveBlank = function_exists('m360_contract_is_blank_display')
+                        ? m360_contract_is_blank_display($fromLive)
+                        : (trim((string)$fromLive) === '' || trim((string)$fromLive) === '-' || trim((string)$fromLive) === '—');
+                    if ($frozenBlank && !$liveBlank) {
+                        $data[$key] = $fromLive;
+                    }
+                }
+            }
         }
     }
     $data['contract_hash'] = (string)($row['contract_body_hash'] ?? $data['contract_hash']);
+    // Never leave generic intake placeholders in contract/PDF snapshot fields.
+    foreach ([
+        'third_party_insurance',
+        'body_insurance_status',
+        'test_drive_allowed',
+        'purchase_limit',
+        'other_agreements_note',
+        'cost_range',
+        'prepayment',
+        'checklist_summary',
+        'service_cost_min',
+        'service_cost_max',
+    ] as $agreeKey) {
+        if (function_exists('m360_contract_normalize_agreement_display')) {
+            $data[$agreeKey] = m360_contract_normalize_agreement_display($data[$agreeKey] ?? '');
+        }
+    }
     return $data;
+}
+
+/**
+ * Resolve Composer autoload for mPDF without exposing absolute paths to callers.
+ */
+function m360_contract_pdf_autoload(): bool
+{
+    static $loaded = null;
+    if ($loaded !== null) {
+        return $loaded;
+    }
+    $candidates = [
+        dirname(__DIR__) . DIRECTORY_SEPARATOR . 'vendor' . DIRECTORY_SEPARATOR . 'autoload.php',
+        dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'vendor' . DIRECTORY_SEPARATOR . 'autoload.php',
+    ];
+    foreach ($candidates as $path) {
+        if (is_file($path)) {
+            require_once $path;
+            $loaded = class_exists('\\Mpdf\\Mpdf');
+            return $loaded;
+        }
+    }
+    $loaded = false;
+
+    return false;
+}
+
+function m360_contract_pdf_engine_ready(): bool
+{
+    return m360_contract_pdf_autoload();
+}
+
+/**
+ * @return array{ok:bool,message:string,absolute:string,relative:string}
+ */
+function m360_contract_pdf_storage_paths(int $onlineRequestId, string $filename): array
+{
+    $onlineRequestId = max(1, $onlineRequestId);
+    $filename = preg_replace('/[^a-zA-Z0-9._-]+/', '_', $filename) ?? 'contract.pdf';
+    $relativeDir = 'storage/contracts/' . $onlineRequestId . '/pdf';
+    $absDir = dirname(__DIR__) . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relativeDir);
+    if (!is_dir($absDir) && !@mkdir($absDir, 0755, true) && !is_dir($absDir)) {
+        return ['ok' => false, 'message' => 'ایجاد مسیر ذخیره PDF ناموفق بود.', 'absolute' => '', 'relative' => ''];
+    }
+    $relative = $relativeDir . '/' . $filename;
+    $absolute = $absDir . DIRECTORY_SEPARATOR . $filename;
+
+    return ['ok' => true, 'message' => '', 'absolute' => $absolute, 'relative' => $relative];
+}
+
+/**
+ * @param array<string, mixed> $contractRow
+ */
+function m360_contract_pdf_status_fa(array $contractRow, array $snapshot = []): string
+{
+    if (m360_intake_contract_is_signed($contractRow)) {
+        return 'تأییدشده';
+    }
+    $workflow = is_array($snapshot['workflow'] ?? null) ? $snapshot['workflow'] : m360_intake_contract_get_workflow_meta($contractRow);
+    if (!empty($workflow['superseded_prior_customer_approval']) || trim((string)($workflow['customer_correction_note'] ?? '')) !== '') {
+        return 'برگشت برای اصلاح';
+    }
+    $status = strtoupper(trim((string)($contractRow['contract_status'] ?? '')));
+    if (in_array($status, [M360_CONTRACT_STATUS_SENT, M360_CONTRACT_STATUS_VIEWED, M360_CONTRACT_STATUS_OTP_SENT, M360_CONTRACT_STATUS_GENERATED], true)) {
+        return 'ارسال‌شده';
+    }
+
+    return 'پیش‌نویس';
+}
+
+/**
+ * @param array<string, mixed> $contractRow
+ */
+function m360_contract_pdf_type_for_row(array $contractRow): string
+{
+    if (m360_intake_contract_is_signed($contractRow)) {
+        return 'signed';
+    }
+    $status = strtoupper(trim((string)($contractRow['contract_status'] ?? '')));
+    if ($status === M360_CONTRACT_STATUS_DRAFT) {
+        return 'draft';
+    }
+    if (in_array($status, [M360_CONTRACT_STATUS_SENT, M360_CONTRACT_STATUS_VIEWED, M360_CONTRACT_STATUS_OTP_SENT, M360_CONTRACT_STATUS_GENERATED], true)) {
+        return 'sent';
+    }
+
+    return 'revised';
+}
+
+/**
+ * @param array<string, mixed> $dataJson
+ * @return list<array<string, mixed>>
+ */
+function m360_contract_pdf_list_from_data(array $dataJson): array
+{
+    $list = is_array($dataJson['contract_pdfs'] ?? null) ? $dataJson['contract_pdfs'] : [];
+    $out = [];
+    foreach ($list as $item) {
+        if (is_array($item)) {
+            $out[] = $item;
+        }
+    }
+
+    return $out;
+}
+
+/**
+ * @param array<string, mixed> $contractRow
+ * @return array{ok:bool,message:string,meta:?array<string,mixed>,bytes:string,created:bool}
+ */
+function m360_intake_contract_ensure_pdf(
+    $conn,
+    array $contractRow,
+    string $actor = 'staff',
+    ?int $generatedByUserId = null,
+    bool $recordDownloadEvent = false
+): array {
+    if (!is_resource($conn)) {
+        return ['ok' => false, 'message' => 'اتصال پایگاه داده برقرار نشد.', 'meta' => null, 'bytes' => '', 'created' => false];
+    }
+    if (!m360_contract_pdf_engine_ready()) {
+        return ['ok' => false, 'message' => 'موتور PDF (mPDF) در این محیط در دسترس نیست.', 'meta' => null, 'bytes' => '', 'created' => false];
+    }
+
+    $contractId = (int)($contractRow['contract_id'] ?? 0);
+    if ($contractId < 1) {
+        return ['ok' => false, 'message' => 'قرارداد معتبر نیست.', 'meta' => null, 'bytes' => '', 'created' => false];
+    }
+
+    $snapshot = m360_intake_contract_snapshot_from_row($contractRow);
+    $jsonRaw = trim((string)($contractRow['contract_data_json'] ?? ''));
+    $dataJson = $jsonRaw !== '' ? json_decode($jsonRaw, true) : [];
+    if (!is_array($dataJson)) {
+        $dataJson = [];
+    }
+    // Keep prior_snapshots / workflow from stored JSON.
+    if (isset($dataJson['prior_snapshots']) && is_array($dataJson['prior_snapshots'])) {
+        $snapshot['prior_snapshots'] = $dataJson['prior_snapshots'];
+    }
+    if (isset($dataJson['workflow']) && is_array($dataJson['workflow'])) {
+        $snapshot['workflow'] = $dataJson['workflow'];
+    }
+
+    $pdfType = m360_contract_pdf_type_for_row($contractRow);
+    $snapshotHash = trim((string)($contractRow['contract_body_hash'] ?? $snapshot['contract_hash'] ?? ''));
+    $pdfs = m360_contract_pdf_list_from_data($dataJson);
+    $pdfFormatVersion = 'COMPLETE_V1';
+
+    $generatedAt = gmdate('c');
+    $statusFa = m360_contract_pdf_status_fa($contractRow, $snapshot);
+    $acceptance = 'ثبت نشده';
+    $signed = m360_intake_contract_is_signed($contractRow);
+    $signedAt = trim((string)($contractRow['signed_at'] ?? ''));
+    $method = 'OTP / امضای دیجیتال / ثبت سیستمی';
+    if ($signed) {
+        $acceptance = 'تأیید شده توسط مشتری'
+            . ($signedAt !== '' ? (' — ' . $signedAt) : '');
+    } elseif ($statusFa === 'ارسال‌شده') {
+        $acceptance = 'در انتظار تأیید و امضای مشتری';
+    } elseif ($statusFa === 'برگشت برای اصلاح') {
+        $acceptance = 'مشتری قرارداد را برای اصلاح برگرداند';
+    }
+
+    $pdfData = $snapshot;
+    $pdfData['contract_title'] = M360_CONTRACT_TITLE;
+    $pdfData['contract_version'] = defined('M360_CONTRACT_VERSION') ? M360_CONTRACT_VERSION : 'MOGHARE360-INTAKE-V1';
+    $pdfData['contract_hash'] = $snapshotHash !== '' ? $snapshotHash : (string)($snapshot['contract_hash'] ?? '');
+    $pdfData['pdf_status_fa'] = $statusFa;
+    $pdfData['pdf_acceptance_info'] = $acceptance;
+    $pdfData['pdf_customer_signed'] = $signed;
+    $pdfData['pdf_customer_signed_at'] = $signedAt;
+    $pdfData['pdf_acceptance_method'] = $method;
+    $pdfData['documents_summary'] = (string)($snapshot['checklist_summary'] ?? '');
+
+    // Content hash must ignore generated_at so identical source reuses the same ACTIVE PDF.
+    $pdfDataForHash = $pdfData;
+    $pdfDataForHash['pdf_generated_at'] = 'STABLE';
+    $htmlForHash = m360_contract_render_pdf_html($pdfDataForHash);
+    $contentHash = hash('sha256', $htmlForHash . '|' . $pdfFormatVersion . '|' . $pdfType);
+
+    foreach ($pdfs as $existing) {
+        $status = strtoupper((string)($existing['status'] ?? ''));
+        $type = (string)($existing['pdf_type'] ?? '');
+        $format = (string)($existing['pdf_format_version'] ?? '');
+        $existingContent = (string)($existing['content_hash'] ?? '');
+        $rel = trim((string)($existing['relative_url'] ?? ''));
+        if ($status !== 'ACTIVE' || $type !== $pdfType || $format !== $pdfFormatVersion) {
+            continue;
+        }
+        if ($existingContent === '' || !hash_equals($existingContent, $contentHash)) {
+            continue;
+        }
+        if ($rel === '' || !str_starts_with($rel, 'storage/')) {
+            continue;
+        }
+        $abs = dirname(__DIR__) . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $rel);
+        if (!is_file($abs)) {
+            continue;
+        }
+        $bytes = (string)@file_get_contents($abs);
+        if ($bytes === '' || !str_starts_with($bytes, '%PDF')) {
+            continue;
+        }
+        if ($recordDownloadEvent) {
+            m360_intake_contract_record_event(
+                $conn,
+                $contractId,
+                'CONTRACT_PDF_DOWNLOADED',
+                'pdf_id=' . (string)($existing['pdf_id'] ?? '') . ';actor=' . $actor,
+                $generatedByUserId
+            );
+        }
+
+        return ['ok' => true, 'message' => '', 'meta' => $existing, 'bytes' => $bytes, 'created' => false];
+    }
+
+    $pdfData['pdf_generated_at'] = $generatedAt;
+    $html = m360_contract_render_pdf_html($pdfData);
+
+    $tempDir = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'storage' . DIRECTORY_SEPARATOR . 'tmp' . DIRECTORY_SEPARATOR . 'mpdf';
+    if (!is_dir($tempDir)) {
+        @mkdir($tempDir, 0755, true);
+    }
+
+    try {
+        $mpdf = new \Mpdf\Mpdf([
+            'mode' => 'utf-8',
+            'format' => 'A4',
+            'default_font' => 'dejavusans',
+            'tempDir' => $tempDir,
+            'margin_left' => 12,
+            'margin_right' => 12,
+            'margin_top' => 12,
+            'margin_bottom' => 16,
+        ]);
+        $mpdf->SetDirectionality('rtl');
+        $mpdf->SetTitle(M360_CONTRACT_TITLE);
+        $mpdf->SetAuthor(M360_CONTRACT_COMPANY);
+        $mpdf->SetHTMLFooter('<div style="font-family:dejavusans; font-size:8pt; text-align:center; direction:rtl;">صفحه {PAGENO} از {nbpg} | ' . htmlspecialchars(M360_CONTRACT_VERSION, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</div>');
+        $mpdf->WriteHTML($html);
+        $bytes = $mpdf->Output('', \Mpdf\Output\Destination::STRING_RETURN);
+    } catch (\Throwable $e) {
+        return ['ok' => false, 'message' => 'تولید PDF ناموفق بود.', 'meta' => null, 'bytes' => '', 'created' => false];
+    }
+
+    if (!is_string($bytes) || $bytes === '' || !str_starts_with($bytes, '%PDF')) {
+        return ['ok' => false, 'message' => 'خروجی PDF معتبر نیست.', 'meta' => null, 'bytes' => '', 'created' => false];
+    }
+
+    $pdfId = 'pdf_' . bin2hex(random_bytes(8));
+    $onlineRequestId = (int)($contractRow['online_request_id'] ?? $snapshot['online_request_id'] ?? 0);
+    $filename = 'contract-req' . max(0, $onlineRequestId) . '-c' . $contractId . '-' . $pdfType . '-' . substr($pdfId, -8) . '.pdf';
+    $paths = m360_contract_pdf_storage_paths($onlineRequestId > 0 ? $onlineRequestId : 1, $filename);
+    if (!$paths['ok']) {
+        return ['ok' => false, 'message' => $paths['message'], 'meta' => null, 'bytes' => '', 'created' => false];
+    }
+    if (@file_put_contents($paths['absolute'], $bytes) === false) {
+        return ['ok' => false, 'message' => 'ذخیره فایل PDF ناموفق بود.', 'meta' => null, 'bytes' => '', 'created' => false];
+    }
+
+    foreach ($pdfs as $idx => $old) {
+        if (!is_array($old)) {
+            continue;
+        }
+        if (strtoupper((string)($old['status'] ?? '')) === 'ACTIVE') {
+            $pdfs[$idx]['status'] = 'SUPERSEDED';
+            $pdfs[$idx]['superseded_at'] = $generatedAt;
+        }
+    }
+
+    $meta = [
+        'pdf_id' => $pdfId,
+        'online_request_id' => $onlineRequestId > 0 ? (string)$onlineRequestId : '',
+        'contract_id' => (string)$contractId,
+        'contract_version' => defined('M360_CONTRACT_VERSION') ? M360_CONTRACT_VERSION : 'MOGHARE360-INTAKE-V1',
+        'pdf_format_version' => $pdfFormatVersion,
+        'pdf_type' => $pdfType,
+        'relative_url' => $paths['relative'],
+        'filename' => $filename,
+        'generated_at' => $generatedAt,
+        'generated_by_user_id' => $generatedByUserId !== null && $generatedByUserId > 0 ? (string)$generatedByUserId : '',
+        'generated_for_customer_id' => (string)((int)($contractRow['customer_id'] ?? 0)),
+        'snapshot_hash' => $snapshotHash,
+        'content_hash' => $contentHash,
+        'status' => 'ACTIVE',
+        'source' => 'CONTRACT_SNAPSHOT',
+        'actor' => $actor,
+    ];
+    $pdfs[] = $meta;
+    if (count($pdfs) > 40) {
+        $pdfs = array_slice($pdfs, -40);
+    }
+    $dataJson['contract_pdfs'] = $pdfs;
+    $dataJson['contract_hash'] = $snapshotHash !== '' ? $snapshotHash : (string)($dataJson['contract_hash'] ?? '');
+    $encoded = json_encode($dataJson, JSON_UNESCAPED_UNICODE);
+    if ($encoded === false) {
+        return ['ok' => false, 'message' => 'ثبت متادیتای PDF در SQL ناموفق بود.', 'meta' => null, 'bytes' => '', 'created' => false];
+    }
+    $ok = customer_core_execute(
+        $conn,
+        'UPDATE dbo.' . M360_CONTRACT_TABLE . ' SET contract_data_json = ?, updated_at = SYSUTCDATETIME() WHERE contract_id = ?',
+        [$encoded, $contractId]
+    );
+    if ($ok === false) {
+        return ['ok' => false, 'message' => 'به‌روزرسانی قرارداد برای متادیتای PDF ناموفق بود.', 'meta' => null, 'bytes' => '', 'created' => false];
+    }
+
+    $eventName = $pdfType === 'signed' ? 'CONTRACT_PDF_SIGNED_VERSION_GENERATED' : 'CONTRACT_PDF_GENERATED';
+    m360_intake_contract_record_event($conn, $contractId, $eventName, 'pdf_id=' . $pdfId . ';type=' . $pdfType . ';format=' . $pdfFormatVersion, $generatedByUserId);
+    if ($recordDownloadEvent) {
+        m360_intake_contract_record_event($conn, $contractId, 'CONTRACT_PDF_DOWNLOADED', 'pdf_id=' . $pdfId . ';actor=' . $actor, $generatedByUserId);
+    }
+
+    return ['ok' => true, 'message' => '', 'meta' => $meta, 'bytes' => $bytes, 'created' => true];
+}
+
+/**
+ * Public relative download URL (no absolute filesystem path).
+ */
+function m360_contract_pdf_download_url(int $contractId, string $actor = 'staff', string $token = ''): string
+{
+    $url = 'contract-pdf-download.php?contract_id=' . max(0, $contractId) . '&actor=' . rawurlencode($actor);
+    if ($token !== '') {
+        $url .= '&token=' . rawurlencode($token);
+    }
+
+    return $url;
+}
+
+/**
+ * @param array<string, mixed>|null $contractRow
+ */
+function m360_contract_pdf_download_label(?array $contractRow): string
+{
+    if (is_array($contractRow) && m360_intake_contract_is_signed($contractRow)) {
+        return 'دانلود PDF قرارداد تأییدشده';
+    }
+
+    return 'دانلود PDF قرارداد';
+}
+
+/**
+ * Render a safe download anchor when engine + contract are available.
+ *
+ * @param array<string, mixed>|null $contractRow
+ */
+function m360_contract_pdf_render_download_button(?array $contractRow, string $actor = 'staff', string $token = '', string $cssClass = 'm360-rw-btn m360-rw-btn-secondary'): void
+{
+    if (!is_array($contractRow) || (int)($contractRow['contract_id'] ?? 0) < 1) {
+        return;
+    }
+    if (!m360_contract_pdf_engine_ready()) {
+        echo '<p class="m360-rw-muted">دانلود PDF قرارداد فعلاً در این محیط فعال نیست (موتور mPDF).</p>';
+
+        return;
+    }
+    $label = m360_contract_pdf_download_label($contractRow);
+    $href = m360_contract_pdf_download_url((int)$contractRow['contract_id'], $actor, $token);
+    echo '<p class="m360-contract-pdf-download"><a class="' . htmlspecialchars($cssClass, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '" href="'
+        . htmlspecialchars($href, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8')
+        . '">' . htmlspecialchars($label, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</a></p>';
 }

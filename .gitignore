@@ -1,3 +1,7 @@
+# Composer dependencies (install at deploy/runtime: composer install)
+# Keep composer.json and composer.lock tracked; never commit vendor/.
+/vendor/
+
 # MOGHARE360 ERP local/private config
 private/erp-config.php
 private/m360-otp-config.php
