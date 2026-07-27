@@ -16,7 +16,7 @@ $readiness = $conn !== false ? m360_access_readiness_report($conn) : ['status' =
 m360_access_mgmt_render_head('مدیریت دسترسی پرسنل');
 m360_access_mgmt_render_flash();
 
-echo '<div class="m360-access-warning-box"><strong>مسیر اصلی:</strong> مدیریت دسترسی از این UI — JSON import فقط bootstrap/fallback است.</div>';
+echo '<div class="m360-access-warning-box"><strong>مسیر اصلی:</strong> مدیریت دسترسی از همین UI انجام می‌شود؛ ایمپورت JSON فقط برای راه‌اندازی یا وضعیت اضطراری است.</div>';
 
 if ($conn === false) {
     echo '<div class="m360-access-alert m360-access-alert-error">اتصال ODBC برقرار نشد.</div>';
@@ -26,16 +26,16 @@ if ($conn === false) {
         'WARNING' => 'warn',
         default => 'block',
     };
-    echo '<section class="m360-access-card"><h2>آمادگی One-Day Run</h2>';
+    echo '<section class="m360-access-card"><h2>آمادگی اجرای آزمایشی</h2>';
     echo '<p>وضعیت: <span class="m360-access-badge ' . m360_access_mgmt_h($badgeClass) . '">' . m360_access_mgmt_h((string)$readiness['status']) . '</span></p>';
     echo '<div class="m360-access-grid">';
     echo '<div class="m360-access-kpi"><div class="val">' . count($staff) . '</div><div class="lbl">کاربران ثبت‌شده</div></div>';
-    echo '<div class="m360-access-kpi"><div class="val">' . m360_access_user_count_non_owner_staff($conn) . '</div><div class="lbl">پرسنل (20001+)</div></div>';
+    echo '<div class="m360-access-kpi"><div class="val">' . m360_access_user_count_non_owner_staff($conn) . '</div><div class="lbl">پرسنل عملیاتی</div></div>';
     echo '<div class="m360-access-kpi"><div class="val">' . m360_access_user_count_login_enabled_staff($conn) . '</div><div class="lbl">ورود فعال</div></div>';
     echo '</div></section>';
 
     echo '<section class="m360-access-card"><h2>لیست پرسنل / کاربران</h2>';
-    echo '<p><a class="m360-access-btn" href="erp-access-user-create.php">+ ایجاد پرسنل</a></p>';
+    echo '<p><a class="m360-access-btn" href="erp-access-user-create.php">ایجاد پرسنل</a></p>';
     if ($staff === []) {
         echo '<p>کاربری یافت نشد.</p>';
     } else {

@@ -125,6 +125,7 @@ function m360_staff_home_role_labels_fa(): array
         'PARTS' => 'انبار / قطعات',
         'FINANCE' => 'مالی',
         'QC' => 'کنترل کیفیت',
+        'CRM' => 'ارتباط با مشتری',
         'UNKNOWN' => 'نامشخص',
     ];
 }
@@ -155,6 +156,7 @@ function m360_staff_home_known_role_codes(): array
         'PARTS',
         'FINANCE',
         'QC',
+        'CRM',
         'UNKNOWN',
     ];
 }
@@ -166,6 +168,30 @@ function m360_staff_home_require_session(): void
         header('Location: staff-login.php');
         exit;
     }
+}
+
+function m360_staff_home_require_role_code($conn, array $allowedRoles): string
+{
+    m360_staff_home_require_session();
+
+    $allowed = array_map(
+        static fn($role): string => strtoupper(trim((string)$role)),
+        $allowedRoles
+    );
+    $userId = (int)erp_auth_context_session_user_id();
+    $companyId = (int)($_SESSION['erp_company_id'] ?? 1);
+    $roleCode = is_resource($conn)
+        ? m360_staff_home_resolve_role_code($conn, $userId, $companyId)
+        : 'UNKNOWN';
+
+    if (!in_array($roleCode, $allowed, true)) {
+        http_response_code(403);
+        header('Content-Type: text/plain; charset=UTF-8');
+        echo 'دسترسی مجاز نیست.';
+        exit;
+    }
+
+    return $roleCode;
 }
 
 function m360_staff_home_sync_session_from_login_payload(array $payload): void
@@ -440,7 +466,8 @@ function m360_staff_home_role_start_questions(): array
         'TECHNICIAN' => 'تکنسین امروز کار فنی را از کدام تابلوی فنی/اجرا شروع کند؟',
         'PARTS' => 'انبار امروز درخواست قطعه را از کجا ببیند و قطعه را از کجا رزرو/مصرف کند؟',
         'FINANCE' => 'مالی امروز پرداخت، برآورد، فاکتور نهایی و تسویه را از کجا پیگیری کند؟',
-        'QC' => 'QC امروز خودروهای آماده کنترل را از کجا ببیند و چک‌لیست را از کجا تکمیل کند؟',
+        'QC' => 'QC امروز کدام خودرو را کنترل کند و نتیجه را از کجا ثبت کند؟',
+        'CRM' => 'پیگیری پاسخ مشتری امروز از کدام صف شروع شود؟',
     ];
 }
 
@@ -556,7 +583,7 @@ function m360_staff_home_workbench_items(string $roleCode): array
             [
                 m360_staff_home_item($g(M360_STAFF_HOME_GROUP_TODAY), 'درخواست‌های آنلاین', 'erp-reception-online-requests.php', 'شروع پذیرش — مشاهده و پذیرش درخواست‌های جدید', $roleCode),
                 m360_staff_home_item($g(M360_STAFF_HOME_GROUP_TODAY), 'JobCardهای پذیرش', 'erp-reception-jobcards.php', 'ثبت ورود و پیشرفت JobCard پذیرش', $roleCode),
-                m360_staff_home_item($g(M360_STAFF_HOME_GROUP_TODAY), 'برد قراردادهای پذیرش', 'erp-intake-contracts.php', 'گیت امضای قرارداد P1.5', $roleCode),
+                m360_staff_home_item($g(M360_STAFF_HOME_GROUP_TODAY), 'برد قراردادهای پذیرش (فقط‌خواندنی / هماهنگی)', 'erp-intake-contracts.php', 'مرجع هماهنگی — ارسال/امضا فقط از پرونده پذیرش + کارتابل مشتری', $roleCode),
             ],
             [
                 m360_staff_home_item($g(M360_STAFF_HOME_GROUP_FOLLOWUP), 'جزئیات درخواست آنلاین', 'erp-reception-online-request-detail.php', 'از فهرست درخواست‌های آنلاین', $roleCode, 'info'),
@@ -568,7 +595,7 @@ function m360_staff_home_workbench_items(string $roleCode): array
                 m360_staff_home_item($g(M360_STAFF_HOME_GROUP_OPERATIONS), 'عملیات JobCard پذیرش', 'erp-reception-jobcard-action.php', 'از جزئیات JobCard پذیرش', $roleCode, 'note'),
             ],
             [
-                m360_staff_home_item($g(M360_STAFF_HOME_GROUP_REPORTS), 'فرم درخواست مشتری', 'customer-request.php', 'فرم عمومی درخواست مشتری (مرجع)', $roleCode),
+                m360_staff_home_item($g(M360_STAFF_HOME_GROUP_REPORTS), 'نمایش فرم عمومی مشتری', 'customer-request.php', 'فقط مرجع؛ عملیات پذیرش از میز پذیرش / تکمیل پرونده', $roleCode, 'ref_coord'),
             ]
         ),
         'SERVICE_MANAGER' => array_merge(
@@ -655,6 +682,9 @@ function m360_staff_home_workbench_items(string $roleCode): array
                 m360_staff_home_item($g(M360_STAFF_HOME_GROUP_OPERATIONS), 'عملیات QC', 'erp-qc-action.php', 'از جزئیات QC', $roleCode, 'note'),
             ]
         ),
+        'CRM' => [
+            m360_staff_home_item($g(M360_STAFF_HOME_GROUP_TODAY), 'صف پاسخ مشتری', 'erp-customer-clarification-queue.php', 'پیگیری ابهام‌ها و پاسخ‌های مشتری', $roleCode),
+        ],
         default => [],
     };
 
@@ -699,6 +729,7 @@ function m360_staff_home_role_routes(string $roleCode): array
         'PARTS' => ['میز کار انبار / قطعات', 'رزرو، مصرف و درخواست خرید'],
         'FINANCE' => ['میز کار مالی', 'پرداخت، برآورد، فاکتور و تسویه'],
         'QC' => ['میز کار کنترل کیفیت', 'QC و آمادگی تحویل'],
+        'CRM' => ['میز کار ارتباط با مشتری', 'پیگیری پاسخ‌ها و ابهام‌های مشتری'],
     ];
 
     if (!isset($meta[$roleCode])) {
@@ -749,7 +780,7 @@ function m360_staff_home_resolve_role_code($conn, int $userId, int $companyId): 
         );
         if ($roleCode !== null && trim($roleCode) !== '') {
             $normalized = strtoupper(trim($roleCode));
-            if (in_array($normalized, ['OWNER', 'SYSTEM_ADMIN', 'RECEPTION', 'SERVICE_MANAGER', 'TECHNICIAN', 'PARTS', 'FINANCE', 'QC'], true)) {
+            if (in_array($normalized, ['OWNER', 'SYSTEM_ADMIN', 'RECEPTION', 'SERVICE_MANAGER', 'TECHNICIAN', 'PARTS', 'FINANCE', 'QC', 'CRM'], true)) {
                 return $normalized;
             }
         }
@@ -771,6 +802,7 @@ function m360_staff_home_resolve_role_code($conn, int $userId, int $companyId): 
         'operations_manager' => 'SERVICE_MANAGER',
         'mechanical_staff' => 'TECHNICIAN',
         'inventory_staff' => 'PARTS',
+        'crm_staff' => 'CRM',
         'finance_staff' => 'FINANCE',
         'technical_manager' => 'QC',
     ];

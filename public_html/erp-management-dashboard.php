@@ -43,6 +43,8 @@ $cardDefs = [
     <title>داشبورد مدیریت MOGHARE360</title>
     <link rel="stylesheet" href="assets/moghare360-ui/moghare360-soft-run-release.css">
     <link rel="stylesheet" href="assets/css/m360-management-dashboard.css">
+    <link rel="stylesheet" href="assets/css/mirror.css">
+    <link rel="stylesheet" href="assets/css/moghare360-v1-luxury-ui.css">
 </head>
 <body class="m360-mgmt-page">
 <div class="w1c-wrap m360-mgmt-wrap">

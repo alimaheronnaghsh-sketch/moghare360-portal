@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 
+require_once __DIR__ . DIRECTORY_SEPARATOR . 'erp-config-loader.php';
+
 /**
  * MOGHARE360 ERP Auth Context Helper
  *
@@ -70,8 +72,8 @@ if (!function_exists('erp_auth_current_user_id')) {
             return $sessionUserId;
         }
 
-        // CONTROLLED LOCAL TEST FALLBACK ONLY - NOT PRODUCTION AUTH
-        return 10001;
+        // CLI fixtures may use the platform owner; web requests always require a real session.
+        return PHP_SAPI === 'cli' ? 10001 : null;
     }
 }
 
@@ -85,24 +87,39 @@ if (!function_exists('erp_auth_create_local_odbc_connection')) {
             throw new RuntimeException('ODBC extension is not available.');
         }
 
-        $dsns = [
-            'Driver={ODBC Driver 17 for SQL Server};Server=.\SQLEXPRESS;Database=moghare360_ERP;Trusted_Connection=Yes;',
-            'Driver={ODBC Driver 18 for SQL Server};Server=.\SQLEXPRESS;Database=moghare360_ERP;Trusted_Connection=Yes;TrustServerCertificate=Yes;',
-        ];
+        $config = erp_load_config();
+        $database = $config['database'];
+        $server = trim((string)$database['server']);
+        $name = trim((string)$database['name']);
+        $trusted = (bool)$database['trusted_connection'];
+        $username = $trusted ? '' : (string)$database['username'];
+        $password = $trusted ? '' : (string)$database['password'];
 
-        $lastError = null;
+        if ($server === '' || $name === '') {
+            throw new RuntimeException('ERP database configuration is invalid.');
+        }
+
+        $dsns = [];
+        foreach (['ODBC Driver 18 for SQL Server', 'ODBC Driver 17 for SQL Server'] as $driver) {
+            $dsn = 'Driver={' . $driver . '};Server=' . $server . ';Database=' . $name . ';';
+            if ($trusted) {
+                $dsn .= 'Trusted_Connection=Yes;';
+            }
+            if ($driver === 'ODBC Driver 18 for SQL Server') {
+                $dsn .= 'TrustServerCertificate=Yes;';
+            }
+            $dsns[] = $dsn;
+        }
 
         foreach ($dsns as $dsn) {
-            $connection = @odbc_connect($dsn, '', '');
+            $connection = @odbc_connect($dsn, $username, $password);
 
             if ($connection !== false) {
                 return $connection;
             }
-
-            $lastError = 'ODBC connection failed.';
         }
 
-        throw new RuntimeException($lastError ?? 'ODBC connection failed.');
+        throw new RuntimeException('ERP database connection failed.');
     }
 }
 

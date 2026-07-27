@@ -121,8 +121,8 @@ function mirror_render_foot(): void
 {
     echo '</main>';
     echo '<footer class="m360-footer">';
-    echo '© <span class="m360-brand-latin" lang="en" dir="ltr">MOGHAREH360</span> — تمامی حقوق محفوظ است.';
-    echo '<div class="m360-install-hint">برای نصب اپلیکیشن: از منوی مرورگر «افزودن به صفحه اصلی» را انتخاب کنید.</div>';
+    echo '© <span class="m360-brand-latin" lang="en" dir="ltr">MOGHAREH360</span> — تمام حقوق محفوظ است.';
+    echo '<div class="m360-install-hint">برای نصب اپلیکیشن، از منوی مرورگر «افزودن به صفحه اصلی» را انتخاب کنید.</div>';
     echo '</footer></div>';
     echo '<script>(function(){if("serviceWorker"in navigator){navigator.serviceWorker.getRegistrations().then(function(r){r.forEach(function(x){x.unregister();});});}if(window.caches&&caches.keys){caches.keys().then(function(k){k.forEach(function(n){caches.delete(n);});});}window.addEventListener("pageshow",function(e){if(e.persisted){window.location.reload();}});})();</script>';
     echo '</body></html>';

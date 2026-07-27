@@ -16,7 +16,30 @@ declare(strict_types=1);
 
 function erp_config_path(): string
 {
+    foreach (erp_config_candidate_paths() as $path) {
+        if (is_file($path)) {
+            return $path;
+        }
+    }
+
     return dirname(__DIR__) . DIRECTORY_SEPARATOR . 'private' . DIRECTORY_SEPARATOR . 'erp-config.php';
+}
+
+function erp_config_candidate_paths(): array
+{
+    $paths = [];
+
+    foreach (['MOGHARE360_ERP_CONFIG_PATH', 'MOGHARE360_PRIVATE_CONFIG_PATH'] as $envKey) {
+        $envPath = getenv($envKey);
+        if (is_string($envPath) && trim($envPath) !== '') {
+            $paths[] = trim($envPath);
+        }
+    }
+
+    $paths[] = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'private' . DIRECTORY_SEPARATOR . 'erp-config.php';
+    $paths[] = dirname(__DIR__, 3) . DIRECTORY_SEPARATOR . 'moghare360-private' . DIRECTORY_SEPARATOR . 'erp-config.php';
+
+    return array_values(array_unique($paths));
 }
 
 function erp_config_required_keys(): array
