@@ -5,6 +5,9 @@ require_once __DIR__ . '/inventory-controlled-helpers.php';
 
 inv_require_inventory_access('count');
 
+header('Location: staff-inventory-count.php', true, 302);
+exit;
+
 $pdo = inv_pdo();
 
 function count_get(string $key, string $default = ''): string

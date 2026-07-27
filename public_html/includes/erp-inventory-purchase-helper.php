@@ -90,6 +90,14 @@ function inventory_safe_current_user(): string
 
 function inventory_db()
 {
+    if (PHP_SAPI !== 'cli') {
+        erp_auth_context_start();
+        if (erp_auth_context_session_user_id() === null) {
+            header('Location: staff-login.php');
+            exit;
+        }
+    }
+
     if (!extension_loaded('odbc')) {
         return false;
     }
@@ -343,6 +351,10 @@ function inventory_badge_class(string $badge): string
 
 function inventory_guard_eval($c, int $uid, string $key): array
 {
+    if ($uid > 0 && erp_auth_is_system_owner($c, $uid)) {
+        return ['allowed' => true, 'system_owner' => true];
+    }
+
     $map = erp_guard_action_map();
     if (isset($map[$key])) {
         $r = erp_guard_action($c, $uid, $key);

@@ -57,9 +57,6 @@ try {
         }
 
         $itemId = inventory_scope_identity($connection);
-        if ($itemId !== null && inventory_table_exists($connection, 'erp_stock_balances')) {
-            inventory_ensure_balance_row($connection, $itemId, null);
-        }
 
         inventory_insert_history($connection, 'INVENTORY_ITEM', $itemId, 'CREATE', 'ثبت قلم جدید در کاتالوگ', null, $itemCode);
 

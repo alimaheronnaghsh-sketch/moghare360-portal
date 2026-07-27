@@ -5,6 +5,67 @@ require_once __DIR__ . '/inventory-controlled-helpers.php';
 
 inv_require_inventory_access('count');
 
+try {
+    $message = '';
+    if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET') {
+        $_SESSION['inventory_blind_count_token'] = bin2hex(random_bytes(32));
+    } else {
+        checkCsrf();
+        $postedToken = trim((string)($_POST['inventory_form_token'] ?? ''));
+        $sessionToken = (string)($_SESSION['inventory_blind_count_token'] ?? '');
+        unset($_SESSION['inventory_blind_count_token']);
+        if ($postedToken === '' || $sessionToken === '' || !hash_equals($sessionToken, $postedToken)) {
+            throw new RuntimeException('فرم منقضی شده یا قبلاً ارسال شده است.');
+        }
+        $itemId = (int)($_POST['inventory_item_id'] ?? 0);
+        $locationId = (int)($_POST['stock_location_id'] ?? 0);
+        $counted = (float)($_POST['counted_quantity'] ?? -1);
+        if ($itemId < 1 || $locationId < 1 || $counted < 0) {
+            throw new RuntimeException('قلم، محل و مقدار شمارش معتبر الزامی است.');
+        }
+        $difference = $counted - inv_current_stock($itemId, $locationId);
+        if (abs($difference) > 0.00001) {
+            inv_record_movement(
+                $itemId,
+                $locationId,
+                'COUNT_ADJUSTMENT',
+                $difference,
+                'BLIND_COUNT | ' . trim((string)($_POST['count_note'] ?? ''))
+            );
+        }
+        $message = 'شمارش کور ثبت شد و مغایرت آن در گردش انبار اعمال شد.';
+        $_SESSION['inventory_blind_count_token'] = bin2hex(random_bytes(32));
+    }
+
+    $items = inv_fetch_all('SELECT inventory_item_id, item_code, item_name FROM dbo.erp_inventory_items WHERE is_active = 1 ORDER BY item_name');
+    $locations = inv_warehouses();
+    renderHeader('انبارگردانی کور', 'شمارش بدون نمایش موجودی سیستم');
+    renderFlashes();
+    inventoryHeaderActions('counting');
+    ?>
+    <main class="auth-wrap wide-auth inventory-page">
+      <section class="card form-card">
+        <h2>ثبت شمارش کور</h2>
+        <p class="muted">موجودی سیستم پیش از ثبت به شمارش‌کننده نمایش داده نمی‌شود.</p>
+        <?php if ($message !== ''): ?><div class="notice good"><?= e($message) ?></div><?php endif; ?>
+        <form method="post" class="form-grid">
+          <?= csrfField() ?>
+          <input type="hidden" name="inventory_form_token" value="<?= e((string)($_SESSION['inventory_blind_count_token'] ?? '')) ?>">
+          <label>قلم انبار *<select name="inventory_item_id" required><option value="">انتخاب کنید</option><?php foreach ($items as $item): ?><option value="<?= e((string)$item['inventory_item_id']) ?>"><?= e((string)$item['item_code'] . ' — ' . (string)$item['item_name']) ?></option><?php endforeach; ?></select></label>
+          <label>محل *<select name="stock_location_id" required><option value="">انتخاب کنید</option><?php foreach ($locations as $location): ?><option value="<?= e((string)$location['id']) ?>"><?= e((string)$location['name']) ?></option><?php endforeach; ?></select></label>
+          <label>تعداد واقعی *<input name="counted_quantity" type="number" min="0" step="0.01" required></label>
+          <label>یادداشت<input name="count_note" maxlength="500"></label>
+          <div class="actions full"><button class="btn primary" type="submit">ثبت شمارش کور</button><a class="btn" href="staff-inventory.php">بازگشت</a></div>
+        </form>
+      </section>
+    </main>
+    <?php
+    renderFooter();
+    exit;
+} catch (Throwable $e) {
+    showErrorPage('خطا در صفحه انبارگردانی کور.', $e->getMessage());
+}
+
 $pdo = inv_pdo();
 
 function bc_post(string $key, string $default = ''): string

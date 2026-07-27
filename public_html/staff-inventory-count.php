@@ -5,6 +5,80 @@ require_once __DIR__ . '/inventory-controlled-helpers.php';
 
 inv_require_inventory_access('count');
 
+try {
+    $message = '';
+    if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET') {
+        $_SESSION['inventory_count_token'] = bin2hex(random_bytes(32));
+    } else {
+        checkCsrf();
+        $postedToken = trim((string)($_POST['inventory_form_token'] ?? ''));
+        $sessionToken = (string)($_SESSION['inventory_count_token'] ?? '');
+        unset($_SESSION['inventory_count_token']);
+        if ($postedToken === '' || $sessionToken === '' || !hash_equals($sessionToken, $postedToken)) {
+            throw new RuntimeException('فرم منقضی شده یا قبلاً ارسال شده است.');
+        }
+
+        $itemId = (int)($_POST['inventory_item_id'] ?? 0);
+        $locationId = (int)($_POST['stock_location_id'] ?? 0);
+        $counted = (float)($_POST['counted_quantity'] ?? -1);
+        if ($itemId < 1 || $locationId < 1 || $counted < 0) {
+            throw new RuntimeException('قلم، محل و مقدار شمارش معتبر الزامی است.');
+        }
+        $current = inv_current_stock($itemId, $locationId);
+        $difference = $counted - $current;
+        if (abs($difference) > 0.00001) {
+            inv_record_movement(
+                $itemId,
+                $locationId,
+                'COUNT_ADJUSTMENT',
+                $difference,
+                'PHYSICAL_COUNT | ' . trim((string)($_POST['count_note'] ?? ''))
+            );
+            $message = 'مغایرت شمارش به‌صورت گردش اصلاحی ثبت شد.';
+        } else {
+            $message = 'شمارش بدون مغایرت ثبت و بررسی شد.';
+        }
+        $_SESSION['inventory_count_token'] = bin2hex(random_bytes(32));
+    }
+
+    $items = inv_fetch_all('SELECT inventory_item_id, item_code, item_name FROM dbo.erp_inventory_items WHERE is_active = 1 ORDER BY item_name');
+    $locations = inv_warehouses();
+    $recent = inv_fetch_all(
+        "SELECT TOP 50 m.stock_movement_id, i.item_code, i.item_name, l.location_name,
+                m.movement_qty, m.movement_note, m.created_at, m.created_by
+         FROM dbo.erp_inventory_stock_movements m
+         INNER JOIN dbo.erp_inventory_items i ON i.inventory_item_id = m.inventory_item_id
+         LEFT JOIN dbo.erp_stock_locations l ON l.stock_location_id = m.stock_location_id
+         WHERE m.movement_type = N'COUNT_ADJUSTMENT'
+         ORDER BY m.stock_movement_id DESC"
+    );
+    renderHeader('انبارگردانی', 'شمارش فیزیکی و گردش اصلاحی');
+    renderFlashes();
+    inventoryHeaderActions('counting');
+    ?>
+    <main class="auth-wrap wide-auth inventory-page">
+      <section class="card form-card">
+        <h2>ثبت شمارش فیزیکی</h2>
+        <?php if ($message !== ''): ?><div class="notice good"><?= e($message) ?></div><?php endif; ?>
+        <form method="post" class="form-grid">
+          <?= csrfField() ?>
+          <input type="hidden" name="inventory_form_token" value="<?= e((string)($_SESSION['inventory_count_token'] ?? '')) ?>">
+          <label>قلم انبار *<select name="inventory_item_id" required><option value="">انتخاب کنید</option><?php foreach ($items as $item): ?><option value="<?= e((string)$item['inventory_item_id']) ?>"><?= e((string)$item['item_code'] . ' — ' . (string)$item['item_name']) ?></option><?php endforeach; ?></select></label>
+          <label>محل *<select name="stock_location_id" required><option value="">انتخاب کنید</option><?php foreach ($locations as $location): ?><option value="<?= e((string)$location['id']) ?>"><?= e((string)$location['name']) ?></option><?php endforeach; ?></select></label>
+          <label>تعداد شمارش‌شده *<input name="counted_quantity" type="number" min="0" step="0.01" required></label>
+          <label>یادداشت<input name="count_note" maxlength="500"></label>
+          <div class="actions full"><button class="btn primary" type="submit">ثبت شمارش</button><a class="btn" href="staff-inventory.php">بازگشت</a></div>
+        </form>
+      </section>
+      <section class="card table-card"><h2>آخرین اصلاحات شمارش</h2><div class="table-scroll"><table class="data-table"><thead><tr><th>قلم</th><th>محل</th><th>اختلاف</th><th>یادداشت</th><th>ثبت‌کننده</th><th>زمان</th></tr></thead><tbody><?php foreach ($recent as $row): ?><tr><td><?= e((string)$row['item_code'] . ' — ' . (string)$row['item_name']) ?></td><td><?= e((string)($row['location_name'] ?? '')) ?></td><td class="num"><?= e((string)$row['movement_qty']) ?></td><td><?= e((string)($row['movement_note'] ?? '')) ?></td><td><?= e((string)($row['created_by'] ?? '')) ?></td><td class="num"><?= e((string)$row['created_at']) ?></td></tr><?php endforeach; ?><?php if ($recent === []): ?><tr><td colspan="6">هنوز اصلاح شمارشی ثبت نشده است.</td></tr><?php endif; ?></tbody></table></div></section>
+    </main>
+    <?php
+    renderFooter();
+    exit;
+} catch (Throwable $e) {
+    showErrorPage('خطا در بارگذاری انبارگردانی.', $e->getMessage());
+}
+
 $pdo = inv_pdo();
 
 function count_get(string $key, string $default = ''): string
