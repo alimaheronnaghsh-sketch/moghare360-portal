@@ -92,6 +92,7 @@ $birthDaySelected = '';
 $result = null;
 $submitSuccess = false;
 $createdRequestId = 0;
+$diagnosticSubcategoriesSelected = [];
 $input = [
     'first_name' => '',
     'last_name' => '',
@@ -121,10 +122,21 @@ $input = [
     'plate_region_2_digits' => '',
     'plate_display' => '',
     'vin' => '',
+    'chassis_number' => '',
+    'color' => '',
+    'fuel_level' => '',
     'odometer_km' => '',
     'request_type' => '',
     'visit_date' => '',
     'request_description' => '',
+    'fault_path' => '',
+    'diagnostic_options' => '',
+    'service_path_clear' => '',
+    'vehicle_condition_note' => '',
+    'damage_zones_note' => '',
+    'trunk_belongings_note' => '',
+    'cost_agreement' => '',
+    'cost_agreement_note' => '',
     'customer_flow' => 'new',
     'verified_customer_name' => '',
 ];
@@ -138,6 +150,7 @@ $requestTypes = [
 ];
 
 $plateLetters = ['ب', 'ج', 'د', 'س', 'ص', 'ط', 'ق', 'ل', 'م', 'ن', 'و', 'ه', 'ی', 'ع', 'پ', 'ت', 'ک', 'گ'];
+$fuelLevels = m360_rw_intake_fuel_levels();
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     foreach (array_keys($input) as $key) {
@@ -153,6 +166,19 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     }
     $input['customer_flow'] = trim((string)($_POST['customer_flow'] ?? 'new'));
     $input['verified_customer_name'] = trim((string)($_POST['verified_customer_name'] ?? ''));
+    $input['service_path_clear'] = in_array((string)($_POST['service_path_clear'] ?? ''), ['0', '1'], true)
+        ? (string)$_POST['service_path_clear']
+        : '';
+    $rawDiagnosticSubs = $_POST['diagnostic_subcategories'] ?? [];
+    if (is_array($rawDiagnosticSubs)) {
+        $allowedDiagnosticSubs = array_keys(m360_rw_service_classification_taxonomy()['diag']['subs'] ?? []);
+        foreach ($rawDiagnosticSubs as $diagSub) {
+            $diagSub = trim((string)$diagSub);
+            if ($diagSub !== '' && in_array($diagSub, $allowedDiagnosticSubs, true)) {
+                $diagnosticSubcategoriesSelected[] = $diagSub;
+            }
+        }
+    }
 
     if (!m360_otp_is_verified($input['mobile'])) {
         $result = [
@@ -182,7 +208,9 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         $input['last_name'] = (string)($parts[1] ?? '');
     } elseif ($isReturningCustomer && $input['full_name'] === '') {
         $input['full_name'] = 'مشتری گرامی';
-    } else {
+    }
+
+    if ($result === null) {
 
     $birthYearSelected = trim((string)($_POST['birth_year_jalali'] ?? ''));
     $birthMonthSelected = trim((string)($_POST['birth_month_jalali'] ?? ''));
@@ -275,11 +303,19 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             'region_digit_2' => $input['plate_region_digit_2'] ?? '',
         ],
         'vin' => $input['vin'],
+        'chassis_number' => $input['chassis_number'],
+        'color' => $input['color'],
+        'fuel_level' => $input['fuel_level'],
         'odometer_km' => $input['odometer_km'],
         'request_type' => $input['request_type'],
         'visit_date' => $input['visit_date'],
         'request_description' => $input['request_description'],
         'service_description' => $input['request_description'],
+        'fault_path' => $input['fault_path'],
+        'diagnostic_options' => $input['diagnostic_options'],
+        'service_route' => $input['request_type'] === 'diagnostic_inspection' ? 'diag' : '',
+        'service_path_clear' => $input['service_path_clear'],
+        'diagnostic_subcategories' => $diagnosticSubcategoriesSelected,
         'address' => $input['address'] !== '' ? $input['address'] : $input['postal_address'],
         'postal_address' => $input['postal_address'],
         'extra_contact_info' => $input['extra_contact_info'],
@@ -290,7 +326,31 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         'otp_verified_token' => m360_otp_verified_token(),
         'customer_flow' => $customerFlow,
         'verified_customer_name' => $verifiedCustomerName,
-        'contract_ack_status' => 'pending_pr02c',
+        'reception_intake' => [
+            'service_classification' => [
+                'request_type' => $input['request_type'],
+                'description' => $input['request_description'],
+                'fault_path' => $input['fault_path'],
+                'diagnostic_options' => $input['diagnostic_options'],
+                'route' => $input['request_type'] === 'diagnostic_inspection' ? 'diag' : '',
+                'service_path_clear' => $input['service_path_clear'],
+                'diagnostic_subcategories' => $diagnosticSubcategoriesSelected,
+            ],
+            'condition' => [
+                'vehicle_condition_note' => $input['vehicle_condition_note'],
+                'damage_zones_note' => $input['damage_zones_note'],
+                'trunk_belongings_note' => $input['trunk_belongings_note'],
+            ],
+            'documents' => [
+                'cost_agreement' => $input['cost_agreement'],
+                'cost_agreement_note' => $input['cost_agreement_note'],
+                'contract_status' => 'PENDING_RECEPTION_COMPLETION',
+            ],
+            'contract' => [
+                'status' => 'NOT_ACTIVE_UNTIL_RECEPTION_COMPLETED',
+            ],
+        ],
+        'contract_ack_status' => 'pending_customer_contract_review_after_reception',
     ];
 
     $result = m360_customer_online_submit_from_post($payload);
@@ -302,7 +362,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             'ok' => false,
             'message' => (string)($result['message'] ?? 'ثبت درخواست ناموفق بود.'),
             'error_code' => (string)($result['error_code'] ?? 'submit_failed'),
-            'step' => (string)($result['step'] ?? 'm360_section_submit'),
+            'step' => (string)($result['step'] ?? 'm360_section_request'),
         ];
     }
     }
@@ -367,7 +427,7 @@ mirror_render_head('ثبت درخواست مشتری', 'customer');
             <span class="m360-step-badge" aria-hidden="true">✓</span>
             <div class="m360-step-header__text">
                 <h3 class="m360-step-title">درخواست شما ثبت شد</h3>
-                <p class="m360-step-sub">پس از بررسی، با شما تماس گرفته می‌شود.</p>
+                <p class="m360-step-sub"><?= mirror_h(m360_rw_online_initial_reception_later_message_fa()) ?></p>
             </div>
         </div>
         <p class="m360-success-tracking">شماره پیگیری درخواست آنلاین: <strong id="m360_created_request_id"><?= mirror_h((string)$createdRequestId) ?></strong></p>
@@ -387,21 +447,27 @@ mirror_render_head('ثبت درخواست مشتری', 'customer');
 
         <nav class="m360-customer-wizard-progress" id="m360_wizard_progress" aria-label="پیشرفت مراحل" hidden>
             <ol class="m360-customer-wizard-progress__list">
-                <li data-step="m360_step_mobile">۱. موبایل</li>
-                <li data-step="m360_section_profile">۲. پروفایل</li>
-                <li data-step="m360_section_vehicle">۳. خودرو</li>
-                <li data-step="m360_section_request">۴. درخواست</li>
-                <li data-step="m360_section_visit">۵. مراجعه</li>
-                <li data-step="m360_section_contract">۶. قرارداد</li>
-                <li data-step="m360_section_submit">۷. ثبت</li>
+                <li data-step="m360_step_mobile">۱. <?= mirror_h(m360_rw_canonical_intake_step_label('mobile_otp')) ?></li>
+                <li data-step="m360_section_profile">۲. <?= mirror_h(m360_rw_canonical_intake_step_label('customer')) ?></li>
+                <li data-step="m360_section_vehicle">۳. <?= mirror_h(m360_rw_canonical_intake_step_label('vehicle')) ?></li>
+                <li data-step="m360_section_request">۴. <?= mirror_h(m360_rw_canonical_intake_step_label('service')) ?></li>
             </ol>
         </nav>
+        <aside class="m360-rw-flash is-info m360-online-future-timeline" aria-label="مراحل بعد از حضور خودرو">
+            <strong>مراحل بعد از حضور خودرو در مجموعه:</strong>
+            <ol>
+                <li>۵. <?= mirror_h(m360_rw_canonical_intake_step_label('condition')) ?> — قفل تا پذیرش حضوری</li>
+                <li>۶. <?= mirror_h(m360_rw_canonical_intake_step_label('checklist')) ?> — قفل تا پذیرش حضوری</li>
+                <li>۷. <?= mirror_h(m360_rw_canonical_intake_step_label('contract')) ?> — فقط در پروفایل مشتری و با OTP</li>
+                <li>۸. <?= mirror_h(m360_rw_canonical_intake_step_label('hall_jobcard')) ?> — پس از قرارداد و تعیین تکلیف پیش‌پرداخت</li>
+            </ol>
+        </aside>
 
         <section id="m360_step_mobile" class="m360-step-card m360-otp-panel m360-step-card--active" aria-labelledby="m360_step_mobile_title">
             <div class="m360-step-header">
                 <span class="m360-step-badge" aria-hidden="true">۱</span>
                 <div class="m360-step-header__text">
-                    <h3 id="m360_step_mobile_title" class="m360-step-title">ورود شماره موبایل</h3>
+                    <h3 id="m360_step_mobile_title" class="m360-step-title"><?= mirror_h(m360_rw_canonical_intake_step_label('mobile_otp')) ?></h3>
                     <p class="m360-step-sub">برای شروع، شماره موبایل خود را وارد کنید تا کد تأیید ارسال شود.</p>
                 </div>
             </div>
@@ -418,9 +484,9 @@ mirror_render_head('ثبت درخواست مشتری', 'customer');
 
         <section id="m360_step_otp" class="m360-step-card m360-otp-panel m360-step--hidden" aria-labelledby="m360_step_otp_title">
             <div class="m360-step-header">
-                <span class="m360-step-badge" aria-hidden="true">۲</span>
+                <span class="m360-step-badge" aria-hidden="true">۱</span>
                 <div class="m360-step-header__text">
-                    <h3 id="m360_step_otp_title" class="m360-step-title">تأیید کد پیامکی</h3>
+                    <h3 id="m360_step_otp_title" class="m360-step-title"><?= mirror_h(m360_rw_canonical_intake_step_label('mobile_otp')) ?></h3>
                     <p class="m360-step-sub">کد ۶ رقمی ارسال‌شده را وارد کنید.</p>
                 </div>
             </div>
@@ -495,8 +561,8 @@ mirror_render_head('ثبت درخواست مشتری', 'customer');
         <div class="m360-step-header">
             <span class="m360-step-badge" aria-hidden="true">۳</span>
             <div class="m360-step-header__text">
-                <h3 id="m360_vehicle_title" class="m360-section-title">انتخاب یا ثبت خودرو</h3>
-                <p class="m360-step-sub">یکی از خودروهای قبلی را انتخاب کنید یا خودرو جدید اضافه کنید.</p>
+                <h3 id="m360_vehicle_title" class="m360-section-title"><?= mirror_h(m360_rw_canonical_intake_step_label('vehicle')) ?></h3>
+                <p class="m360-step-sub">برند، مدل، سال تولید، پلاک، شاسی، کیلومتر، رنگ و سوخت را تکمیل کنید.</p>
             </div>
         </div>
 
@@ -624,8 +690,22 @@ mirror_render_head('ثبت درخواست مشتری', 'customer');
         <label for="vin">شماره شاسی (VIN)</label>
         <input type="text" id="vin" name="vin" maxlength="17" value="<?= mirror_h($input['vin']) ?>">
 
+        <label for="chassis_number">شماره شاسی داخلی</label>
+        <input type="text" id="chassis_number" name="chassis_number" maxlength="160" value="<?= mirror_h($input['chassis_number']) ?>">
+
         <label for="odometer_km">کیلومتر خودرو</label>
         <input type="number" id="odometer_km" name="odometer_km" min="0" step="1" value="<?= mirror_h($input['odometer_km']) ?>">
+
+        <label for="color">رنگ</label>
+        <input type="text" id="color" name="color" maxlength="160" value="<?= mirror_h($input['color']) ?>">
+
+        <label for="fuel_level">سطح سوخت</label>
+        <select id="fuel_level" name="fuel_level">
+            <option value="">نامشخص</option>
+            <?php foreach ($fuelLevels as $level): ?>
+                <option value="<?= mirror_h($level) ?>" <?= $input['fuel_level'] === $level ? 'selected' : '' ?>><?= mirror_h($level) ?></option>
+            <?php endforeach; ?>
+        </select>
         </div>
         <div class="m360-wizard-nav">
             <button type="button" class="m360-btn m360-btn-secondary m360-wizard-prev" data-target="m360_section_profile">قبلی</button>
@@ -638,8 +718,8 @@ mirror_render_head('ثبت درخواست مشتری', 'customer');
         <div class="m360-step-header">
             <span class="m360-step-badge" aria-hidden="true">۴</span>
             <div class="m360-step-header__text">
-                <h3 id="m360_request_title" class="m360-section-title">شرح درخواست</h3>
-                <p class="m360-step-sub">نوع خدمت و علائم / نیاز خود را بنویسید.</p>
+                <h3 id="m360_request_title" class="m360-section-title"><?= mirror_h(m360_rw_canonical_intake_step_label('service')) ?></h3>
+                <p class="m360-step-sub">نوع خدمت، مسیر عیب، گفته مشتری و تاریخ مراجعه را تکمیل کنید.</p>
             </div>
         </div>
 
@@ -653,21 +733,14 @@ mirror_render_head('ثبت درخواست مشتری', 'customer');
 
         <label for="request_description">شرح درخواست <span class="m360-req">*</span></label>
         <textarea id="request_description" name="request_description" data-required-both="1" maxlength="1500"><?= mirror_h($input['request_description']) ?></textarea>
-        <div class="m360-wizard-nav">
-            <button type="button" class="m360-btn m360-btn-secondary m360-wizard-prev" data-target="m360_section_vehicle">قبلی</button>
-            <button type="button" class="m360-btn m360-luxury-action m360-wizard-next" data-target="m360_section_visit">مرحله بعد — تاریخ مراجعه</button>
-        </div>
-        </section>
 
-        <section id="m360_section_visit" class="m360-step-card m360-request-panel m360-step--hidden" aria-labelledby="m360_visit_title">
-        <p id="m360_visit_step_error" class="m360-step-error m360-step--hidden" role="alert" aria-live="polite"></p>
-        <div class="m360-step-header">
-            <span class="m360-step-badge" aria-hidden="true">۵</span>
-            <div class="m360-step-header__text">
-                <h3 id="m360_visit_title" class="m360-section-title">تاریخ مراجعه</h3>
-                <p class="m360-step-sub">روز مراجعه را از تقویم کاری انتخاب کنید.</p>
-            </div>
-        </div>
+        <label for="fault_path">مسیر عیب / خدمت</label>
+        <input type="text" id="fault_path" name="fault_path" maxlength="500" value="<?= mirror_h($input['fault_path']) ?>">
+
+        <label for="diagnostic_options">گزینه‌های تشخیصی</label>
+        <textarea id="diagnostic_options" name="diagnostic_options" maxlength="500" placeholder="مثلاً صدای موتور، چراغ هشدار، سرویس دوره‌ای"><?= mirror_h($input['diagnostic_options']) ?></textarea>
+        <?php m360_rw_render_public_diagnostic_parity_fields($diagnosticSubcategoriesSelected, $input['service_path_clear']); ?>
+
         <div class="m360-date-field">
             <input
                 type="text"
@@ -687,39 +760,12 @@ mirror_render_head('ثبت درخواست مشتری', 'customer');
             </div>
         </div>
         <p id="visit_time_hint" class="m360-visit-hint" style="display:none">ساعت حضور الزاما بین 8:30 الی 11:30 می‌باشد.</p>
-        <div class="m360-wizard-nav">
-            <button type="button" class="m360-btn m360-btn-secondary m360-wizard-prev" data-target="m360_section_request">قبلی</button>
-            <button type="button" class="m360-btn m360-luxury-action m360-wizard-next" data-target="m360_section_contract">مرحله بعد — قرارداد</button>
-        </div>
+        <section class="m360-rw-flash is-info">
+            <?= mirror_h(m360_rw_online_initial_reception_later_message_fa()) ?>
         </section>
-
-        <section id="m360_section_contract" class="m360-step-card m360-request-panel m360-step--hidden" aria-labelledby="m360_contract_title">
-        <div class="m360-step-header">
-            <span class="m360-step-badge" aria-hidden="true">۶</span>
-            <div class="m360-step-header__text">
-                <h3 id="m360_contract_title" class="m360-section-title">قرارداد و تأیید نهایی</h3>
-                <p class="m360-step-sub">قرارداد و تأیید نهایی در مرحله بعدی فعال می‌شود.</p>
-            </div>
-        </div>
-        <p class="m360-contract-placeholder" role="status">قرارداد و تأیید نهایی در مرحله بعدی فعال می‌شود</p>
         <div class="m360-wizard-nav">
-            <button type="button" class="m360-btn m360-btn-secondary m360-wizard-prev" data-target="m360_section_visit">قبلی</button>
-            <button type="button" class="m360-btn m360-luxury-action m360-wizard-next" data-target="m360_section_submit">مرحله بعد — ثبت نهایی</button>
-        </div>
-        </section>
-
-        <section id="m360_section_submit" class="m360-step-card m360-request-panel m360-step--hidden" aria-labelledby="m360_submit_title">
-        <p id="m360_submit_step_error" class="m360-step-error m360-step--hidden" role="alert" aria-live="polite"></p>
-        <div class="m360-step-header">
-            <span class="m360-step-badge" aria-hidden="true">۷</span>
-            <div class="m360-step-header__text">
-                <h3 id="m360_submit_title" class="m360-section-title">ثبت و پیگیری</h3>
-                <p class="m360-step-sub">پس از ثبت، شماره پیگیری درخواست آنلاین نمایش داده می‌شود.</p>
-            </div>
-        </div>
-        <button type="submit" id="m360_submit_btn" class="m360-btn m360-luxury-action" disabled>ثبت درخواست</button>
-        <div class="m360-wizard-nav">
-            <button type="button" class="m360-btn m360-btn-secondary m360-wizard-prev" data-target="m360_section_contract">قبلی</button>
+            <button type="button" class="m360-btn m360-btn-secondary m360-wizard-prev" data-target="m360_section_vehicle">قبلی</button>
+            <button type="submit" id="m360_submit_btn" class="m360-btn m360-luxury-action" disabled>ثبت درخواست اولیه</button>
         </div>
         </section>
     </form>
@@ -732,7 +778,7 @@ $m360CustomerPageBoot = [
     'createdRequestId' => $createdRequestId,
     'submitError' => $submitErrorMessage,
     'submitErrorCode' => $showSubmitError ? (string)($result['error_code'] ?? '') : '',
-    'submitErrorStep' => (string)($submitErrorMeta['step'] ?? ($result['step'] ?? 'm360_section_submit')),
+    'submitErrorStep' => (string)($submitErrorMeta['step'] ?? ($result['step'] ?? 'm360_section_request')),
     'submitErrorIsOtp' => !empty($submitErrorMeta['is_otp_error']),
     'mobileVerified' => $mobileVerifiedSession,
     'mobile' => $input['mobile'],

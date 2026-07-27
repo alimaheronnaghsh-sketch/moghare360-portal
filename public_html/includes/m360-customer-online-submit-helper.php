@@ -497,7 +497,7 @@ function m360_customer_online_submit($conn, int $companyId, array $body): array
             'ok' => false,
             'message' => $message,
             'error_code' => $errorCode,
-            'step' => 'm360_section_submit',
+            'step' => 'm360_section_request',
             'online_request_id' => 0,
             'customer_id' => $customerId,
             'vehicle_id' => $vehicleId,
@@ -524,7 +524,7 @@ function m360_customer_online_submit($conn, int $companyId, array $body): array
 function m360_pr02b_submit_error_meta(string $message, bool $otpVerified, string $errorCode = ''): array
 {
     if ($errorCode === 'online_request_insert_failed' || $errorCode === 'online_request_identity_missing') {
-        return ['step' => 'm360_section_submit', 'is_otp_error' => false];
+        return ['step' => 'm360_section_request', 'is_otp_error' => false];
     }
     if (!$otpVerified || str_contains($message, 'کد پیامکی') || str_contains($message, 'نشست تأیید')) {
         return ['step' => 'm360_step_otp', 'is_otp_error' => true];
@@ -536,13 +536,13 @@ function m360_pr02b_submit_error_meta(string $message, bool $otpVerified, string
         return ['step' => 'm360_section_vehicle', 'is_otp_error' => false];
     }
     if (str_contains($message, 'مراجعه') || str_contains($message, 'تاریخ')) {
-        return ['step' => 'm360_section_visit', 'is_otp_error' => false];
+        return ['step' => 'm360_section_request', 'is_otp_error' => false];
     }
     if (str_contains($message, 'شرح') || str_contains($message, 'نوع درخواست')) {
         return ['step' => 'm360_section_request', 'is_otp_error' => false];
     }
 
-    return ['step' => 'm360_section_submit', 'is_otp_error' => false];
+    return ['step' => 'm360_section_request', 'is_otp_error' => false];
 }
 
 /**
@@ -560,7 +560,7 @@ function m360_customer_online_submit_from_post(array $post): array
             'ok' => false,
             'message' => 'اتصال به پایگاه داده برقرار نشد.',
             'error_code' => 'db_connection_failed',
-            'step' => 'm360_section_submit',
+            'step' => 'm360_section_request',
             'online_request_id' => 0,
             'customer_id' => 0,
             'vehicle_id' => 0,

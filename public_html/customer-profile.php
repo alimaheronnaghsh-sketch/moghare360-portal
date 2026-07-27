@@ -141,6 +141,18 @@ body.m360-public-shell { overflow-x: hidden; }
                         <?php if (trim((string)($case['contract_legacy_label'] ?? '')) !== ''): ?>
                             <p class="m360-dash-legacy"><?= mirror_h((string)$case['contract_legacy_label']) ?></p>
                         <?php endif; ?>
+                        <?php
+                        $caseReqId = (int)($case['online_request_id'] ?? 0);
+                        $caseContract = ($caseReqId > 0 && is_resource($conn))
+                            ? m360_intake_contract_find_active_for_online_request($conn, $caseReqId)
+                            : null;
+                        if (is_array($caseContract) && (int)($caseContract['contract_id'] ?? 0) > 0) {
+                            $pdfLabel = m360_contract_pdf_download_label($caseContract);
+                            $pdfHref = m360_contract_pdf_download_url((int)$caseContract['contract_id'], 'customer');
+                            echo '<div class="m360-dash-actions"><a class="m360-dash-btn m360-dash-btn--secondary" href="'
+                                . mirror_h($pdfHref) . '">' . mirror_h($pdfLabel) . '</a></div>';
+                        }
+                        ?>
                         <?php if (trim((string)($case['action_url'] ?? '')) !== ''): ?>
                             <div class="m360-dash-actions">
                                 <a class="m360-dash-btn m360-dash-btn--secondary" href="<?= mirror_h((string)$case['action_url']) ?>">

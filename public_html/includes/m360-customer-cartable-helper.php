@@ -17,8 +17,11 @@ const M360_CARTABLE_STATUS_CANCELLED = 'CANCELLED';
 const M360_CARTABLE_STATUS_EXPIRED = 'EXPIRED';
 
 const M360_CARTABLE_TASK_TYPE_CONTRACT_SIGNATURE = 'CONTRACT_SIGNATURE';
+const M360_CARTABLE_TASK_TYPE_ESTIMATE_APPROVAL = 'ESTIMATE_APPROVAL';
 const M360_CARTABLE_SOURCE_MODULE_INTAKE_CONTRACT = 'INTAKE_CONTRACT';
+const M360_CARTABLE_SOURCE_MODULE_ESTIMATE = 'ESTIMATE';
 const M360_CARTABLE_SOURCE_ENTITY_TYPE_INTAKE_CONTRACT = 'ERP_INTAKE_CONTRACT';
+const M360_CARTABLE_SOURCE_ENTITY_TYPE_ESTIMATE_VERSION = 'ERP_ESTIMATE_VERSION';
 
 const M360_CARTABLE_EVENT_CREATED = 'CREATED';
 const M360_CARTABLE_EVENT_BACKFILLED = 'BACKFILLED';
@@ -27,13 +30,18 @@ const M360_CARTABLE_EVENT_COMPLETED = 'COMPLETED';
 const M360_CARTABLE_EVENT_CANCELLED = 'CANCELLED';
 const M360_CARTABLE_EVENT_EXPIRED = 'EXPIRED';
 const M360_CARTABLE_EVENT_ACTION_LINK_REFRESHED = 'ACTION_LINK_REFRESHED';
+const M360_CARTABLE_EVENT_CUSTOMER_CORRECTION_REQUESTED = 'CUSTOMER_CORRECTION_REQUESTED';
 const M360_CARTABLE_EVENT_SYNCED_FROM_MODULE = 'SYNCED_FROM_MODULE';
 const M360_CARTABLE_EVENT_SYNCED_TO_COMPATIBILITY_PAYLOAD = 'SYNCED_TO_COMPATIBILITY_PAYLOAD';
 
 const M360_CARTABLE_CONTRACT_PRIORITY = 80;
+const M360_CARTABLE_ESTIMATE_PRIORITY = 70;
 const M360_CARTABLE_CONTRACT_ACTION_ROUTE = 'customer-intake-contract-review.php';
+const M360_CARTABLE_ESTIMATE_ACTION_ROUTE = 'customer-estimate-approval.php';
 const M360_CARTABLE_CONTRACT_TITLE_FA = 'قرارداد نیازمند امضا';
 const M360_CARTABLE_CONTRACT_MESSAGE_FA = 'قرارداد پذیرش خودروی شما آماده بررسی و امضا است.';
+const M360_CARTABLE_ESTIMATE_TITLE_FA = 'تأیید برآورد هزینه';
+const M360_CARTABLE_ESTIMATE_MESSAGE_FA = 'برآورد هزینه پرونده شما آماده بررسی و تصمیم‌گیری است.';
 
 function m360_cartable_tables_available($conn): bool
 {
@@ -547,6 +555,9 @@ function m360_cartable_resolve_task_action($conn, array $taskRow, ?array $reques
     if ($taskType === M360_CARTABLE_TASK_TYPE_CONTRACT_SIGNATURE) {
         return m360_cartable_resolve_contract_signature_action($conn, $taskRow, $requestRow, $payload);
     }
+    if ($taskType === M360_CARTABLE_TASK_TYPE_ESTIMATE_APPROVAL) {
+        return m360_cartable_resolve_estimate_approval_action($conn, $taskRow);
+    }
 
     $route = trim((string)($taskRow['action_route'] ?? ''));
     if ($route !== '' && !str_contains($route, '?')) {
@@ -569,8 +580,11 @@ function m360_cartable_resolve_contract_signature_action(
     ?array $payload = null
 ): array {
     $empty = ['ok' => false, 'action_route' => '', 'review_url' => '', 'message' => ''];
+    $taskId = (int)($taskRow['task_id'] ?? 0);
     $contractId = (int)($taskRow['contract_id'] ?? 0);
-    $requestId = (int)($taskRow['online_request_id'] ?? 0);
+    if ($taskId < 1) {
+        return array_merge($empty, ['message' => 'missing_task']);
+    }
     if ($contractId < 1) {
         return array_merge($empty, ['message' => 'missing_contract']);
     }
@@ -579,8 +593,20 @@ function m360_cartable_resolve_contract_signature_action(
         require_once __DIR__ . DIRECTORY_SEPARATOR . 'm360-intake-contract-helper.php';
     }
     $contractRow = m360_intake_contract_fetch_by_id($conn, $contractId);
-    if ($contractRow === null || m360_intake_contract_is_signed($contractRow)) {
+    if ($contractRow === null) {
+        return array_merge($empty, ['message' => 'contract_not_found']);
+    }
+    if (m360_intake_contract_is_signed($contractRow)) {
         return array_merge($empty, ['message' => 'contract_not_actionable']);
+    }
+    $contractStatus = strtoupper((string)($contractRow['contract_status'] ?? ''));
+    if (in_array($contractStatus, [M360_CONTRACT_STATUS_CANCELLED, M360_CONTRACT_STATUS_EXPIRED], true)) {
+        return array_merge($empty, ['message' => 'contract_not_actionable']);
+    }
+    $taskStatus = strtoupper((string)($taskRow['status'] ?? ''));
+    if ((int)($taskRow['is_active'] ?? 0) !== 1
+        || !in_array($taskStatus, [M360_CARTABLE_STATUS_PENDING, M360_CARTABLE_STATUS_OPENED], true)) {
+        return array_merge($empty, ['message' => 'task_not_active']);
     }
     $tokenHash = trim((string)($taskRow['action_token_hash'] ?? ''));
     $contractTokenHash = trim((string)($contractRow['secure_token_hash'] ?? ''));
@@ -596,30 +622,178 @@ function m360_cartable_resolve_contract_signature_action(
         $route = M360_CARTABLE_CONTRACT_ACTION_ROUTE;
     }
 
-    if ($payload !== null && function_exists('m360_rw_customer_profile_contract_review_url_readonly')) {
-        $readonlyUrl = m360_rw_customer_profile_contract_review_url_readonly($payload);
-        if ($readonlyUrl !== '') {
-            return ['ok' => true, 'action_route' => $route, 'review_url' => $readonlyUrl, 'message' => ''];
-        }
+    return [
+        'ok' => true,
+        'action_route' => $route,
+        'review_url' => $route . '?task_id=' . (string)$taskId,
+        'message' => '',
+    ];
+}
+
+/**
+ * @param array<string, mixed> $estimateRow
+ * @param array<string, mixed> $jobcardRow
+ * @return array{ok:bool,task_id:int,created_new:bool,message:string}
+ */
+function m360_cartable_sync_estimate_approval_task(
+    $conn,
+    int $estimateVersionId,
+    array $estimateRow,
+    array $jobcardRow,
+    string $tokenHash,
+    string $tokenExpiresAt
+): array {
+    $empty = ['ok' => false, 'task_id' => 0, 'created_new' => false, 'message' => ''];
+    if (!is_resource($conn) || $estimateVersionId < 1 || !m360_cartable_tables_available($conn)) {
+        return array_merge($empty, ['message' => 'unavailable']);
     }
 
-    if ($requestId > 0 && function_exists('m360_rw_intake_consume_contract_review_token_once')) {
-        if (session_status() !== PHP_SESSION_ACTIVE) {
-            @session_start();
-        }
-        $sessionKey = 'm360_rw_contract_token_' . $requestId;
-        $sessionToken = trim((string)($_SESSION[$sessionKey] ?? ''));
-        if ($sessionToken !== '' && function_exists('m360_rw_intake_contract_review_url')) {
-            return [
-                'ok' => true,
-                'action_route' => $route,
-                'review_url' => m360_rw_intake_contract_review_url($sessionToken),
-                'message' => '',
-            ];
-        }
+    $mobile = m360_cartable_normalize_mobile((string)($jobcardRow['customer_mobile'] ?? ''));
+    if ($mobile === '') {
+        return array_merge($empty, ['message' => 'missing_mobile']);
     }
 
-    return array_merge($empty, ['message' => 'secure_action_unavailable']);
+    $customerId = (int)($estimateRow['customer_id'] ?? 0);
+    if ($customerId < 1) {
+        $customerId = (int)($jobcardRow['customer_id'] ?? 0);
+    }
+    $estimateId = (int)($estimateRow['estimate_id'] ?? 0);
+    $jobcardId = (int)($jobcardRow['jobcard_id'] ?? 0);
+    $onlineRequestId = (int)($jobcardRow['online_request_id'] ?? 0);
+    $expiresAt = trim($tokenExpiresAt) !== '' ? str_replace('T', ' ', substr($tokenExpiresAt, 0, 19)) : null;
+
+    $created = m360_cartable_create_or_get_active($conn, [
+        'customer_id' => $customerId > 0 ? $customerId : null,
+        'customer_mobile_normalized' => $mobile,
+        'task_type' => M360_CARTABLE_TASK_TYPE_ESTIMATE_APPROVAL,
+        'title' => M360_CARTABLE_ESTIMATE_TITLE_FA,
+        'message' => M360_CARTABLE_ESTIMATE_MESSAGE_FA,
+        'priority' => M360_CARTABLE_ESTIMATE_PRIORITY,
+        'status' => M360_CARTABLE_STATUS_PENDING,
+        'source_module' => M360_CARTABLE_SOURCE_MODULE_ESTIMATE,
+        'source_entity_type' => M360_CARTABLE_SOURCE_ENTITY_TYPE_ESTIMATE_VERSION,
+        'source_entity_id' => (string)$estimateVersionId,
+        'online_request_id' => $onlineRequestId > 0 ? $onlineRequestId : null,
+        'jobcard_id' => $jobcardId > 0 ? $jobcardId : null,
+        'estimate_id' => $estimateId > 0 ? $estimateId : null,
+        'action_route' => M360_CARTABLE_ESTIMATE_ACTION_ROUTE,
+        'action_token_hash' => trim($tokenHash) !== '' ? trim($tokenHash) : null,
+        'action_expires_at' => $expiresAt,
+        'created_by_actor_type' => 'SYSTEM',
+        'created_by_actor_id' => 'estimate_issue',
+        'event_type' => M360_CARTABLE_EVENT_CREATED,
+        'event_metadata' => [
+            'estimate_id' => $estimateId,
+            'estimate_version_id' => $estimateVersionId,
+            'jobcard_id' => $jobcardId,
+        ],
+    ]);
+
+    if (!$created['ok']) {
+        return array_merge($empty, ['message' => (string)$created['message']]);
+    }
+
+    return [
+        'ok' => true,
+        'task_id' => (int)$created['task_id'],
+        'created_new' => (bool)$created['created_new'],
+        'message' => '',
+    ];
+}
+
+function m360_cartable_cancel_task_for_estimate_version(
+    $conn,
+    int $estimateVersionId,
+    string $actorType,
+    ?string $actorId = null
+): array {
+    if (!is_resource($conn) || $estimateVersionId < 1 || !m360_cartable_tables_available($conn)) {
+        return ['ok' => false, 'message' => 'unavailable', 'changed' => false];
+    }
+    $task = m360_cartable_find_active_by_source(
+        $conn,
+        M360_CARTABLE_SOURCE_MODULE_ESTIMATE,
+        M360_CARTABLE_SOURCE_ENTITY_TYPE_ESTIMATE_VERSION,
+        (string)$estimateVersionId,
+        M360_CARTABLE_TASK_TYPE_ESTIMATE_APPROVAL
+    );
+    if ($task === null) {
+        return ['ok' => true, 'message' => '', 'changed' => false];
+    }
+
+    return m360_cartable_cancel_task(
+        $conn,
+        (int)$task['task_id'],
+        $actorType,
+        $actorId,
+        ['estimate_version_id' => $estimateVersionId, 'reason' => 'superseded']
+    );
+}
+
+/**
+ * @param array<string, string> $taskRow
+ * @return array{ok:bool,action_route:string,review_url:string,message:string}
+ */
+function m360_cartable_resolve_estimate_approval_action($conn, array $taskRow): array
+{
+    $empty = ['ok' => false, 'action_route' => '', 'review_url' => '', 'message' => ''];
+    $taskId = (int)($taskRow['task_id'] ?? 0);
+    if ($taskId < 1) {
+        return array_merge($empty, ['message' => 'missing_task']);
+    }
+    $route = trim((string)($taskRow['action_route'] ?? M360_CARTABLE_ESTIMATE_ACTION_ROUTE));
+    if ($route === '') {
+        $route = M360_CARTABLE_ESTIMATE_ACTION_ROUTE;
+    }
+
+    return [
+        'ok' => true,
+        'action_route' => $route,
+        'review_url' => $route . '?task_id=' . (string)$taskId,
+        'message' => '',
+    ];
+}
+
+/**
+ * @return array{ok:bool,message:string,changed:bool,compatibility_only:bool}
+ */
+function m360_cartable_complete_estimate_approval_task(
+    $conn,
+    int $estimateVersionId,
+    string $completedChannel = 'CUSTOMER_PORTAL',
+    ?array $metadata = null
+): array {
+    $empty = ['ok' => false, 'message' => 'unavailable', 'changed' => false, 'compatibility_only' => false];
+    if (!is_resource($conn) || $estimateVersionId < 1 || !m360_cartable_tables_available($conn)) {
+        return $empty;
+    }
+    $task = m360_cartable_find_active_by_source(
+        $conn,
+        M360_CARTABLE_SOURCE_MODULE_ESTIMATE,
+        M360_CARTABLE_SOURCE_ENTITY_TYPE_ESTIMATE_VERSION,
+        (string)$estimateVersionId,
+        M360_CARTABLE_TASK_TYPE_ESTIMATE_APPROVAL
+    );
+    if ($task === null) {
+        return ['ok' => true, 'message' => '', 'changed' => false, 'compatibility_only' => true];
+    }
+
+    $meta = is_array($metadata) ? $metadata : ['estimate_version_id' => $estimateVersionId];
+    $result = m360_cartable_complete_task(
+        $conn,
+        (int)$task['task_id'],
+        'CUSTOMER',
+        null,
+        $completedChannel,
+        $meta
+    );
+
+    return [
+        'ok' => $result['ok'],
+        'message' => (string)$result['message'],
+        'changed' => (bool)$result['changed'],
+        'compatibility_only' => false,
+    ];
 }
 
 /**
@@ -850,14 +1024,21 @@ function m360_cartable_list_dashboard_inbox($conn, int $customerId, string $mobi
             M360_CARTABLE_STATUS_PENDING => 'نیازمند اقدام',
             M360_CARTABLE_STATUS_OPENED => 'در حال انجام',
         ];
+        $taskType = (string)($taskRow['task_type'] ?? '');
+        $actionLabel = '';
+        if ($action['ok']) {
+            $actionLabel = $taskType === M360_CARTABLE_TASK_TYPE_ESTIMATE_APPROVAL
+                ? 'بررسی و تصمیم‌گیری'
+                : 'بررسی و امضای قرارداد';
+        }
         $items[] = [
             'task_id' => (int)($taskRow['task_id'] ?? 0),
-            'title' => (string)($taskRow['title'] ?? M360_CARTABLE_CONTRACT_TITLE_FA),
-            'message' => (string)($taskRow['message'] ?? M360_CARTABLE_CONTRACT_MESSAGE_FA),
+            'title' => (string)($taskRow['title'] ?? ($taskType === M360_CARTABLE_TASK_TYPE_ESTIMATE_APPROVAL ? M360_CARTABLE_ESTIMATE_TITLE_FA : M360_CARTABLE_CONTRACT_TITLE_FA)),
+            'message' => (string)($taskRow['message'] ?? ($taskType === M360_CARTABLE_TASK_TYPE_ESTIMATE_APPROVAL ? M360_CARTABLE_ESTIMATE_MESSAGE_FA : M360_CARTABLE_CONTRACT_MESSAGE_FA)),
             'priority' => (int)($taskRow['priority'] ?? 50),
             'status_label' => $statusLabels[$status] ?? 'نیازمند اقدام',
             'context' => $requestId > 0 ? 'REQ-' . (string)$requestId : '',
-            'action_label' => $action['ok'] ? 'بررسی و امضای قرارداد' : '',
+            'action_label' => $actionLabel,
             'action_url' => $action['ok'] ? (string)$action['review_url'] : '',
         ];
     }

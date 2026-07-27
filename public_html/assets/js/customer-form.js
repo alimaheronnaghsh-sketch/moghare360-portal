@@ -10,14 +10,34 @@
   var currentWizardStep = 'm360_step_mobile';
   var profileVehicles = [];
 
-  var WIZARD_STEPS_AFTER_OTP = [
+  var ONLINE_WIZARD_STEPS_AFTER_OTP = [
+    'm360_section_profile',
+    'm360_section_vehicle',
+    'm360_section_request'
+  ];
+  var STAFF_WIZARD_STEPS = [
+    'm360_section_customer_search',
     'm360_section_profile',
     'm360_section_vehicle',
     'm360_section_request',
-    'm360_section_visit',
+    'm360_section_condition',
+    'm360_section_checklist',
     'm360_section_contract',
     'm360_section_submit'
   ];
+  var ALL_WIZARD_SECTIONS = ONLINE_WIZARD_STEPS_AFTER_OTP.concat(STAFF_WIZARD_STEPS).filter(function (step, index, list) {
+    return list.indexOf(step) === index;
+  });
+
+  function wizardStepsForPage() {
+    var boot = window.m360CustomerPageBoot || {};
+    return boot.staffWalkinMode ? STAFF_WIZARD_STEPS : ONLINE_WIZARD_STEPS_AFTER_OTP;
+  }
+
+  function wizardProgressStepsForPage() {
+    var boot = window.m360CustomerPageBoot || {};
+    return boot.staffWalkinMode ? STAFF_WIZARD_STEPS : ['m360_step_mobile'].concat(ONLINE_WIZARD_STEPS_AFTER_OTP);
+  }
 
   function $(id) { return document.getElementById(id); }
 
@@ -182,10 +202,13 @@
   }
 
   var STEP_ERROR_IDS = {
+    m360_section_customer_search: 'm360_customer_search_step_error',
     m360_section_profile: 'm360_profile_step_error',
     m360_section_vehicle: 'm360_vehicle_step_error',
     m360_section_request: 'm360_request_step_error',
-    m360_section_visit: 'm360_visit_step_error',
+    m360_section_condition: 'm360_condition_step_error',
+    m360_section_checklist: 'm360_checklist_step_error',
+    m360_section_contract: 'm360_contract_step_error',
     m360_section_submit: 'm360_submit_step_error',
     m360_step_otp: 'm360_otp_status'
   };
@@ -219,7 +242,7 @@
   }
 
   function hideAllWizardSections() {
-    ['m360_step_welcome'].concat(WIZARD_STEPS_AFTER_OTP).forEach(function (id) {
+    ['m360_step_welcome'].concat(ALL_WIZARD_SECTIONS).forEach(function (id) {
       showSection(id, false);
     });
   }
@@ -227,16 +250,18 @@
   function updateWizardProgress(stepId) {
     var nav = $('m360_wizard_progress');
     if (!nav) return;
-    nav.hidden = WIZARD_STEPS_AFTER_OTP.indexOf(stepId) < 0;
+    var steps = wizardProgressStepsForPage();
+    nav.hidden = steps.indexOf(stepId) < 0;
     nav.querySelectorAll('[data-step]').forEach(function (li) {
+      var itemStep = li.getAttribute('data-step');
       li.classList.toggle('m360-customer-wizard-progress__item--active', li.getAttribute('data-step') === stepId);
-      li.classList.toggle('m360-customer-wizard-progress__item--done', WIZARD_STEPS_AFTER_OTP.indexOf(li.getAttribute('data-step')) < WIZARD_STEPS_AFTER_OTP.indexOf(stepId));
+      li.classList.toggle('m360-customer-wizard-progress__item--done', steps.indexOf(itemStep) >= 0 && steps.indexOf(itemStep) < steps.indexOf(stepId));
     });
   }
 
   function goToWizardStep(stepId) {
     currentWizardStep = stepId;
-    var inPostOtp = WIZARD_STEPS_AFTER_OTP.indexOf(stepId) >= 0;
+    var inPostOtp = wizardStepsForPage().indexOf(stepId) >= 0;
     showSection('m360_step_mobile', stepId === 'm360_step_mobile');
     showSection('m360_step_otp', stepId === 'm360_step_otp');
     if (inPostOtp) {
@@ -286,6 +311,65 @@
     });
   }
 
+  function isStaffWalkinMode() {
+    var boot = window.m360CustomerPageBoot || {};
+    return !!boot.staffWalkinMode;
+  }
+
+  function setWalkinVisitFieldsRequired(required) {
+    if (!isStaffWalkinMode()) return;
+    ['odometer_km', 'fuel_level'].forEach(function (id) {
+      setFieldRequired($(id), !!required);
+    });
+  }
+
+  function setExistingVehicleSummary(vehicle) {
+    var summary = $('m360_existing_vehicle_summary');
+    var label = $('m360_existing_vehicle_summary_label');
+    if (!summary) return;
+    if (!vehicle) {
+      summary.hidden = true;
+      if (label) label.textContent = '';
+      return;
+    }
+    summary.hidden = false;
+    if (label) label.textContent = vehicle.label || [vehicle.brand, vehicle.model, vehicle.plate].filter(Boolean).join(' — ');
+  }
+
+  function applyExistingVehicleSelection(vehicle) {
+    var mode = $('vehicle_mode');
+    var selected = $('selected_vehicle_id');
+    var newFields = $('m360_vehicle_new_fields');
+    if (mode) mode.value = 'existing';
+    if (selected) selected.value = String(vehicle.vehicle_id || '');
+    if (newFields) newFields.hidden = true;
+    setVehicleNewFieldsRequired(false);
+    if (isStaffWalkinMode()) {
+      setExistingVehicleSummary(vehicle);
+      setWalkinVisitFieldsRequired(true);
+      var visitFields = $('m360_vehicle_visit_fields');
+      if (visitFields) visitFields.hidden = false;
+    }
+  }
+
+  function applyNewVehicleSelection() {
+    var mode = $('vehicle_mode');
+    var selected = $('selected_vehicle_id');
+    var newFields = $('m360_vehicle_new_fields');
+    var list = $('m360_vehicle_picker_list');
+    if (mode) mode.value = 'new';
+    if (selected) selected.value = '';
+    if (list) list.querySelectorAll('input[type="radio"]').forEach(function (r) { r.checked = false; });
+    if (newFields) newFields.hidden = false;
+    setVehicleNewFieldsRequired(true);
+    setExistingVehicleSummary(null);
+    if (isStaffWalkinMode()) {
+      setWalkinVisitFieldsRequired(true);
+      var visitFields = $('m360_vehicle_visit_fields');
+      if (visitFields) visitFields.hidden = false;
+    }
+  }
+
   function syncFullNameHidden() {
     var first = $('first_name');
     var last = $('last_name');
@@ -319,10 +403,7 @@
 
     if (profileVehicles.length === 0) {
       picker.hidden = oos.length === 0;
-      if (mode) mode.value = 'new';
-      if (selected) selected.value = '';
-      newFields.hidden = false;
-      setVehicleNewFieldsRequired(true);
+      applyNewVehicleSelection();
       return;
     }
 
@@ -335,10 +416,7 @@
       radio.name = 'vehicle_pick';
       radio.value = String(v.vehicle_id);
       radio.addEventListener('change', function () {
-        if (mode) mode.value = 'existing';
-        if (selected) selected.value = String(v.vehicle_id);
-        newFields.hidden = true;
-        setVehicleNewFieldsRequired(false);
+        applyExistingVehicleSelection(v);
       });
       label.appendChild(radio);
       label.appendChild(document.createTextNode(' ' + (v.label || '')));
@@ -348,15 +426,10 @@
     var addBtn = $('m360_vehicle_add_new');
     if (addBtn) {
       addBtn.onclick = function () {
-        if (mode) mode.value = 'new';
-        if (selected) selected.value = '';
-        list.querySelectorAll('input[type="radio"]').forEach(function (r) { r.checked = false; });
-        newFields.hidden = false;
-        setVehicleNewFieldsRequired(true);
+        applyNewVehicleSelection();
       };
     }
-    newFields.hidden = false;
-    setVehicleNewFieldsRequired(true);
+    applyNewVehicleSelection();
   }
 
   function fillProfileForm(profile) {
@@ -394,6 +467,140 @@
       profileMobile.value = profile.primary_mobile || (mobileInput ? mobileInput.value : '');
     }
     syncFullNameHidden();
+  }
+
+  function formCsrfToken() {
+    var token = document.querySelector('input[name="erp_csrf_token"]');
+    return token ? token.value : '';
+  }
+
+  function setWalkinSearchStatus(message, type) {
+    setStatus($('m360_walkin_customer_search_status'), message, type);
+  }
+
+  function setHiddenValue(id, value) {
+    var el = $(id);
+    if (el) el.value = value || '';
+  }
+
+  function copyWalkinSearchToProfile() {
+    var searchMobile = $('walkin_search_mobile');
+    var searchNational = $('walkin_search_national_id');
+    var mobile = $('mobile');
+    var national = $('national_id');
+    if (mobile && searchMobile && mobile.value.trim() === '') mobile.value = searchMobile.value.trim();
+    if (national && searchNational && national.value.trim() === '') national.value = searchNational.value.trim();
+    var profileMobile = $('profile_primary_mobile');
+    if (profileMobile && mobile) profileMobile.value = mobile.value;
+  }
+
+  function clearWalkinNewCustomerProfile() {
+    ['first_name', 'last_name', 'full_name', 'second_phone', 'residence_address', 'vehicle_delivery_address', 'authorized_receiver_name', 'authorized_receiver_phone', 'customer_notes'].forEach(function (id) {
+      var el = $(id);
+      if (el) el.value = '';
+    });
+    setHiddenValue('selected_existing_customer_id', '');
+    copyWalkinSearchToProfile();
+  }
+
+  function beginWalkinNewCustomer() {
+    var flow = $('customer_flow');
+    if (flow) flow.value = 'new';
+    setHiddenValue('verified_customer_name', '');
+    clearWalkinNewCustomerProfile();
+    renderVehiclePicker([], []);
+    setNewCustomerRequired(true);
+    setBothFlowRequired(true);
+    setVehicleNewFieldsRequired(true);
+    setSubmitEnabled(true);
+    clearAllStepErrors();
+    goToWizardStep('m360_section_profile');
+  }
+
+  function applyWalkinExistingCustomer(payload) {
+    var profile = payload.profile || {};
+    var mobile = $('mobile');
+    var profileMobile = profile.primary_mobile || profile.mobile || '';
+    if (mobile && profileMobile) {
+      mobile.value = profileMobile;
+      mobile.readOnly = false;
+    }
+    fillProfileForm(profile);
+    setHiddenValue('customer_flow', 'returning');
+    setHiddenValue('verified_customer_name', profile.full_name || '');
+    setHiddenValue('selected_existing_customer_id', String(profile.customer_id || ''));
+    renderVehiclePicker(payload.vehicles || [], payload.vehicles_out_of_scope || []);
+    setNewCustomerRequired(false);
+    setBothFlowRequired(true);
+    setVehicleNewFieldsRequired(true);
+    setSubmitEnabled(true);
+    clearAllStepErrors();
+    setWalkinSearchStatus('مشتری موجود پیدا شد. ادامه از مرحله اطلاعات خودرو انجام می‌شود.', 'ok');
+    goToWizardStep('m360_section_vehicle');
+  }
+
+  function searchWalkinCustomer() {
+    var searchBtn = $('m360_walkin_customer_search_btn');
+    var mobile = $('walkin_search_mobile');
+    var national = $('walkin_search_national_id');
+    var phone = mobile ? mobile.value.trim() : '';
+    var nationalId = national ? national.value.trim() : '';
+    if (phone === '' && nationalId === '') {
+      showStepError('m360_section_customer_search', 'شماره موبایل یا کد ملی مشتری را وارد کنید.');
+      setWalkinSearchStatus('شماره موبایل یا کد ملی مشتری را وارد کنید.', 'error');
+      return;
+    }
+    if (phone !== '' && !/^09\d{9}$/.test(phone)) {
+      showStepError('m360_section_customer_search', 'شماره موبایل معتبر ۱۱ رقمی وارد کنید.');
+      setWalkinSearchStatus('شماره موبایل معتبر ۱۱ رقمی وارد کنید.', 'error');
+      return;
+    }
+    setButtonBusy(searchBtn, true);
+    setWalkinSearchStatus('در حال جستجوی مشتری...', 'pending');
+    fetchJson('api/staff/customer-lookup.php', {
+      mobile: phone,
+      national_id: nationalId,
+      erp_csrf_token: formCsrfToken()
+    }).then(function (result) {
+      var data = result.data || {};
+      var payload = data.data || data;
+      if (data.ok && payload.customer_exists) {
+        applyWalkinExistingCustomer(payload);
+        return;
+      }
+      if (data.ok) {
+        setWalkinSearchStatus('مشتری پیدا نشد. اطلاعات مشتری جدید را تکمیل کنید.', 'pending');
+        beginWalkinNewCustomer();
+        return;
+      }
+      showStepError('m360_section_customer_search', data.message || 'جستجوی مشتری ناموفق بود.');
+      setWalkinSearchStatus(data.message || 'جستجوی مشتری ناموفق بود.', 'error');
+    }).catch(function () {
+      showStepError('m360_section_customer_search', 'جستجوی مشتری ناموفق بود.');
+      setWalkinSearchStatus('جستجوی مشتری ناموفق بود.', 'error');
+    }).finally(function () {
+      setButtonBusy(searchBtn, false);
+    });
+  }
+
+  function initStaffCustomerSearch() {
+    var boot = window.m360CustomerPageBoot || {};
+    if (!boot.staffWalkinMode) return;
+    var searchBtn = $('m360_walkin_customer_search_btn');
+    var newBtn = $('m360_walkin_new_customer_btn');
+    if (searchBtn) {
+      searchBtn.addEventListener('click', function (e) {
+        e.preventDefault();
+        searchWalkinCustomer();
+      });
+    }
+    if (newBtn) {
+      newBtn.addEventListener('click', function (e) {
+        e.preventDefault();
+        setWalkinSearchStatus('اطلاعات مشتری جدید را تکمیل کنید.', 'pending');
+        beginWalkinNewCustomer();
+      });
+    }
   }
 
   function startResendCountdown() {
@@ -584,8 +791,15 @@
   function updateVisitHint() {
     var type = $('request_type');
     var hint = $('visit_time_hint');
-    if (!type || !hint) return;
-    hint.style.display = (type.value === 'diagnostic_inspection') ? 'block' : 'none';
+    if (!type) return;
+    var isDiagnostic = type.value === 'diagnostic_inspection';
+    if (hint) hint.style.display = isDiagnostic ? 'block' : 'none';
+    document.querySelectorAll('[data-diagnostic-parity]').forEach(function (panel) {
+      panel.hidden = !isDiagnostic;
+      panel.querySelectorAll('[data-diagnostic-input]').forEach(function (input) {
+        input.disabled = !isDiagnostic;
+      });
+    });
   }
 
   function buildPlateDisplay() {
@@ -601,7 +815,7 @@
     var mid = $('plate_middle_3_digits');
     var region = $('plate_region_2_digits');
     var hidden = $('plate_display');
-    var preview = $('plate_preview');
+    var preview = $('plate_preview') || $('m360_rw_plate_preview');
     if (!d1 || !d2 || !letter || !m1 || !m2 || !m3 || !r1 || !r2 || !left || !mid || !region || !hidden) return;
     if (d1.value !== '' && d2.value !== '') left.value = d1.value + d2.value;
     if (m1.value !== '' && m2.value !== '' && m3.value !== '') mid.value = m1.value + m2.value + m3.value;
@@ -616,6 +830,118 @@
       preview.textContent = 'پس از تکمیل، پلاک اینجا نمایش داده می‌شود';
       preview.classList.remove('iran-plate-preview--filled');
     }
+  }
+
+  function bindTrunkOtherToggle() {
+    var box = $('m360_rw_trunk_other_selected');
+    var text = $('m360_rw_trunk_other_text');
+    if (!box || !text) return;
+    var sync = function () {
+      text.hidden = !box.checked;
+      if (!box.checked) text.value = '';
+    };
+    box.addEventListener('change', sync);
+    sync();
+  }
+
+  function bindDamageSelector() {
+    var selector = $('m360_rw_damage_selector');
+    if (!selector) return;
+    var statusLabels = { HEALTHY: 'سالم', MINOR: 'آسیب جزئی', SEVERE: 'آسیب شدید' };
+    var rows = Array.prototype.slice.call(selector.querySelectorAll('.m360-rw-zone-row'));
+    if (!rows.length) return;
+
+    function rowLabel(row) {
+      return row.getAttribute('data-label') || row.getAttribute('data-zone') || 'ناحیه';
+    }
+
+    function paintRow(row) {
+      var status = row.getAttribute('data-status') || 'HEALTHY';
+      var assessed = row.getAttribute('data-assessed') === '1';
+      row.querySelectorAll('.m360-rw-zone-seg button[data-status]').forEach(function (btn) {
+        var active = assessed && btn.getAttribute('data-status') === status;
+        btn.classList.toggle('is-active', active);
+        btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+      });
+      row.setAttribute('aria-label', rowLabel(row) + '، وضعیت فعلی ' + (assessed ? (statusLabels[status] || status) : 'بررسی‌نشده'));
+    }
+
+    function setRowStatus(row, status, assessed) {
+      var zone = row.getAttribute('data-zone') || '';
+      row.setAttribute('data-status', status);
+      row.setAttribute('data-assessed', assessed ? '1' : '0');
+      var hidden = $('m360_rw_damage_zone_' + zone);
+      if (hidden) hidden.value = status;
+      paintRow(row);
+    }
+
+    function renderSummary() {
+      var body = $('m360_rw_damage_summary_body');
+      if (!body) return;
+      var damaged = [];
+      var assessedCount = 0;
+      rows.forEach(function (row) {
+        if (row.getAttribute('data-assessed') !== '1') return;
+        assessedCount += 1;
+        var status = row.getAttribute('data-status') || 'HEALTHY';
+        if (status !== 'HEALTHY') damaged.push({ label: rowLabel(row), status: statusLabels[status] || status });
+      });
+      if (damaged.length) {
+        body.innerHTML = '<ul>' + damaged.map(function (item) {
+          return '<li>' + item.label + ' — ' + item.status + '</li>';
+        }).join('') + '</ul>';
+      } else if (assessedCount === rows.length) {
+        body.innerHTML = '<p class="m360-rw-muted" style="margin:0">همه نواحی بررسی‌شده سالم ثبت شدند.</p>';
+      } else {
+        body.innerHTML = '<p class="m360-rw-muted" style="margin:0">هنوز آسیب ظاهری ثبت نشده است. نواحی را بررسی کنید یا «ثبت همه سالم» را بزنید.</p>';
+      }
+    }
+
+    rows.forEach(paintRow);
+    renderSummary();
+
+    selector.addEventListener('click', function (e) {
+      var target = e.target;
+      var btn = target && target.closest ? target.closest('.m360-rw-zone-seg button[data-status]') : null;
+      if (!btn) return;
+      var row = btn.closest('.m360-rw-zone-row');
+      if (!row) return;
+      setRowStatus(row, btn.getAttribute('data-status'), true);
+      renderSummary();
+    });
+
+    var allHealthy = $('m360_rw_damage_all_healthy');
+    if (allHealthy) {
+      allHealthy.addEventListener('click', function () {
+        rows.forEach(function (row) { setRowStatus(row, 'HEALTHY', true); });
+        renderSummary();
+      });
+    }
+
+    var clearBtn = $('m360_rw_damage_clear');
+    if (clearBtn) {
+      clearBtn.addEventListener('click', function () {
+        rows.forEach(function (row) { setRowStatus(row, 'HEALTHY', false); });
+        renderSummary();
+      });
+    }
+  }
+
+  function allDamageZonesAssessed() {
+    var selector = $('m360_rw_damage_selector');
+    if (!selector) return true;
+    var rows = Array.prototype.slice.call(selector.querySelectorAll('.m360-rw-zone-row'));
+    return rows.length === 0 || rows.every(function (row) {
+      return row.getAttribute('data-assessed') === '1';
+    });
+  }
+
+  function allTrunkItemsChecked() {
+    var rows = Array.prototype.slice.call(document.querySelectorAll('.m360-rw-trunk-row[data-trunk-key]'));
+    return rows.length === 0 || rows.every(function (row) {
+      var key = row.getAttribute('data-trunk-key') || '';
+      return !!document.querySelector('input[name="trunk_' + key + '"]:checked');
+    });
   }
 
   function initOtpFirstFlow() {
@@ -642,8 +968,34 @@
     setStatus($('m360_mobile_status'), 'برای شروع، شماره موبایل خود را وارد کنید.', '');
   }
 
+  function beginStaffWalkinFlow() {
+    verified = true;
+    var flow = $('customer_flow');
+    if (flow) flow.value = 'new';
+    var mode = $('vehicle_mode');
+    if (mode && mode.value === '') mode.value = 'new';
+    setNewCustomerRequired(false);
+    setBothFlowRequired(false);
+    setVehicleNewFieldsRequired(false);
+    setSubmitEnabled(true);
+    showSection('m360_step_mobile', false);
+    showSection('m360_step_otp', false);
+    goToWizardStep('m360_section_customer_search');
+  }
+
   function validateWizardBeforeSubmit() {
+    var boot = window.m360CustomerPageBoot || {};
     syncFullNameHidden();
+    if (boot.staffWalkinMode) {
+      var mobile = $('mobile');
+      var phone = mobile ? mobile.value.trim() : '';
+      if (!/^09\d{9}$/.test(phone)) {
+        showStepError('m360_section_profile', 'لطفاً شماره موبایل معتبر ۱۱ رقمی وارد کنید.');
+        goToWizardStep('m360_section_profile');
+        if (mobile) mobile.focus();
+        return false;
+      }
+    }
     var flow = $('customer_flow');
     var isReturning = flow && flow.value === 'returning';
     var first = $('first_name');
@@ -696,6 +1048,22 @@
         return false;
       }
     }
+    if (boot.staffWalkinMode) {
+      var odometer = $('odometer_km');
+      var fuel = $('fuel_level');
+      if (!odometer || odometer.value.trim() === '') {
+        showStepError('m360_section_vehicle', 'لطفاً کیلومتر فعلی خودرو را وارد کنید.');
+        goToWizardStep('m360_section_vehicle');
+        if (odometer) odometer.focus();
+        return false;
+      }
+      if (!fuel || fuel.value === '') {
+        showStepError('m360_section_vehicle', 'لطفاً سطح بنزین را انتخاب کنید.');
+        goToWizardStep('m360_section_vehicle');
+        if (fuel) fuel.focus();
+        return false;
+      }
+    }
     var reqType = $('request_type');
     var reqDesc = $('request_description');
     if (!reqType || reqType.value === '') {
@@ -711,9 +1079,21 @@
     }
     var visitHidden = $('visit_date');
     if (!visitHidden || visitHidden.value === '') {
-      showStepError('m360_section_visit', 'لطفاً تاریخ مراجعه را از تقویم انتخاب کنید.');
-      goToWizardStep('m360_section_visit');
+      showStepError('m360_section_request', 'لطفاً تاریخ مراجعه را از تقویم انتخاب کنید.');
+      goToWizardStep('m360_section_request');
       return false;
+    }
+    if (boot.staffWalkinMode) {
+      if (!allDamageZonesAssessed()) {
+        showStepError('m360_section_condition', 'برای ذخیره پذیرش حضوری، وضعیت همه نواحی خودرو را مشخص کنید.');
+        goToWizardStep('m360_section_condition');
+        return false;
+      }
+      if (!allTrunkItemsChecked()) {
+        showStepError('m360_section_checklist', 'برای ذخیره پذیرش حضوری، وضعیت همه متعلقات را مشخص کنید.');
+        goToWizardStep('m360_section_checklist');
+        return false;
+      }
     }
     clearAllStepErrors();
     return true;
@@ -741,7 +1121,7 @@
     setBothFlowRequired(true);
     setSubmitEnabled(true);
 
-    var step = boot.submitErrorStep || 'm360_section_submit';
+    var step = boot.submitErrorStep || (boot.staffWalkinMode ? 'm360_section_submit' : 'm360_section_request');
     goToWizardStep(step);
     if (boot.submitError) {
       if (boot.submitErrorIsOtp) {
@@ -827,10 +1207,15 @@
     chainPlateFocus(plateDigitIds.concat(['plate_letter']));
 
     initServerVisitCalendar();
+    bindTrunkOtherToggle();
+    bindDamageSelector();
     initOtpFirstFlow();
     initWizardNav();
+    initStaffCustomerSearch();
     var boot = window.m360CustomerPageBoot || {};
-    if (boot.skipOtpToWizard && boot.verifiedSessionMobile) {
+    if (boot.staffWalkinMode) {
+      beginStaffWalkinFlow();
+    } else if (boot.skipOtpToWizard && boot.verifiedSessionMobile) {
       verified = true;
       var mobileEl = $('mobile');
       if (mobileEl) {

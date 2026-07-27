@@ -95,7 +95,7 @@ try {
           </div>
           <div class="action-row">
             <?php if ($focusNeedsContract): ?>
-              <a class="btn primary" href="customer-contract.php?request_id=<?= e((string)$focusRequest['id']) ?>">تکمیل قرارداد آنلاین</a>
+              <a class="btn primary" href="customer-contract.php?request_id=<?= e((string)$focusRequest['id']) ?>">تکمیل قرارداد (مسیر قدیمی — غیر اصلی)</a>
             <?php endif; ?>
             <a class="btn secondary" href="customer-profile.php?mode=dashboard">بازگشت به داشبورد</a>
           </div>
