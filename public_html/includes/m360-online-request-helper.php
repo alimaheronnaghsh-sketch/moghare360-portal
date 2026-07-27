@@ -14,6 +14,7 @@ const M360_ONLINE_REQ_STATUS_CONVERTED = 'CONVERTED_TO_JOBCARD';
 const M360_ONLINE_REQ_STATUS_REJECTED = 'REJECTED';
 
 const M360_ONLINE_REQ_SOURCE_PUBLIC = 'PUBLIC_SITE';
+const M360_ONLINE_REQ_SOURCE_STAFF_WALKIN = 'STAFF_ASSISTED_WALKIN';
 
 const M360_ONLINE_REQ_HISTORY_CREATED = 'ONLINE_REQUEST_CREATED';
 const M360_ONLINE_REQ_HISTORY_UNDER_REVIEW = 'ONLINE_REQUEST_UNDER_REVIEW';
@@ -109,6 +110,22 @@ function m360_online_req_normalize_plate(string $plate): string
 {
     $plate = preg_replace('/\s+/u', ' ', trim($plate)) ?? trim($plate);
     return $plate;
+}
+
+function m360_online_req_source_channel(array $requestRow): string
+{
+    $source = strtoupper(trim((string)($requestRow['source_channel'] ?? $requestRow['source'] ?? '')));
+    if ($source === '') {
+        $payload = m360_online_req_parse_payload($requestRow['request_payload_json'] ?? null);
+        $source = strtoupper(trim((string)($payload['source_channel'] ?? $payload['source'] ?? '')));
+    }
+
+    return $source;
+}
+
+function m360_online_req_is_staff_walkin(array $requestRow): bool
+{
+    return m360_online_req_source_channel($requestRow) === M360_ONLINE_REQ_SOURCE_STAFF_WALKIN;
 }
 
 /** @return array<string, mixed> */
@@ -219,6 +236,9 @@ function m360_online_req_insert($conn, int $companyId, array $fields): array
     $note = trim((string)($fields['service_note'] ?? ''));
     $requestType = trim((string)($fields['request_type'] ?? ''));
     $sourceChannel = trim((string)($fields['source_channel'] ?? M360_ONLINE_REQ_SOURCE_PUBLIC));
+    if ($sourceChannel === '') {
+        $sourceChannel = M360_ONLINE_REQ_SOURCE_PUBLIC;
+    }
     $payloadJson = (string)($fields['request_payload_json'] ?? '{}');
     $visitDate = trim((string)($fields['visit_date'] ?? ''));
     $status = m360_online_req_initial_status();
@@ -228,8 +248,10 @@ function m360_online_req_insert($conn, int $companyId, array $fields): array
     $profileRequired = $customerId === null;
 
     $payload = m360_online_req_parse_payload($payloadJson);
-    $payload['otp_verified'] = 1;
-    $payload['source'] = M360_ONLINE_REQ_SOURCE_PUBLIC;
+    $otpVerified = (int)($fields['otp_verified'] ?? ($payload['otp_verified'] ?? 1));
+    $payload['otp_verified'] = $otpVerified;
+    $payload['source'] = $sourceChannel;
+    $payload['source_channel'] = $sourceChannel;
     if ($customerId !== null) {
         $payload['customer_id'] = $customerId;
     }
@@ -274,7 +296,7 @@ function m360_online_req_insert($conn, int $companyId, array $fields): array
     }
     if ($hasOtpVerified) {
         $columns[] = 'otp_verified';
-        $values[] = 1;
+        $values[] = $otpVerified;
     }
 
     $placeholders = implode(', ', array_fill(0, count($columns), '?'));

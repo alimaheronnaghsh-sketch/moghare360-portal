@@ -7,6 +7,12 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/includes/erp-crm-helper.php';
 
+erp_auth_context_start();
+if (erp_auth_context_session_user_id() === null) {
+    header('Location: staff-login.php');
+    exit;
+}
+
 $connection = false;
 $errorMessage = '';
 $schedules = [];

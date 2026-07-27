@@ -10,6 +10,8 @@ require_once __DIR__ . DIRECTORY_SEPARATOR . 'erp-customer-core-helper.php';
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'moghare360-customer-v2-write-helper.php';
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'moghare360-vehicle-v2-write-helper.php';
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'moghare360-jobcard-v2-write-helper.php';
+require_once __DIR__ . DIRECTORY_SEPARATOR . 'm360-intake-prepayment-gate-helper.php';
+require_once __DIR__ . DIRECTORY_SEPARATOR . 'm360-intake-contract-helper.php';
 
 const M360_RECEPTION_CSRF_PURPOSE = 'online_request_reception';
 
@@ -52,7 +54,13 @@ function m360_reception_csrf_is_valid(?string $token): bool
 function m360_reception_intake_recover_step_key(string $activeStep): string
 {
     $activeStep = trim($activeStep);
-    $allowed = ['otp', 'vehicle', 'condition', 'service', 'referral', 'photos', 'documents', 'signature', 'locked_summary'];
+    if (in_array($activeStep, ['photos', 'camera_photo'], true)) {
+        return 'condition';
+    }
+    if ($activeStep === 'contract') {
+        return 'signature';
+    }
+    $allowed = ['otp', 'customer', 'vehicle', 'service', 'condition', 'documents', 'signature', 'referral', 'locked_summary'];
 
     return in_array($activeStep, $allowed, true) ? $activeStep : 'documents';
 }
@@ -61,11 +69,11 @@ function m360_reception_intake_step_hash(string $stepKey): string
 {
     return match (m360_reception_intake_recover_step_key($stepKey)) {
         'otp' => 'step-otp',
+        'customer' => 'step-customer',
         'vehicle' => 'step-vehicle',
         'condition' => 'step-condition',
         'service' => 'step-service',
         'referral' => 'step-referral',
-        'photos' => 'step-photos',
         'documents' => 'step-documents',
         'signature' => 'step-signature',
         'locked_summary' => 'step-locked',
@@ -186,7 +194,7 @@ function m360_reception_status_counts($conn): array
 
     $where = '1=1';
     if (m360_online_req_has_column($conn, 'otp_verified')) {
-        $where .= ' AND ISNULL(r.otp_verified, 0) = 1';
+        $where .= " AND (ISNULL(r.otp_verified, 0) = 1 OR r.source_channel = N'" . M360_ONLINE_REQ_SOURCE_STAFF_WALKIN . "')";
     }
 
     $sql = 'SELECT r.request_status, COUNT(*) AS cnt
@@ -263,7 +271,7 @@ function m360_reception_list_requests($conn, ?string $statusFilter = null, int $
     $where = '1=1';
 
     if (m360_online_req_has_column($conn, 'otp_verified')) {
-        $where .= ' AND ISNULL(r.otp_verified, 0) = 1';
+        $where .= " AND (ISNULL(r.otp_verified, 0) = 1 OR r.source_channel = N'" . M360_ONLINE_REQ_SOURCE_STAFF_WALKIN . "')";
     }
 
     if ($statusFilter !== null && $statusFilter !== '' && $statusFilter !== 'ALL') {
@@ -316,12 +324,12 @@ function m360_reception_list_requests($conn, ?string $statusFilter = null, int $
             $normalized[strtolower((string)$key)] = $value === null ? '' : (string)$value;
         }
         if ($hasOtpColumn) {
-            if (!m360_online_req_payload_otp_verified_for_list($conn, $normalized)) {
+            if (!m360_online_req_payload_otp_verified_for_list($conn, $normalized) && !m360_online_req_is_staff_walkin($normalized)) {
                 continue;
             }
         } else {
             $normalized = m360_online_req_hydrate_row_payload_json($conn, $normalized);
-            if (!m360_online_req_payload_otp_verified($normalized)) {
+            if (!m360_online_req_payload_otp_verified($normalized) && !m360_online_req_is_staff_walkin($normalized)) {
                 continue;
             }
         }
@@ -593,8 +601,29 @@ function m360_reception_convert_to_jobcard(int $requestId): array
         ];
     }
 
-    if (!m360_online_req_payload_otp_verified($row)) {
+    $staffWalkin = m360_online_req_is_staff_walkin($row);
+    $payload = m360_online_req_parse_payload($row['request_payload_json'] ?? null);
+    if (!m360_online_req_payload_otp_verified($row) && !$staffWalkin) {
         return ['ok' => false, 'message' => 'درخواست بدون تأیید OTP قابل تبدیل نیست.', 'jobcard_id' => null, 'jobcard_number' => null, 'already_converted' => false];
+    }
+
+    if (!m360_intake_prepayment_contract_signed_from_payload($payload)) {
+        return ['ok' => false, 'message' => 'پرونده قبل از تأیید قرارداد توسط خود مشتری قابل تبدیل به کارت کار نیست.', 'jobcard_id' => null, 'jobcard_number' => null, 'already_converted' => false];
+    }
+
+    $prepaymentGate = m360_intake_prepayment_gate_evaluate(
+        $payload,
+        true,
+        m360_intake_prepayment_fetch_backend_summary($conn, 0, (int)($row['customer_id'] ?? ($payload['customer_id'] ?? 0)))
+    );
+    if (empty($prepaymentGate['allow_handoff'])) {
+        return [
+            'ok' => false,
+            'message' => (string)($prepaymentGate['message'] !== '' ? $prepaymentGate['message'] : $prepaymentGate['label']),
+            'jobcard_id' => null,
+            'jobcard_number' => null,
+            'already_converted' => false,
+        ];
     }
 
     $status = strtoupper(trim((string)($row['request_status'] ?? '')));
@@ -621,7 +650,6 @@ function m360_reception_convert_to_jobcard(int $requestId): array
 
     m360_reception_bind_request_entities($conn, $requestId, $customerId, $vehicleId);
 
-    $payload = m360_online_req_parse_payload($row['request_payload_json'] ?? null);
     $visitDate = trim((string)($row['visit_date'] ?? $payload['visit_date'] ?? ''));
     $complaint = trim((string)($row['service_note'] ?? ''));
     if ($complaint === '') {
@@ -649,6 +677,34 @@ function m360_reception_convert_to_jobcard(int $requestId): array
     }
 
     $jobcardId = (int)$jobcardWrite['jobcard_id'];
+    if (customer_core_column_exists($conn, 'erp_jobcards', 'online_request_id')) {
+        customer_core_execute(
+            $conn,
+            'UPDATE dbo.erp_jobcards SET online_request_id = ?, updated_at = SYSUTCDATETIME() WHERE jobcard_id = ?',
+            [$requestId, $jobcardId]
+        );
+    }
+    $contractId = 0;
+    if (customer_core_table_exists($conn, M360_CONTRACT_TABLE)) {
+        customer_core_execute(
+            $conn,
+            'UPDATE dbo.' . M360_CONTRACT_TABLE . ' SET jobcard_id = ?, updated_at = SYSUTCDATETIME()
+             WHERE online_request_id = ? AND (jobcard_id IS NULL OR jobcard_id = 0)',
+            [$jobcardId, $requestId]
+        );
+        $contractId = (int)(customer_core_scalar(
+            $conn,
+            'SELECT TOP 1 contract_id FROM dbo.' . M360_CONTRACT_TABLE . ' WHERE online_request_id = ? ORDER BY contract_id DESC',
+            [$requestId]
+        ) ?? 0);
+    }
+    if ($contractId > 0 && customer_core_column_exists($conn, 'erp_jobcards', 'contract_status')) {
+        customer_core_execute(
+            $conn,
+            'UPDATE dbo.erp_jobcards SET contract_status = ?, intake_contract_id = ?, contract_signed_at = COALESCE(contract_signed_at, SYSUTCDATETIME()), updated_at = SYSUTCDATETIME() WHERE jobcard_id = ?',
+            ['SIGNED', $contractId, $jobcardId]
+        );
+    }
     $previousStatus = (string)($row['request_status'] ?? '');
     erp_auth_context_start();
     $userId = erp_auth_current_user_id() ?? ERP_PHASE1_PLATFORM_OWNER_ID;

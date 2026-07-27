@@ -17,7 +17,7 @@ $conn = customer_core_db();
 $dbOk = $conn !== false;
 $kpi = $dbOk ? m360_rw_workbench_kpis($conn) : [
     'online_active' => 0, 'incomplete' => 0, 'ready_convert' => 0,
-    'jobcards_today' => 0, 'contracts_pending' => 0, 'rejected_closed' => 0,
+    'jobcards_today' => 0, 'contracts_pending' => 0, 'prepayment_owner_pending' => 0, 'rejected_closed' => 0,
 ];
 $hrCards = m360_rw_workbench_hr_shortcuts();
 $hubCards = m360_rw_reception_process_hub_cards($kpi);
@@ -36,15 +36,22 @@ $isLanding = ($section === '' || $section === 'home');
 <body class="m360-public-shell m360-rw-page">
 <div class="m360-wrap m360-rw-wrap">
     <header class="m360-rw-header">
+        <div class="m360-brand-lockup" aria-label="MOGHARE360">
+            <img class="m360-brand-logo" src="assets/brand/moghareh-motors-logo.jpg" width="40" height="40" alt="MOGHARE360" onerror="this.style.display='none'">
+            <div class="m360-brand-wordmark">
+                <span class="m360-brand-wordmark__title" lang="en" dir="ltr">MOGHARE360</span>
+                <span class="m360-brand-wordmark__sub">میز کار پذیرش</span>
+            </div>
+        </div>
         <div class="m360-rw-header__top">
-            <a class="m360-rw-back" href="erp-staff-home.php">← داشبورد پرسنل</a>
+            <a class="m360-op-nav-pill" href="erp-staff-home.php">← داشبورد پرسنل</a>
             <?php if (!$isLanding): ?>
-                <a class="m360-rw-back" href="erp-reception-workbench.php">میز کار پذیرش</a>
+                <a class="m360-op-nav-pill" href="erp-reception-workbench.php">میز کار پذیرش</a>
             <?php endif; ?>
             <span class="m360-rw-badge">پذیرش</span>
         </div>
         <h1 class="m360-rw-title">میز کار پذیرش</h1>
-        <p class="m360-rw-subtitle">مدیریت پذیرش موقت و کامل، تکمیل پرونده و آماده‌سازی کارت کار</p>
+        <p class="m360-rw-subtitle">درخواست‌های آنلاین مشتریان، شروع درخواست حضوری توسط پذیرش، تکمیل پرونده پذیرش</p>
     </header>
 
     <?php if (!$dbOk): ?>
@@ -55,13 +62,13 @@ $isLanding = ($section === '' || $section === 'home');
         <section class="m360-rw-landing-grid">
             <a class="m360-rw-landing-card" href="erp-reception-workbench.php?section=reception">
                 <h2>پذیرش</h2>
-                <p>پذیرش موقت، پذیرش حضوری/آنلاین، تکمیل پرونده، پیگیری، QC و ترخیص</p>
-                <span class="m360-rw-card-link">ورود به hub پذیرش</span>
+                <p>درخواست‌های آنلاین مشتریان، شروع درخواست حضوری توسط پذیرش، تکمیل پرونده و آماده‌سازی کارت کار</p>
+                <span class="m360-op-button-secondary">ورود به hub پذیرش</span>
             </a>
             <a class="m360-rw-landing-card m360-rw-landing-card--profile" href="erp-reception-workbench.php?section=profile">
                 <h2>پروفایل پرسنلی</h2>
                 <p>پروفایل، مرخصی، مدارک و فیش حقوقی</p>
-                <span class="m360-rw-card-link">ورود</span>
+                <span class="m360-op-button-secondary">ورود</span>
             </a>
         </section>
 
@@ -76,7 +83,7 @@ $isLanding = ($section === '' || $section === 'home');
                         <?php if ($card['placeholder'] || $card['href'] === ''): ?>
                             <span class="m360-rw-placeholder"><?= m360_rw_h($card['placeholder_text']) ?></span>
                         <?php else: ?>
-                            <a class="m360-rw-card-link" href="<?= m360_rw_h($card['href']) ?>">ورود</a>
+                            <a class="m360-op-button" href="<?= m360_rw_h($card['href']) ?>">ورود</a>
                         <?php endif; ?>
                     </article>
                 <?php endforeach; ?>
@@ -91,6 +98,7 @@ $isLanding = ($section === '' || $section === 'home');
                 <div class="m360-rw-kpi"><span class="m360-rw-kpi-val"><?= m360_rw_h((string)(int)$kpi['incomplete']) ?></span><span class="m360-rw-kpi-lbl">پرونده ناقص</span></div>
                 <div class="m360-rw-kpi"><span class="m360-rw-kpi-val"><?= m360_rw_h((string)(int)$kpi['ready_convert']) ?></span><span class="m360-rw-kpi-lbl">آماده تبدیل</span></div>
                 <div class="m360-rw-kpi"><span class="m360-rw-kpi-val"><?= m360_rw_h((string)(int)$kpi['jobcards_today']) ?></span><span class="m360-rw-kpi-lbl">کارت کار امروز</span></div>
+                <div class="m360-rw-kpi"><span class="m360-rw-kpi-val"><?= m360_rw_h((string)(int)($kpi['prepayment_owner_pending'] ?? 0)) ?></span><span class="m360-rw-kpi-lbl">تصمیم مالک پیش‌پرداخت</span></div>
             </div>
         </section>
         <section class="m360-rw-section">
@@ -101,15 +109,15 @@ $isLanding = ($section === '' || $section === 'home');
                         <h3><?= m360_rw_h($card['title']) ?></h3>
                         <p><?= m360_rw_h($card['desc']) ?></p>
                         <?php if (!empty($card['subs'])): ?>
-                            <ul class="m360-rw-sub-links">
-                                <?php foreach ($card['subs'] as $sub): ?>
-                                    <li><a href="<?= m360_rw_h($sub['href']) ?>"><?= m360_rw_h($sub['title']) ?></a></li>
+                            <div class="m360-op-button-row m360-rw-hub-actions">
+                                <?php foreach ($card['subs'] as $idx => $sub): ?>
+                                    <a class="m360-op-button<?= $idx === 0 ? ' m360-op-button-primary' : '' ?> m360-rw-hub-btn" href="<?= m360_rw_h($sub['href']) ?>"><?= m360_rw_h($sub['title']) ?></a>
                                 <?php endforeach; ?>
-                            </ul>
+                            </div>
                         <?php elseif ($card['placeholder'] || ($card['href'] ?? '') === ''): ?>
                             <span class="m360-rw-placeholder"><?= m360_rw_h($card['placeholder_text']) ?></span>
                         <?php else: ?>
-                            <a class="m360-rw-card-link" href="<?= m360_rw_h($card['href']) ?>">ورود</a>
+                            <a class="m360-op-button m360-rw-hub-btn" href="<?= m360_rw_h($card['href']) ?>">ورود</a>
                         <?php endif; ?>
                     </article>
                 <?php endforeach; ?>
@@ -118,12 +126,14 @@ $isLanding = ($section === '' || $section === 'home');
 
     <?php elseif ($section === 'walkin'): ?>
         <section class="m360-rw-panel">
-            <h2>پذیرش خودرو حضوری</h2>
-            <p class="m360-rw-panel-lead"><?= m360_rw_h(M360_RW_WALKIN_PLACEHOLDER_FA) ?></p>
-            <p class="m360-rw-muted">پذیرش حضوری پس از فعال‌سازی فرم عملیاتی از همین میز کار انجام می‌شود. تا آن زمان، درخواست‌های آنلاین از مسیر «پذیرش آنلاین / تکمیل پرونده» پیگیری شوند.</p>
-            <div class="m360-rw-actions">
-                <a class="m360-rw-btn" href="erp-reception-online-requests.php">پذیرش آنلاین / تکمیل پرونده</a>
-                <a class="m360-rw-btn m360-rw-btn-secondary" href="erp-reception-workbench.php?section=reception">بازگشت به hub پذیرش</a>
+            <h2>شروع درخواست حضوری توسط پذیرش</h2>
+            <p class="m360-rw-panel-lead">پذیرش حضوری فقط کانال ورود پرسنل است: همان شیء درخواست آنلاین ایجاد می‌شود و تکمیل پرونده فقط در موتور مشترک پذیرش انجام می‌شود.</p>
+            <p class="m360-rw-muted">پس از ایجاد درخواست، مسیر canonical همان «پذیرش آنلاین / تکمیل پرونده» است. مسیر جداگانه عکس یا قرارداد حضوری وجود ندارد.</p>
+            <p class="m360-rw-warn">قرارداد، امضای مشتری و OTP قانونی همچنان فقط از مسیر customer-facing انجام می‌شود؛ پذیرش مجاز به امضا یا تأیید از طرف مشتری نیست.</p>
+            <div class="m360-rw-actions m360-op-button-row">
+                <a class="m360-op-button m360-op-button-primary" href="erp-reception-walkin-create.php">شروع درخواست حضوری توسط پذیرش</a>
+                <a class="m360-op-button" href="erp-reception-online-requests.php">پذیرش آنلاین / تکمیل پرونده</a>
+                <a class="m360-op-button-secondary" href="erp-reception-workbench.php?section=reception">بازگشت به hub پذیرش</a>
             </div>
             <details class="m360-rw-mock-guides">
                 <summary><?= m360_rw_h(M360_RW_MOCK_UX_LABEL_FA) ?></summary>
@@ -140,7 +150,7 @@ $isLanding = ($section === '' || $section === 'home');
         <?php if (!$isLanding): ?>
             <a href="erp-reception-workbench.php">میز کار پذیرش</a>
         <?php endif; ?>
-        <a href="erp-reception-online-requests.php">درخواست‌های آنلاین</a>
+        <a href="erp-reception-online-requests.php">درخواست‌های آنلاین مشتریان</a>
         <a href="erp-reception-jobcards.php">JobCardهای پذیرش</a>
         <a href="erp-staff-home.php">داشبورد پرسنل</a>
     </footer>

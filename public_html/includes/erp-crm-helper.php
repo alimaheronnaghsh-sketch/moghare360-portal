@@ -87,6 +87,14 @@ function crm_safe_current_user(): string
 
 function crm_db()
 {
+    if (PHP_SAPI !== 'cli') {
+        erp_auth_context_start();
+        if (erp_auth_context_session_user_id() === null) {
+            header('Location: staff-login.php');
+            exit;
+        }
+    }
+
     if (!extension_loaded('odbc')) {
         return false;
     }
