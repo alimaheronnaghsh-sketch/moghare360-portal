@@ -381,13 +381,20 @@ function m360_estimate_verify_otp(int $estimateVersionId, string $mobile, string
     if ($contentHash !== '' && (string)($bag['content_hash'] ?? '') !== $contentHash) {
         return false;
     }
-    if ((int)($bag['expires_at'] ?? 0) < time()) {
+    if (!empty($bag['used_at'])) {
         return false;
     }
-    if (!password_verify($code, (string)($bag['hash'] ?? ''))) {
+    if ((int)($bag['expires_at'] ?? 0) < time()) {
+        unset($_SESSION[$key]);
+        return false;
+    }
+    $digits = preg_replace('/\D+/', '', $code) ?? '';
+    if ($digits === '' || !password_verify($digits, (string)($bag['hash'] ?? ''))) {
         return false;
     }
     $_SESSION[$key]['verified'] = true;
+    $_SESSION[$key]['used_at'] = time();
+    $_SESSION[$key]['hash'] = '';
 
     return true;
 }
@@ -396,12 +403,19 @@ function m360_estimate_otp_was_verified(int $estimateVersionId, string $mobile, 
 {
     m360_estimate_approval_session_start();
     $bag = $_SESSION[m360_estimate_approval_session_key($estimateVersionId)] ?? null;
+    if (!is_array($bag)
+        || empty($bag['verified'])
+        || trim($mobile) !== trim((string)($bag['mobile'] ?? ''))
+        || (int)($bag['estimate_version_id'] ?? 0) !== $estimateVersionId
+        || ($contentHash !== '' && (string)($bag['content_hash'] ?? '') !== $contentHash)
+    ) {
+        return false;
+    }
+    if ((int)($bag['expires_at'] ?? 0) < time()) {
+        return false;
+    }
 
-    return is_array($bag)
-        && !empty($bag['verified'])
-        && trim($mobile) === trim((string)($bag['mobile'] ?? ''))
-        && (int)($bag['estimate_version_id'] ?? 0) === $estimateVersionId
-        && ($contentHash === '' || (string)($bag['content_hash'] ?? '') === $contentHash);
+    return true;
 }
 
 function m360_estimate_client_ip(): string
