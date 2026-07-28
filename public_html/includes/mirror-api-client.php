@@ -36,6 +36,13 @@ function mirror_api_post(string $endpoint, array $payload): array
         ];
     }
 
+    // Local UAT: rewrite localhost → 127 so .htaccess GET-only host redirect cannot break POST APIs.
+    if (preg_match('#^https?://localhost(?::(\d+))?(.*)$#i', $base, $bm) === 1) {
+        $port = ($bm[1] ?? '') !== '' ? $bm[1] : '8080';
+        $path = $bm[2] ?? '';
+        $base = 'http://127.0.0.1:' . $port . $path;
+    }
+
     $url = $base . mirror_api_endpoint_path($endpoint);
     $body = json_encode($payload, JSON_UNESCAPED_UNICODE);
     if ($body === false) {

@@ -1,4 +1,4 @@
-DirectoryIndex index.html index.php
+DirectoryIndex index-canonical.php index.html index.php
 Options -Indexes
 
 <IfModule mod_headers.c>
@@ -15,6 +15,10 @@ Options -Indexes
 
 <IfModule mod_rewrite.c>
   RewriteEngine On
+  # Localhost → 127 for browser GETs only. Do not redirect POST (breaks login/API curl to localhost).
+  RewriteCond %{HTTP_HOST} ^localhost(:\d+)?$ [NC]
+  RewriteCond %{REQUEST_METHOD} ^(GET|HEAD)$ [NC]
+  RewriteRule ^ http://127.0.0.1:%{SERVER_PORT}%{REQUEST_URI} [R=302,L]
   RewriteRule ^sql/ - [F,L]
 </IfModule>
 
