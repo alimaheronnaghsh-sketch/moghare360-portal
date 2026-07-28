@@ -16,7 +16,33 @@ const M360_CONTRACT_OTP_PURPOSE = 'CONTRACT_CONFIRMATION';
 const M360_CONTRACT_TASK_CONTEXT_SESSION = 'm360_contract_task_context';
 const M360_CONTRACT_ENTRY_TASK = 'TASK_CARTABLE';
 const M360_CONTRACT_ENTRY_TOKEN = 'SECURE_TOKEN';
+const M360_CONTRACT_CUSTOMER_CSRF_PURPOSE = 'intake_contract_customer_review';
 
+function m360_contract_customer_csrf_token(): string
+{
+    if (!function_exists('erp_csrf_get_or_create_token')) {
+        customer_core_require_helper('erp-csrf.php');
+    }
+
+    return erp_csrf_get_or_create_token(M360_CONTRACT_CUSTOMER_CSRF_PURPOSE);
+}
+
+function m360_contract_customer_csrf_input_html(): string
+{
+    $token = m360_contract_customer_csrf_token();
+
+    return '<input type="hidden" name="erp_csrf_token" value="'
+        . htmlspecialchars($token, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '">';
+}
+
+function m360_contract_customer_csrf_is_valid(?string $token): bool
+{
+    if (!function_exists('erp_csrf_validate_token')) {
+        customer_core_require_helper('erp-csrf.php');
+    }
+
+    return erp_csrf_validate_token(M360_CONTRACT_CUSTOMER_CSRF_PURPOSE, trim((string)($token ?? '')));
+}
 /**
  * @return array{
  *   task_id:int,
@@ -1005,6 +1031,9 @@ function m360_contract_otp_verified(int $contractId, string $mobile): bool
     if (empty($bag['verified'])) {
         return false;
     }
+    if (!empty($bag['used_at']) && (string)($bag['hash'] ?? '') === '') {
+        // Verified once; still valid for the signing session until expires_at.
+    }
     if ((int)($bag['expires_at'] ?? 0) < time()) {
         return false;
     }
@@ -1023,7 +1052,11 @@ function m360_contract_verify_otp(int $contractId, string $mobile, string $otp):
     if (trim((string)($bag['mobile'] ?? '')) !== $mobile) {
         return ['ok' => false, 'message' => 'شماره موبایل مطابقت ندارد.'];
     }
+    if (!empty($bag['used_at'])) {
+        return ['ok' => false, 'message' => 'این کد تأیید قبلاً استفاده شده است. کد جدید درخواست کنید.'];
+    }
     if ((int)($bag['expires_at'] ?? 0) < time()) {
+        unset($_SESSION[$key]);
         return ['ok' => false, 'message' => 'کد تأیید منقضی شده است.'];
     }
     $digits = preg_replace('/\D+/', '', $otp) ?? '';
@@ -1031,9 +1064,18 @@ function m360_contract_verify_otp(int $contractId, string $mobile, string $otp):
         return ['ok' => false, 'message' => 'کد تأیید باید ۶ رقم باشد.'];
     }
     if (!password_verify($digits, (string)($bag['hash'] ?? ''))) {
+        $attempts = (int)($bag['attempts'] ?? 0) + 1;
+        $_SESSION[$key]['attempts'] = $attempts;
+        if ($attempts >= 5) {
+            unset($_SESSION[$key]);
+            return ['ok' => false, 'message' => 'تعداد تلاش‌های مجاز تمام شد. لطفاً کد جدید درخواست کنید.'];
+        }
         return ['ok' => false, 'message' => 'کد تأیید نادرست است.'];
     }
     $_SESSION[$key]['verified'] = true;
+    $_SESSION[$key]['used_at'] = time();
+    // Invalidate reusable secret after successful verification.
+    $_SESSION[$key]['hash'] = '';
     return ['ok' => true, 'message' => 'کد تأیید شد.'];
 }
 
@@ -1156,6 +1198,29 @@ function m360_contract_complete_signature(
         return ['ok' => false, 'message' => 'ثبت امضا ناموفق بود.'];
     }
 
+    // New signatures must land in SQL vault before contract is marked SIGNED.
+    if (!function_exists('m360_vault_store_signature_image')) {
+        require_once __DIR__ . DIRECTORY_SEPARATOR . 'm360-document-vault-helper.php';
+    }
+    if (m360_vault_table_exists($conn)) {
+        $sigVault = m360_vault_store_signature_image(
+            $conn,
+            $contractId,
+            (int)($contractRow['online_request_id'] ?? 0),
+            (int)($contractRow['customer_id'] ?? 0),
+            $signatureImageData,
+            null
+        );
+        if (empty($sigVault['ok']) || (int)($sigVault['blob_id'] ?? 0) < 1) {
+            return ['ok' => false, 'message' => 'ذخیره تصویر امضا در مخزن اسناد ناموفق بود. لطفاً دوباره تلاش کنید.'];
+        }
+        m360_intake_contract_patch_workflow_meta($conn, $contractId, [
+            'signature_vault_blob_id' => (string)$sigVault['blob_id'],
+            'signature_vault_sha256' => (string)($sigVault['sha256'] ?? ''),
+            'signature_vault_at' => gmdate('c'),
+        ]);
+    }
+
     customer_core_execute(
         $conn,
         'UPDATE dbo.' . M360_CONTRACT_TABLE . ' SET contract_status = ?, signed_at = SYSUTCDATETIME(), updated_at = SYSUTCDATETIME(), contract_body_hash = ? WHERE contract_id = ?',
@@ -1186,27 +1251,6 @@ function m360_contract_complete_signature(
     m360_intake_contract_record_event($conn, $contractId, 'CONTRACT_LOCKED', null, null);
     m360_intake_contract_record_event($conn, $contractId, 'CONTRACT_SIGNED', 'signed_hash=' . substr($signedHash, 0, 16), null);
 
-    // Canonical vault: signature binary + regenerate signed PDF (disk mirror retained).
-    if (!function_exists('m360_vault_store_signature_image')) {
-        require_once __DIR__ . DIRECTORY_SEPARATOR . 'm360-document-vault-helper.php';
-    }
-    if (m360_vault_table_exists($conn)) {
-        $sigVault = m360_vault_store_signature_image(
-            $conn,
-            $contractId,
-            (int)($contractRow['online_request_id'] ?? 0),
-            (int)($contractRow['customer_id'] ?? 0),
-            $signatureImageData,
-            null
-        );
-        if ($sigVault['ok'] && $sigVault['blob_id'] > 0) {
-            m360_intake_contract_patch_workflow_meta($conn, $contractId, [
-                'signature_vault_blob_id' => (string)$sigVault['blob_id'],
-                'signature_vault_sha256' => (string)$sigVault['sha256'],
-                'signature_vault_at' => gmdate('c'),
-            ]);
-        }
-    }
     $freshContract = m360_intake_contract_fetch_by_id($conn, $contractId);
     if (is_array($freshContract)) {
         m360_intake_contract_ensure_pdf($conn, $freshContract, 'customer', null, false);

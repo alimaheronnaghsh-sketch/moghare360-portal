@@ -1,8 +1,31 @@
 <?php
 declare(strict_types=1);
 
+/**
+ * LEGACY portal contract page — deprecate to customer profile / canonical review.
+ * Do not delete yet.
+ */
 require_once __DIR__ . '/config.php';
+if (is_file(__DIR__ . '/includes/m360-canonical-host-helper.php')) {
+    require_once __DIR__ . '/includes/m360-canonical-host-helper.php';
+    if (function_exists('m360_canonical_local_host_enforce')) {
+        m360_canonical_local_host_enforce();
+    }
+}
 ensureSessionStarted();
+
+$legacyToken = trim((string)($_GET['token'] ?? $_GET['t'] ?? ''));
+$legacyTaskId = (int)($_GET['task_id'] ?? 0);
+if ($legacyTaskId > 0) {
+    header('Location: customer-intake-contract-review.php?task_id=' . $legacyTaskId . '&legacy_portal=1', true, 302);
+    exit;
+}
+if ($legacyToken !== '') {
+    header('Location: customer-intake-contract-review.php?t=' . rawurlencode($legacyToken) . '&legacy_portal=1', true, 302);
+    exit;
+}
+header('Location: customer-profile.php?legacy_contract=1', true, 302);
+exit;
 
 function loadContractRequest(string $mobile, int $requestId): ?array
 {

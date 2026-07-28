@@ -3,6 +3,9 @@ declare(strict_types=1);
 
 header('X-Robots-Tag: noindex, nofollow');
 
+require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-canonical-host-helper.php';
+m360_canonical_local_host_enforce();
+
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-reception-workbench-helper.php';
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-contract-signature-helper.php';
 
@@ -52,7 +55,16 @@ $contextInput = ['token' => $rawToken, 'task_id' => $taskId];
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($taskId > 0 || $rawToken !== '')) {
     $action = trim((string)($_POST['workflow_action'] ?? ''));
-    if ($conn === false) {
+    if (!m360_contract_customer_csrf_is_valid(isset($_POST['erp_csrf_token']) ? (string)$_POST['erp_csrf_token'] : null)) {
+        if ($isAjax) {
+            m360_contract_review_json_response([
+                'ok' => false,
+                'message' => 'توکن امنیتی نامعتبر است. صفحه را تازه کنید و دوباره تلاش کنید.',
+                'error_code' => 'csrf_invalid',
+            ], 403);
+        }
+        $error = 'توکن امنیتی نامعتبر است. صفحه را تازه کنید و دوباره تلاش کنید.';
+    } elseif ($conn === false) {
         if ($isAjax) {
             m360_contract_review_json_response([
                 'ok' => false,
@@ -228,7 +240,12 @@ if ($conn === false) {
         if (is_array($contractRow)) {
             m360_intake_contract_mark_viewed($conn, (int)$contractRow['contract_id']);
             if ($entryMode === M360_CONTRACT_ENTRY_TASK && $taskId > 0 && !$readOnly) {
-                m360_cartable_mark_opened($conn, $taskId, 'CUSTOMER', null);
+                $openActorMobile = '';
+                if (function_exists('m360_rw_customer_profile_resolve_verified_session_mobile')) {
+                    $sess = m360_rw_customer_profile_resolve_verified_session_mobile();
+                    $openActorMobile = !empty($sess['ok']) ? (string)($sess['mobile'] ?? '') : '';
+                }
+                m360_cartable_mark_opened($conn, $taskId, 'CUSTOMER', $openActorMobile !== '' ? $openActorMobile : null);
             }
             if ($request === null && (int)($contractRow['online_request_id'] ?? 0) > 0) {
                 $request = m360_online_req_fetch_by_id($conn, (int)$contractRow['online_request_id']);
@@ -264,6 +281,8 @@ $taskMessage = M360_RW_INTAKE_CARTABLE_TASK_MESSAGE_FA;
 $formActionUrl = m360_contract_review_return_url($entryMode, $taskId, $rawToken);
 $jsTaskId = $entryMode === M360_CONTRACT_ENTRY_TASK ? $taskId : 0;
 $jsToken = $entryMode === M360_CONTRACT_ENTRY_TOKEN ? $rawToken : '';
+$customerCsrfToken = m360_contract_customer_csrf_token();
+$customerCsrfInputHtml = m360_contract_customer_csrf_input_html();
 
 ?>
 <!DOCTYPE html>
@@ -443,6 +462,7 @@ $jsToken = $entryMode === M360_CONTRACT_ENTRY_TOKEN ? $rawToken : '';
                         <p class="m360-rw-muted">کد تأیید به شماره تأیید پیامکی <?= m360_rw_h($maskedMobile) ?> ارسال می‌شود.</p>
                     <?php endif; ?>
                     <form id="m360_sign_form" method="post" action="<?= m360_rw_h($formActionUrl) ?>">
+                        <?= $customerCsrfInputHtml ?>
                         <?php if ($jsTaskId > 0): ?>
                             <input type="hidden" name="task_id" value="<?= (int)$jsTaskId ?>">
                         <?php elseif ($jsToken !== ''): ?>
@@ -469,6 +489,7 @@ $jsToken = $entryMode === M360_CONTRACT_ENTRY_TOKEN ? $rawToken : '';
     var token = <?= json_encode($jsToken, JSON_UNESCAPED_UNICODE) ?>;
     var taskId = <?= (int)$jsTaskId ?>;
     var postUrl = <?= json_encode($formActionUrl, JSON_UNESCAPED_UNICODE) ?>;
+    var csrfToken = <?= json_encode($customerCsrfToken, JSON_UNESCAPED_UNICODE) ?>;
     var reviewConsentDone = <?= $reviewConsentDone ? 'true' : 'false' ?>;
     var signatureConfirmed = <?= $signatureConfirmed ? 'true' : 'false' ?>;
     var scrollHost = document.getElementById('m360_contract_scroll');
@@ -492,6 +513,9 @@ $jsToken = $entryMode === M360_CONTRACT_ENTRY_TOKEN ? $rawToken : '';
     var signatureData = '';
 
     function appendAuth(body) {
+        if (csrfToken) {
+            body.set('erp_csrf_token', csrfToken);
+        }
         if (taskId > 0) {
             body.set('task_id', String(taskId));
         } else if (token) {
