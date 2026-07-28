@@ -446,6 +446,7 @@ function m360_otp_store_pending(string $normalized, string $code, string $succes
     $_SESSION['otp_expires_at'] = time() + m360_otp_ttl_seconds();
     $_SESSION['otp_attempts'] = 0;
     $_SESSION['otp_last_sent_at'] = time();
+    unset($_SESSION['otp_used_at']);
 
     $result = ['ok' => true, 'message' => $successMessage];
     if ($testMode) {
@@ -1113,6 +1114,11 @@ function m360_otp_verify(string $phone, string $otp): array
         return ['ok' => false, 'message' => 'کد تأیید منقضی شده است. لطفاً کد جدید درخواست کنید.'];
     }
 
+    if (!empty($_SESSION['otp_used_at'])) {
+        m360_otp_clear_pending();
+        return ['ok' => false, 'message' => 'این کد تأیید قبلاً استفاده شده است. کد جدید درخواست کنید.'];
+    }
+
     if ($attempts >= M360_OTP_MAX_ATTEMPTS) {
         m360_otp_clear_pending();
         return ['ok' => false, 'message' => 'تعداد تلاش‌های مجاز تمام شد. لطفاً کد جدید درخواست کنید.'];
@@ -1129,6 +1135,7 @@ function m360_otp_verify(string $phone, string $otp): array
         return ['ok' => false, 'message' => 'کد تأیید نادرست است. ' . $remaining . ' تلاش باقی مانده.'];
     }
 
+    $_SESSION['otp_used_at'] = time();
     m360_otp_clear_pending();
     $token = bin2hex(random_bytes(16));
     $_SESSION['otp_verified_phone'] = $normalized;
