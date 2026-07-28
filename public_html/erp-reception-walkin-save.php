@@ -48,7 +48,7 @@ if (!$result['ok']) {
 }
 
 $requestId = (int)$result['online_request_id'];
-// Let intake resolver choose furthest incomplete step (do not force condition).
+// After Stage 1–4 create: hand off to canonical intake-file Stage 5 engine.
 header(
     'Location: erp-reception-intake-file.php?online_request_id=' . $requestId
     . '&active_step=condition&walkin_created=1&ok=1#section-condition-photos'

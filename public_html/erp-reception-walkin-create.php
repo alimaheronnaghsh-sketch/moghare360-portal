@@ -81,12 +81,15 @@ foreach ($visitCalendarDays as $day) {
 if ($defaultVisitDisplay === '') {
     $defaultVisitDisplay = $defaultVisitDate;
 }
+$walkinResumeRequestId = max(0, (int)($_GET['online_request_id'] ?? 0));
 $m360CustomerPageBoot = [
     'staffWalkinMode' => true,
     'pr02bActive' => true,
     'mobileVerified' => true,
     'restoreForm' => true,
     'submitSuccess' => false,
+    'walkinResumeRequestId' => $walkinResumeRequestId,
+    'walkinStage56LockedMessage' => 'ابتدا مراحل ۱ تا ۴ را تکمیل و پرونده را ایجاد کنید.',
 ];
 ?>
 <!DOCTYPE html>
@@ -139,27 +142,66 @@ $m360CustomerPageBoot = [
 
                 <?php
                 $walkinStages = m360_intake_stage_registry(M360_INTAKE_CHANNEL_WALKIN);
-                $walkinStepMap = [
+                $walkinCreateStepMap = [
                     'otp' => 'm360_section_customer_search',
                     'customer' => 'm360_section_profile',
                     'vehicle' => 'm360_section_vehicle',
                     'service' => 'm360_section_request',
-                    'condition' => 'm360_section_condition_handoff',
-                    'documents' => 'm360_section_documents_handoff',
-                    'signature' => 'm360_section_contract_handoff',
-                    'referral' => 'm360_section_submit',
                 ];
+                $walkinLockedMessage = 'ابتدا مراحل ۱ تا ۴ را تکمیل و پرونده را ایجاد کنید.';
                 ?>
-                <nav class="m360-customer-wizard-progress m360-rw-wizard-progress" id="m360_wizard_progress" aria-label="پیشرفت ۸ مرحله پذیرش حضوری" data-m360-channel="STAFF_ASSISTED_WALKIN" data-m360-stage-count="8">
+                <nav class="m360-customer-wizard-progress m360-rw-wizard-progress" id="m360_wizard_progress" aria-label="پیشرفت ۸ مرحله پذیرش حضوری" data-m360-channel="STAFF_ASSISTED_WALKIN" data-m360-stage-count="8" data-m360-walkin-create="1" data-m360-request-id="<?= (int)$walkinResumeRequestId ?>">
                     <ol class="m360-customer-wizard-progress__list m360-rw-wizard-progress-track">
                         <?php foreach ($walkinStages as $stageKey => $stageMeta): ?>
-                            <li data-step="<?= m360_rw_h($walkinStepMap[$stageKey] ?? '') ?>" data-stage-key="<?= m360_rw_h($stageKey) ?>" data-actor="<?= m360_rw_h((string)$stageMeta['actor']) ?>">
+                            <?php
+                            $stageNum = (int)($stageMeta['num'] ?? 0);
+                            $isCreateStep = isset($walkinCreateStepMap[$stageKey]);
+                            $href = '';
+                            $locked = false;
+                            if ($isCreateStep) {
+                                $dataStep = $walkinCreateStepMap[$stageKey];
+                            } elseif ($walkinResumeRequestId > 0 && $stageKey === 'condition') {
+                                $dataStep = '';
+                                $href = 'erp-reception-intake-file.php?online_request_id=' . $walkinResumeRequestId
+                                    . '&active_step=condition&walkin_resume=1#section-condition-photos';
+                            } elseif ($walkinResumeRequestId > 0 && $stageKey === 'documents') {
+                                $dataStep = '';
+                                $href = 'erp-reception-intake-file.php?online_request_id=' . $walkinResumeRequestId
+                                    . '&active_step=documents&walkin_resume=1#section-agreements';
+                            } else {
+                                $dataStep = '';
+                                $locked = true;
+                            }
+                            $liClass = $locked ? 'm360-customer-wizard-progress__item--locked' : '';
+                            if ($href !== '') {
+                                $liClass = trim($liClass . ' m360-customer-wizard-progress__item--link');
+                            }
+                            ?>
+                            <li
+                                class="<?= m360_rw_h($liClass) ?>"
+                                data-step="<?= m360_rw_h($dataStep) ?>"
+                                data-stage-key="<?= m360_rw_h($stageKey) ?>"
+                                data-actor="<?= m360_rw_h((string)$stageMeta['actor']) ?>"
+                                data-locked="<?= $locked ? '1' : '0' ?>"
+                                <?php if ($href !== ''): ?>data-href="<?= m360_rw_h($href) ?>"<?php endif; ?>
+                                <?php if ($locked): ?>aria-disabled="true" title="<?= m360_rw_h($walkinLockedMessage) ?>"<?php endif; ?>
+                            >
                                 <?= m360_rw_h((string)$stageMeta['num']) ?>. <?= m360_rw_h((string)$stageMeta['label']) ?>
                                 <span class="m360-rw-wizard-progress-actor"><?= m360_rw_h(m360_intake_actor_label_fa((string)$stageMeta['actor'])) ?></span>
                             </li>
                         <?php endforeach; ?>
                     </ol>
                 </nav>
+                <section class="m360-rw-flash is-info" id="m360_walkin_stage56_lock_note" role="status">
+                    مراحل ۱ تا ۴ در این صفحه تکمیل می‌شود. مراحل ۵ و ۶ فقط در پرونده واحد
+                    (<code>erp-reception-intake-file.php</code>) اجرا می‌شوند — بدون فرم تکراری در این صفحه.
+                    <?php if ($walkinResumeRequestId < 1): ?>
+                        <strong><?= m360_rw_h($walkinLockedMessage) ?></strong>
+                    <?php else: ?>
+                        <a class="m360-rw-btn m360-rw-btn-secondary" href="erp-reception-intake-file.php?online_request_id=<?= (int)$walkinResumeRequestId ?>&amp;active_step=condition#section-condition-photos">ادامه مرحله ۵ برای پرونده <?= (int)$walkinResumeRequestId ?></a>
+                        <a class="m360-rw-btn m360-rw-btn-secondary" href="erp-reception-intake-file.php?online_request_id=<?= (int)$walkinResumeRequestId ?>&amp;active_step=documents#section-agreements">ادامه مرحله ۶</a>
+                    <?php endif; ?>
+                </section>
 
                 <section class="m360-rw-flash is-info" id="m360_walkin_otp_note">
                     پذیرش حضوری با جستجوی مشتری شروع می‌شود؛ OTP اولیه برای ایجاد درخواست لازم نیست، اما امضای قرارداد همچنان فقط در پروفایل مشتری و با OTP انجام می‌شود.
@@ -395,75 +437,9 @@ $m360CustomerPageBoot = [
                     <p id="visit_time_hint" class="m360-visit-hint" style="display:none">ساعت حضور برای کارشناسی معمولاً بین 8:30 تا 11:30 است.</p>
                     <div class="m360-wizard-nav">
                         <button type="button" class="m360-btn m360-btn-secondary m360-wizard-prev" data-target="m360_section_vehicle">قبلی</button>
-                        <button type="button" class="m360-btn m360-luxury-action m360-wizard-next" data-target="m360_section_condition_handoff">مرحله بعد — وضعیت و عکس‌ها</button>
+                        <button type="submit" id="m360_submit_btn" class="m360-btn m360-luxury-action">ثبت پرونده و ادامه مرحله ۵ (عکس‌ها در پرونده واحد)</button>
                     </div>
-                </section>
-
-                <section id="m360_section_condition_handoff" class="m360-step-card m360-request-panel m360-step--hidden" aria-labelledby="m360_condition_handoff_title" data-stage-key="condition">
-                    <div class="m360-step-header">
-                        <span class="m360-step-badge" aria-hidden="true">۵</span>
-                        <div class="m360-step-header__text">
-                            <h3 id="m360_condition_handoff_title" class="m360-section-title"><?= m360_rw_h(m360_intake_stage_label(M360_INTAKE_CHANNEL_WALKIN, 'condition')) ?></h3>
-                            <p class="m360-step-sub"><?= m360_rw_h(m360_intake_actor_label_fa(M360_INTAKE_ACTOR_RECEPTION)) ?> — همان رندر پرونده واحد (عکس شش‌گانه فقط دوربین + وضعیت خودرو).</p>
-                        </div>
-                    </div>
-                    <section class="m360-rw-flash is-info" role="status">
-                        پس از ثبت مراحل ۱ تا ۴، پرونده در <code>erp-reception-intake-file.php</code> روی مرحله ۵ باز می‌شود و همان کنترل‌های عکس/وضعیت آنلاین نمایش داده می‌شود — بدون رندر تکراری در این صفحه.
-                    </section>
-                    <div class="m360-wizard-nav">
-                        <button type="button" class="m360-btn m360-btn-secondary m360-wizard-prev" data-target="m360_section_request">قبلی</button>
-                        <button type="button" class="m360-btn m360-luxury-action m360-wizard-next" data-target="m360_section_documents_handoff">مرحله بعد — مدارک و توافقات</button>
-                    </div>
-                </section>
-
-                <section id="m360_section_documents_handoff" class="m360-step-card m360-request-panel m360-step--hidden" aria-labelledby="m360_documents_handoff_title" data-stage-key="documents">
-                    <div class="m360-step-header">
-                        <span class="m360-step-badge" aria-hidden="true">۶</span>
-                        <div class="m360-step-header__text">
-                            <h3 id="m360_documents_handoff_title" class="m360-section-title"><?= m360_rw_h(m360_intake_stage_label(M360_INTAKE_CHANNEL_WALKIN, 'documents')) ?></h3>
-                            <p class="m360-step-sub"><?= m360_rw_h(m360_intake_actor_label_fa(M360_INTAKE_ACTOR_RECEPTION)) ?> — دیاگ، بیمه، توافقات، چک‌لیست و مبالغ با همان فرم واحد.</p>
-                        </div>
-                    </div>
-                    <section class="m360-rw-flash is-info" role="status">
-                        مرحله ۶ در پرونده واحد (`section-diagnostic-pdf` / `section-agreements`) تکمیل می‌شود؛ آپلود فایل فقط برای مدارک مجاز است، نه عکس خودرو.
-                    </section>
-                    <div class="m360-wizard-nav">
-                        <button type="button" class="m360-btn m360-btn-secondary m360-wizard-prev" data-target="m360_section_condition_handoff">قبلی</button>
-                        <button type="button" class="m360-btn m360-luxury-action m360-wizard-next" data-target="m360_section_contract_handoff">مرحله بعد — قرارداد مشتری</button>
-                    </div>
-                </section>
-
-                <section id="m360_section_contract_handoff" class="m360-step-card m360-request-panel m360-step--hidden" aria-labelledby="m360_contract_handoff_title" data-stage-key="signature">
-                    <div class="m360-step-header">
-                        <span class="m360-step-badge" aria-hidden="true">۷</span>
-                        <div class="m360-step-header__text">
-                            <h3 id="m360_contract_handoff_title" class="m360-section-title"><?= m360_rw_h(m360_intake_stage_label(M360_INTAKE_CHANNEL_WALKIN, 'signature')) ?></h3>
-                            <p class="m360-step-sub"><?= m360_rw_h(m360_intake_actor_label_fa(M360_INTAKE_ACTOR_CUSTOMER)) ?> — امضا و OTP فقط در کارتابل مشتری.</p>
-                        </div>
-                    </div>
-                    <p class="m360-contract-placeholder" role="status"><?= m360_rw_h(m360_rw_canonical_contract_step_text_fa()) ?></p>
-                    <div class="m360-wizard-nav">
-                        <button type="button" class="m360-btn m360-btn-secondary m360-wizard-prev" data-target="m360_section_documents_handoff">قبلی</button>
-                        <button type="button" class="m360-btn m360-luxury-action m360-wizard-next" data-target="m360_section_submit">مرحله بعد — ثبت و سالن</button>
-                    </div>
-                </section>
-
-                <section id="m360_section_submit" class="m360-step-card m360-request-panel m360-step--hidden" aria-labelledby="m360_submit_title" data-stage-key="referral">
-                    <p id="m360_submit_step_error" class="m360-step-error m360-step--hidden" role="alert" aria-live="polite"></p>
-                    <div class="m360-step-header">
-                        <span class="m360-step-badge" aria-hidden="true">۸</span>
-                        <div class="m360-step-header__text">
-                            <h3 id="m360_submit_title" class="m360-section-title"><?= m360_rw_h(m360_intake_stage_label(M360_INTAKE_CHANNEL_WALKIN, 'referral')) ?></h3>
-                            <p class="m360-step-sub"><?= m360_rw_h(m360_intake_actor_label_fa(M360_INTAKE_ACTOR_RECEPTION)) ?> — پس از ثبت، پرونده واحد از مرحله ۵ باز می‌شود؛ ارسال سالن بعد از تکمیل ۵–۷ انجام می‌شود.</p>
-                        </div>
-                    </div>
-                    <section class="m360-rw-flash is-info" role="status">
-                        با ثبت، درخواست STAFF_ASSISTED_WALKIN ساخته می‌شود و همان موتور پرونده پذیرش برای مراحل ۵ تا ۸ ادامه می‌یابد.
-                    </section>
-                    <button type="submit" id="m360_submit_btn" class="m360-btn m360-luxury-action">ثبت و ادامه در پرونده پذیرش واحد (مرحله ۵)</button>
-                    <div class="m360-wizard-nav">
-                        <button type="button" class="m360-btn m360-btn-secondary m360-wizard-prev" data-target="m360_section_contract_handoff">قبلی</button>
-                    </div>
+                    <p class="m360-rw-muted" role="note">پس از ثبت موفق، به <code>erp-reception-intake-file.php</code> با <code>active_step=condition</code> هدایت می‌شوید. مراحل ۵ و ۶ در این صفحه اجرا نمی‌شوند.</p>
                 </section>
             </form>
         </section>

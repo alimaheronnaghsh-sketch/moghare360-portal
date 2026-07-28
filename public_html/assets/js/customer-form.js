@@ -19,11 +19,7 @@
     'm360_section_customer_search',
     'm360_section_profile',
     'm360_section_vehicle',
-    'm360_section_request',
-    'm360_section_condition_handoff',
-    'm360_section_documents_handoff',
-    'm360_section_contract_handoff',
-    'm360_section_submit'
+    'm360_section_request'
   ];
   var ALL_WIZARD_SECTIONS = ONLINE_WIZARD_STEPS_AFTER_OTP.concat(STAFF_WIZARD_STEPS).filter(function (step, index, list) {
     return list.indexOf(step) === index;
@@ -254,8 +250,46 @@
     nav.hidden = steps.indexOf(stepId) < 0;
     nav.querySelectorAll('[data-step]').forEach(function (li) {
       var itemStep = li.getAttribute('data-step');
-      li.classList.toggle('m360-customer-wizard-progress__item--active', li.getAttribute('data-step') === stepId);
-      li.classList.toggle('m360-customer-wizard-progress__item--done', steps.indexOf(itemStep) >= 0 && steps.indexOf(itemStep) < steps.indexOf(stepId));
+      var isCreateStep = itemStep && steps.indexOf(itemStep) >= 0;
+      li.classList.toggle('m360-customer-wizard-progress__item--active', itemStep === stepId);
+      li.classList.toggle(
+        'm360-customer-wizard-progress__item--done',
+        isCreateStep && steps.indexOf(itemStep) >= 0 && steps.indexOf(itemStep) < steps.indexOf(stepId)
+      );
+    });
+  }
+
+  function initWalkinCreateProgressNav() {
+    var nav = $('m360_wizard_progress');
+    if (!nav || nav.getAttribute('data-m360-walkin-create') !== '1') return;
+    var boot = window.m360CustomerPageBoot || {};
+    var lockedMsg = boot.walkinStage56LockedMessage
+      || 'ابتدا مراحل ۱ تا ۴ را تکمیل و پرونده را ایجاد کنید.';
+    nav.querySelectorAll('li[data-stage-key]').forEach(function (li) {
+      li.addEventListener('click', function (e) {
+        var href = li.getAttribute('data-href') || '';
+        if (href) {
+          e.preventDefault();
+          window.location.href = href;
+          return;
+        }
+        if (li.getAttribute('data-locked') === '1') {
+          e.preventDefault();
+          e.stopPropagation();
+          var note = $('m360_walkin_stage56_lock_note');
+          if (note) {
+            note.classList.add('is-attention');
+            note.setAttribute('tabindex', '-1');
+            note.focus();
+          }
+          window.alert(lockedMsg);
+          return;
+        }
+        var step = li.getAttribute('data-step') || '';
+        if (step && wizardStepsForPage().indexOf(step) >= 0) {
+          goToWizardStep(step);
+        }
+      });
     });
   }
 
@@ -1109,7 +1143,7 @@
     setBothFlowRequired(true);
     setSubmitEnabled(true);
 
-    var step = boot.submitErrorStep || (boot.staffWalkinMode ? 'm360_section_submit' : 'm360_section_request');
+    var step = boot.submitErrorStep || 'm360_section_request';
     goToWizardStep(step);
     if (boot.submitError) {
       if (boot.submitErrorIsOtp) {
@@ -1199,6 +1233,7 @@
     bindDamageSelector();
     initOtpFirstFlow();
     initWizardNav();
+    initWalkinCreateProgressNav();
     initStaffCustomerSearch();
     var boot = window.m360CustomerPageBoot || {};
     if (boot.staffWalkinMode) {

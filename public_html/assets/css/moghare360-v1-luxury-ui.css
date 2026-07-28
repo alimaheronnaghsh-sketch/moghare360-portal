@@ -1175,6 +1175,19 @@
 .m360-customer-wizard-progress__list li.m360-customer-wizard-progress__item--done {
   color: #c8c8c8;
 }
+.m360-customer-wizard-progress__list li.m360-customer-wizard-progress__item--locked {
+  opacity: 0.55;
+  cursor: not-allowed;
+  border-style: dashed;
+}
+.m360-customer-wizard-progress__list li.m360-customer-wizard-progress__item--link {
+  cursor: pointer;
+  border-color: rgba(212, 175, 55, 0.45);
+}
+#m360_walkin_stage56_lock_note.is-attention {
+  outline: 2px solid rgba(212, 175, 55, 0.65);
+  outline-offset: 2px;
+}
 .m360-wizard-nav {
   display: flex;
   flex-wrap: wrap;
