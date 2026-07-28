@@ -46,7 +46,7 @@ if ($rawToken === '') {
     $_SESSION['m360_contract_last_raw_token_' . $contractId] = $rawToken;
 }
 
-$url = m360_intake_contract_customer_url($rawToken);
+$url = m360_intake_contract_customer_absolute_url($rawToken);
 $sms = m360_contract_send_link_sms(trim((string)$row['mobile']), $url);
 if (!$sms['ok']) {
     header('Location: ' . $detailUrl . '&msg=' . rawurlencode((string)$sms['message']) . '&ok=0');

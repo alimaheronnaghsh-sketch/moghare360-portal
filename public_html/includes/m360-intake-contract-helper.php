@@ -76,24 +76,73 @@ function m360_intake_contract_generate_token(): array
     ];
 }
 
+/**
+ * Absolute public base for rare external/SMS links only.
+ * Prefer relative routes in-app. Canonical local UAT host is 127.0.0.1:8080 (not localhost).
+ */
 function m360_intake_contract_public_base_url(): string
 {
-    $https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off');
-    $host = trim((string)($_SERVER['HTTP_HOST'] ?? 'localhost'));
-    if ($host === '' && PHP_SAPI === 'cli') {
-        return 'http://localhost/moghare360';
+    $https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+        || ((string)($_SERVER['SERVER_PORT'] ?? '') === '443');
+    $host = trim((string)($_SERVER['HTTP_HOST'] ?? ''));
+    if ($host === '') {
+        $host = trim((string)($_SERVER['SERVER_NAME'] ?? ''));
     }
-    return ($https ? 'https' : 'http') . '://' . $host;
+    $m = [];
+    // Normalize localhost → 127.0.0.1 for absolute outbound links (canonical local UAT).
+    if ($host === '' || preg_match('/^localhost(?::(\d+))?$/i', $host, $m) === 1) {
+        $port = (isset($m[1]) && $m[1] !== '') ? $m[1] : '';
+        if ($port === '') {
+            $serverPort = trim((string)($_SERVER['SERVER_PORT'] ?? ''));
+            if ($serverPort !== '' && $serverPort !== '80' && $serverPort !== '443') {
+                $port = $serverPort;
+            } else {
+                $port = '8080';
+            }
+        }
+        $host = '127.0.0.1:' . $port;
+    }
+    $appRoot = '/moghare360';
+    if (function_exists('m360_rw_customer_portal_app_root_web_path')) {
+        $detected = trim((string)m360_rw_customer_portal_app_root_web_path());
+        if ($detected !== '' && $detected !== '/') {
+            $appRoot = rtrim($detected, '/');
+        }
+    } else {
+        $script = str_replace('\\', '/', (string)($_SERVER['SCRIPT_NAME'] ?? ''));
+        if ($script !== '') {
+            $detected = rtrim(str_replace('\\', '/', dirname($script)), '/');
+            if ($detected !== '' && $detected !== '/' && $detected !== '.') {
+                $appRoot = $detected;
+            }
+        }
+    }
+
+    return ($https ? 'https' : 'http') . '://' . $host . $appRoot;
 }
 
+/**
+ * In-app customer contract routes stay relative so localhost vs 127.0.0.1 sessions stay intact.
+ */
 function m360_intake_contract_customer_url(string $rawToken): string
 {
-    return m360_intake_contract_public_base_url() . '/customer-intake-contract.php?token=' . rawurlencode($rawToken);
+    return 'customer-intake-contract.php?token=' . rawurlencode($rawToken);
 }
 
 function m360_intake_contract_sign_url(string $rawToken): string
 {
-    return m360_intake_contract_public_base_url() . '/customer-intake-contract-sign.php?token=' . rawurlencode($rawToken);
+    return 'customer-intake-contract-sign.php?token=' . rawurlencode($rawToken);
+}
+
+/** Absolute URL only when an external channel (SMS) needs a full link. */
+function m360_intake_contract_customer_absolute_url(string $rawToken): string
+{
+    return rtrim(m360_intake_contract_public_base_url(), '/') . '/' . ltrim(m360_intake_contract_customer_url($rawToken), '/');
+}
+
+function m360_intake_contract_sign_absolute_url(string $rawToken): string
+{
+    return rtrim(m360_intake_contract_public_base_url(), '/') . '/' . ltrim(m360_intake_contract_sign_url($rawToken), '/');
 }
 
 function m360_intake_contract_service_type_fa(string $requestType, string $route = ''): string
@@ -1459,7 +1508,7 @@ function m360_intake_contract_ensure_pdf(
     $pdfData['pdf_acceptance_method'] = $method;
     $pdfData['documents_summary'] = (string)($snapshot['checklist_summary'] ?? '');
 
-    // Attach real signature image when present in SQL; never invent.
+    // Attach real signature image when present in SQL / vault; never invent.
     $sigImage = '';
     $sigRows = customer_core_fetch_rows(
         $conn,
@@ -1471,6 +1520,28 @@ function m360_intake_contract_ensure_pdf(
     }
     if ($sigImage === '' && isset($dataJson['workflow']) && is_array($dataJson['workflow'])) {
         $sigImage = trim((string)($dataJson['workflow']['signature_image_data'] ?? ''));
+    }
+    if ($sigImage !== '' && !str_starts_with($sigImage, 'data:image/') && preg_match('/^[A-Za-z0-9+\/=]+$/', $sigImage) === 1 && strlen($sigImage) > 80) {
+        $sigImage = 'data:image/png;base64,' . $sigImage;
+    }
+    if (($sigImage === '' || !str_starts_with($sigImage, 'data:image/')) && isset($dataJson['workflow']) && is_array($dataJson['workflow'])) {
+        $sigVaultBlobId = (int)($dataJson['workflow']['signature_vault_blob_id'] ?? 0);
+        if ($sigVaultBlobId > 0 && m360_vault_table_exists($conn)) {
+            $vaultLoad = m360_vault_load_bytes($conn, $sigVaultBlobId);
+            if (!empty($vaultLoad['ok']) && (string)($vaultLoad['bytes'] ?? '') !== '') {
+                $ctype = 'image/png';
+                $metaRows = customer_core_fetch_rows(
+                    $conn,
+                    'SELECT TOP 1 content_type FROM dbo.erp_document_blobs WHERE document_blob_id = ?',
+                    [$sigVaultBlobId]
+                );
+                $metaType = trim((string)($metaRows[0]['content_type'] ?? ''));
+                if ($metaType !== '' && str_starts_with(strtolower($metaType), 'image/')) {
+                    $ctype = $metaType;
+                }
+                $sigImage = 'data:' . $ctype . ';base64,' . base64_encode((string)$vaultLoad['bytes']);
+            }
+        }
     }
     if ($sigImage !== '' && str_starts_with($sigImage, 'data:image/')) {
         $pdfData['pdf_signature_image_data'] = $sigImage;
