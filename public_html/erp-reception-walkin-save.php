@@ -3,6 +3,9 @@ declare(strict_types=1);
 
 header('X-Robots-Tag: noindex, nofollow');
 
+require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-canonical-host-helper.php';
+m360_canonical_local_host_enforce();
+
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-staff-walkin-helper.php';
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
@@ -45,8 +48,9 @@ if (!$result['ok']) {
 }
 
 $requestId = (int)$result['online_request_id'];
+// Let intake resolver choose furthest incomplete step (do not force condition).
 header(
     'Location: erp-reception-intake-file.php?online_request_id=' . $requestId
-    . '&walkin_created=1&ok=1&active_step=condition#step-condition'
+    . '&active_step=condition&walkin_created=1&ok=1#section-condition-photos'
 );
 exit;

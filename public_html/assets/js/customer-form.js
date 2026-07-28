@@ -20,9 +20,9 @@
     'm360_section_profile',
     'm360_section_vehicle',
     'm360_section_request',
-    'm360_section_condition',
-    'm360_section_checklist',
-    'm360_section_contract',
+    'm360_section_condition_handoff',
+    'm360_section_documents_handoff',
+    'm360_section_contract_handoff',
     'm360_section_submit'
   ];
   var ALL_WIZARD_SECTIONS = ONLINE_WIZARD_STEPS_AFTER_OTP.concat(STAFF_WIZARD_STEPS).filter(function (step, index, list) {
@@ -1082,18 +1082,6 @@
       showStepError('m360_section_request', 'لطفاً تاریخ مراجعه را از تقویم انتخاب کنید.');
       goToWizardStep('m360_section_request');
       return false;
-    }
-    if (boot.staffWalkinMode) {
-      if (!allDamageZonesAssessed()) {
-        showStepError('m360_section_condition', 'برای ذخیره پذیرش حضوری، وضعیت همه نواحی خودرو را مشخص کنید.');
-        goToWizardStep('m360_section_condition');
-        return false;
-      }
-      if (!allTrunkItemsChecked()) {
-        showStepError('m360_section_checklist', 'برای ذخیره پذیرش حضوری، وضعیت همه متعلقات را مشخص کنید.');
-        goToWizardStep('m360_section_checklist');
-        return false;
-      }
     }
     clearAllStepErrors();
     return true;

@@ -785,7 +785,9 @@
 .m360-rw-photo-card__label { font-weight: 600; font-size: 0.9rem; }
 .m360-rw-photo-card__status { font-size: 0.85rem; color: var(--m360-muted); }
 .m360-rw-photo-card__thumb { max-width: 100%; max-height: 120px; object-fit: cover; border-radius: 6px; }
-.m360-rw-photo-slot-form { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.25rem; }
+.m360-rw-photo-slot-form { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.25rem; align-items: center; }
+.m360-rw-slot-file-label { cursor: pointer; display: inline-flex; align-items: center; margin: 0; }
+.m360-rw-step5-docs-hint { margin-top: 1rem; display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
 .m360-rw-contract-text { white-space: pre-wrap; background: rgba(0,0,0,0.15); padding: 0.75rem; border-radius: 8px; font-size: 0.88rem; line-height: 1.7; }
 .m360-rw-help-collapsed { font-size: 0.82rem; color: var(--m360-muted); }
 .m360-rw-btn[disabled] { opacity: 0.55; cursor: not-allowed; }
@@ -997,6 +999,17 @@
 .m360-rw-wizard-progress-item.is-future { opacity: 0.45; pointer-events: none; }
 .m360-rw-wizard-progress-num { font-weight: 700; color: var(--m360-gold); font-size: 0.8rem; }
 .m360-rw-wizard-progress-title { text-align: center; line-height: 1.2; }
+.m360-rw-wizard-progress-actor {
+  display: block;
+  margin-top: .2rem;
+  font-size: .72rem;
+  color: var(--m360-muted, #94a3b8);
+  font-weight: 500;
+}
+.m360-customer-wizard-progress__list .m360-rw-wizard-progress-actor {
+  display: inline;
+  margin-inline-start: .35rem;
+}
 .m360-rw-wizard-progress-status { opacity: 0.85; font-size: 0.62rem; }
 .m360-rw-wizard-page-card {
   max-width: 42rem;
@@ -1047,8 +1060,72 @@
 .m360-rw-contract-compact { max-height: 6rem; overflow: hidden; font-size: 0.78rem; margin: 0.5rem 0; }
 .m360-rw-locked-summary .m360-rw-field { margin-bottom: 0.35rem; }
 .m360-rw-wizard-amendment-placeholder { margin-top: 0.75rem; text-align: center; }
-.m360-rw-wizard-page .m360-rw-step-panel,
+/* Legacy multi-panel stepper cards stay hidden on focused wizard pages.
+   Do NOT hide .m360-rw-step-panel inside the active step body — that killed photo/docs UI. */
+.m360-rw-wizard-page > .m360-rw-wizard-layout .m360-rw-step-compact-card,
 .m360-rw-wizard-page .m360-rw-step-compact-card { display: none !important; }
+.m360-rw-wizard-page .m360-rw-wizard-step-body .m360-rw-step-panel,
+.m360-rw-wizard-page .m360-rw-wizard-step-body details.m360-rw-step-panel,
+.m360-rw-wizard-page .m360-rw-wizard-step-body .m360-rw-intake-block {
+  display: block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  height: auto !important;
+  max-height: none !important;
+  overflow: visible !important;
+}
+
+/* Emergency high-contrast photo/docs panels — always visible */
+.m360-rw-intake-block {
+  margin: 0.75rem 0 1.1rem;
+  padding: 0.85rem 0.95rem;
+  border: 2px solid rgba(34, 197, 94, 0.55);
+  border-radius: 12px;
+  background: rgba(15, 32, 24, 0.95);
+}
+.m360-rw-intake-block__title {
+  margin: 0 0 0.65rem;
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: #ecfdf5;
+}
+.m360-rw-photo-slot-grid {
+  display: grid !important;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 0.85rem;
+  margin-top: 0.85rem;
+}
+.m360-rw-photo-card {
+  border: 1px solid rgba(134, 239, 172, 0.35) !important;
+  border-radius: 10px;
+  padding: 0.85rem;
+  display: flex !important;
+  flex-direction: column;
+  gap: 0.5rem;
+  background: #0b1611 !important;
+  min-height: 10rem;
+  color: #ecfdf5;
+}
+.m360-rw-photo-card__label { font-weight: 700; font-size: 0.95rem; color: #f0fdf4 !important; }
+.m360-rw-photo-card__status { font-size: 0.85rem; color: #86efac !important; }
+.m360-rw-slot-file-visible {
+  display: block !important;
+  width: 100%;
+  margin: 0.35rem 0;
+  padding: 0.35rem;
+  color: #ecfdf5;
+  background: #13261c;
+  border: 1px solid #234d38;
+  border-radius: 8px;
+}
+.m360-rw-camera-shared video {
+  max-width: 100%;
+  max-height: 180px;
+  border-radius: 8px;
+  border: 1px solid var(--m360-border);
+  margin-bottom: 1rem;
+  background: #000;
+}
 
 @media (max-width: 768px) {
   .m360-rw-wizard-page .m360-rw-wizard-layout { grid-template-columns: 1fr; }

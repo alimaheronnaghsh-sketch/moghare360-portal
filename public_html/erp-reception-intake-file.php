@@ -8,6 +8,9 @@ declare(strict_types=1);
 header('Content-Type: text/html; charset=UTF-8');
 header('X-Robots-Tag: noindex, nofollow');
 
+require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-canonical-host-helper.php';
+m360_canonical_local_host_enforce();
+
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-reception-workbench-helper.php';
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-case-stage-tree-helper.php';
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-case-stage-header.php';
@@ -21,6 +24,7 @@ if ($onlineRequestId < 1 && isset($_GET['request_id'])) {
 
 $csrfTokenHtml = m360_reception_csrf_input_html();
 $csrfInputHtml = $csrfTokenHtml;
+$m360RuntimeBuild = 'P1-EMERGENCY-' . gmdate('Ymd-His');
 
 if (session_status() === PHP_SESSION_ACTIVE) {
     session_write_close();
@@ -193,9 +197,9 @@ function m360_rw_intake_form_field(string $label, string $name, string $value, s
 $m360LuxCssPath = __DIR__ . DIRECTORY_SEPARATOR . 'assets' . DIRECTORY_SEPARATOR . 'css' . DIRECTORY_SEPARATOR . 'moghare360-v1-luxury-ui.css';
 $m360MirrorCssPath = __DIR__ . DIRECTORY_SEPARATOR . 'assets' . DIRECTORY_SEPARATOR . 'css' . DIRECTORY_SEPARATOR . 'mirror.css';
 $m360RwJsPath = __DIR__ . DIRECTORY_SEPARATOR . 'assets' . DIRECTORY_SEPARATOR . 'js' . DIRECTORY_SEPARATOR . 'm360-reception-intake.js';
-$m360LuxCssVer = is_file($m360LuxCssPath) ? (string)filemtime($m360LuxCssPath) : '1';
-$m360MirrorCssVer = is_file($m360MirrorCssPath) ? (string)filemtime($m360MirrorCssPath) : '1';
-$m360RwJsVer = is_file($m360RwJsPath) ? (string)filemtime($m360RwJsPath) : '1';
+$m360LuxCssVer = 'p1-unification-' . (is_file($m360LuxCssPath) ? (string)filemtime($m360LuxCssPath) : '1');
+$m360MirrorCssVer = 'p1-unification-' . (is_file($m360MirrorCssPath) ? (string)filemtime($m360MirrorCssPath) : '1');
+$m360RwJsVer = 'p1-unification-' . (is_file($m360RwJsPath) ? (string)filemtime($m360RwJsPath) : '1');
 
 ?>
 <!DOCTYPE html>
@@ -209,6 +213,7 @@ $m360RwJsVer = is_file($m360RwJsPath) ? (string)filemtime($m360RwJsPath) : '1';
     <link rel="stylesheet" href="assets/css/mirror.css?v=<?= m360_rw_h($m360MirrorCssVer) ?>">
 </head>
 <body class="m360-public-shell m360-rw-page m360-rw-wizard-page m360-rw-focused-step m360-rw-focused-<?= m360_rw_h((string)$activeStep) ?>">
+<!-- RUNTIME_BUILD: <?= m360_rw_h($m360RuntimeBuild) ?> -->
 <div class="m360-wrap m360-rw-wrap">
     <header class="m360-rw-header m360-rw-header--compact">
         <div class="m360-rw-header__top">
@@ -436,10 +441,36 @@ $m360RwJsVer = is_file($m360RwJsPath) ? (string)filemtime($m360RwJsPath) : '1';
                         <?php break;
 
                         case 'condition': ?>
-                            <div class="m360-rw-wizard-step-body m360-rw-condition-focused">
-                                <details class="m360-rw-step-panel" open>
-                                    <summary class="m360-rw-step-panel__summary">وضعیت ظاهری و متعلقات</summary>
-                                    <div class="m360-rw-step-panel__body">
+                            <div class="m360-rw-wizard-step-body m360-rw-condition-focused" data-m360-active-step="condition">
+                                <section class="m360-rw-intake-block" id="section-condition-photos" data-m360-photo-panel="1" aria-label="ثبت عکس‌های پذیرش خودرو">
+                                    <h3 class="m360-rw-intake-block__title">ثبت عکس‌های پذیرش خودرو</h3>
+                                    <div class="m360-rw-flash is-info" id="m360_rw_photo_controls_banner" data-m360-photo-controls="1">
+                                        ثبت عکس‌های پذیرش از همین بخش انجام می‌شود — فقط از دوربین؛ پس از ثبت هر ۶ عکس، «تأیید نهایی عکس‌های پذیرش» الزامی است.
+                                    </div>
+                                    <div id="m360_rw_photo_controls_root">
+                                <?php
+                                m360_rw_intake_render_reception_photos_section(
+                                    $onlineRequestId,
+                                    $payloadData,
+                                    $request,
+                                    $formValues,
+                                    $editSection,
+                                    $canShowStepForm,
+                                    $csrfInputHtml,
+                                    $saveUrl,
+                                    'condition',
+                                    true
+                                );
+                                if ($canShowStepForm): ?>
+                                    <p class="m360-rw-muted m360-rw-step5-docs-hint">
+                                        آپلود گزارش دیاگ، اسکنر، کارشناسی و مدارک PDF در مرحله ۶ است —
+                                        <a class="m360-rw-btn m360-rw-btn-secondary" href="<?= m360_rw_h(m360_rw_intake_step_go_url($onlineRequestId, 'documents')) ?>#section-diagnostic-pdf">آپلود گزارش دیاگ و مدارک در مرحله ۶</a>
+                                    </p>
+                                <?php endif; ?>
+                                    </div>
+                                </section>
+                                <section class="m360-rw-intake-block" id="section-condition-damage" aria-label="وضعیت ظاهری و متعلقات">
+                                    <h3 class="m360-rw-intake-block__title">وضعیت ظاهری و متعلقات</h3>
                                 <?php if ($canShowStepForm) {
                                     $conditionCanonUx = m360_rw_intake_condition_canonical($payloadData);
                                     $damageStructuredUx = !empty($conditionCanonUx['structured']) ? '1' : '0';
@@ -473,27 +504,7 @@ $m360RwJsVer = is_file($m360RwJsPath) ? (string)filemtime($m360RwJsPath) : '1';
                                     }
                                     echo '</div>';
                                 } ?>
-                                    </div>
-                                </details>
-                                <details class="m360-rw-step-panel" open id="section-condition-photos">
-                                    <summary class="m360-rw-step-panel__summary">عکس‌های پذیرش (۶ زاویه)</summary>
-                                    <div class="m360-rw-step-panel__body">
-                                <?php
-                                m360_rw_intake_render_reception_photos_section(
-                                    $onlineRequestId,
-                                    $payloadData,
-                                    $request,
-                                    $formValues,
-                                    $editSection,
-                                    $canShowStepForm,
-                                    $csrfInputHtml,
-                                    $saveUrl,
-                                    'condition',
-                                    true
-                                );
-                                ?>
-                                    </div>
-                                </details>
+                                </section>
                             </div>
                         <?php break;
 
@@ -557,7 +568,21 @@ $m360RwJsVer = is_file($m360RwJsPath) ? (string)filemtime($m360RwJsPath) : '1';
                         <?php break;
 
                         case 'documents': ?>
-                            <div class="m360-rw-wizard-step-body m360-rw-documents-focused">
+                            <div class="m360-rw-wizard-step-body m360-rw-documents-focused" data-m360-active-step="documents">
+                                <section class="m360-rw-intake-block" id="section-documents-root" aria-label="مدارک، گزارش دیاگ و توافقات پذیرش">
+                                <h3 class="m360-rw-intake-block__title">مدارک، گزارش دیاگ و توافقات پذیرش</h3>
+                                <?php
+                                $conditionStepComplete = !empty($wizardStepState['steps']['condition']['complete']);
+                                if (!$conditionStepComplete): ?>
+                                    <div class="m360-rw-flash is-err" id="m360_rw_documents_prereq_lock" role="alert">
+                                        برای ذخیره مدارک، ابتدا عکس‌های پذیرش را تکمیل کنید.
+                                    </div>
+                                    <p class="m360-rw-actions">
+                                        <a class="m360-rw-btn" href="<?= m360_rw_h(m360_rw_intake_step_go_url($onlineRequestId, 'condition')) ?>#section-condition-photos">
+                                            بازگشت به ثبت عکس‌های پذیرش (مرحله ۵)
+                                        </a>
+                                    </p>
+                                <?php endif; ?>
                                 <?php
                                 $receptionComplete = m360_rw_intake_reception_is_completed($payloadData);
                                 if ($receptionComplete): ?>
@@ -569,7 +594,7 @@ $m360RwJsVer = is_file($m360RwJsPath) ? (string)filemtime($m360RwJsPath) : '1';
                                 ?>
 
                                 <?php if ($canShowStepForm): ?>
-                                <section class="m360-rw-doc-upload" id="section-diagnostic-pdf" aria-label="بارگذاری مدرک جدید">
+                                <section class="m360-rw-doc-upload" id="section-diagnostic-pdf" aria-label="بارگذاری مدرک جدید" data-m360-doc-upload="1">
                                     <h3 class="m360-rw-section-title">بارگذاری مدرک جدید</h3>
                                     <p class="m360-rw-muted">هر بارگذاری یک کارت جدید اضافه می‌کند. فایل‌های قبلی حفظ می‌شوند.</p>
                                     <form class="m360-rw-form m360-rw-doc-upload-form" method="post" action="<?= m360_rw_h($saveUrl) ?>" enctype="multipart/form-data" id="m360_rw_doc_upload_form">
@@ -653,6 +678,7 @@ $m360RwJsVer = is_file($m360RwJsPath) ? (string)filemtime($m360RwJsPath) : '1';
                                 }
                                 m360_contract_pdf_render_download_button($staffContractRow, 'staff', '', 'm360-rw-btn');
                                 ?>
+                                </section>
                             </div>
                         <?php break;
 

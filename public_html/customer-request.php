@@ -407,11 +407,11 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST' && !empty($verifiedSession[
     exit;
 }
 
-mirror_render_head('ثبت درخواست مشتری', 'customer');
+mirror_render_head('ثبت درخواست خدمت خودرو', 'customer');
 ?>
 <section class="m360-hero m360-hero--luxury">
-    <h2>ثبت درخواست آنلاین</h2>
-    <p>در چند قدم ساده، درخواست خود را ثبت کنید. ابتدا شماره موبایل را تأیید می‌کنید؛ سپس فرم مناسب شما نمایش داده می‌شود.</p>
+    <h2>ثبت درخواست خدمت خودرو</h2>
+    <p>شماره موبایل، اطلاعات خودرو و شرح درخواست را ثبت کنید. ادامه بررسی خودرو توسط پذیرش مجموعه انجام می‌شود.</p>
 </section>
 
 <?php if ($showTopSubmitAlert): ?>
@@ -445,23 +445,27 @@ mirror_render_head('ثبت درخواست مشتری', 'customer');
         <input type="hidden" id="selected_vehicle_id" name="selected_vehicle_id" value="<?= mirror_h((string)($input['selected_vehicle_id'] ?? '')) ?>">
         <input type="hidden" id="vehicle_mode" name="vehicle_mode" value="<?= mirror_h((string)($input['vehicle_mode'] ?? 'new')) ?>">
 
-        <nav class="m360-customer-wizard-progress" id="m360_wizard_progress" aria-label="پیشرفت مراحل" hidden>
-            <ol class="m360-customer-wizard-progress__list">
-                <li data-step="m360_step_mobile">۱. <?= mirror_h(m360_rw_canonical_intake_step_label('mobile_otp')) ?></li>
-                <li data-step="m360_section_profile">۲. <?= mirror_h(m360_rw_canonical_intake_step_label('customer')) ?></li>
-                <li data-step="m360_section_vehicle">۳. <?= mirror_h(m360_rw_canonical_intake_step_label('vehicle')) ?></li>
-                <li data-step="m360_section_request">۴. <?= mirror_h(m360_rw_canonical_intake_step_label('service')) ?></li>
+        <nav class="m360-customer-wizard-progress m360-rw-wizard-progress" id="m360_wizard_progress" aria-label="پیشرفت ثبت درخواست" data-m360-channel="PUBLIC_SITE" data-m360-stage-count="4" hidden>
+            <ol class="m360-customer-wizard-progress__list m360-rw-wizard-progress-track">
+                <?php
+                $customerFacingStages = m360_intake_customer_facing_stage_registry();
+                $onlineStepMap = [
+                    'otp' => 'm360_step_mobile',
+                    'customer' => 'm360_section_profile',
+                    'vehicle' => 'm360_section_vehicle',
+                    'service' => 'm360_section_request',
+                ];
+                foreach ($customerFacingStages as $stageKey => $stageMeta):
+                ?>
+                <li data-step="<?= mirror_h($onlineStepMap[$stageKey] ?? '') ?>" data-stage-key="<?= mirror_h($stageKey) ?>">
+                    <?= mirror_h((string)$stageMeta['num']) ?>. <?= mirror_h((string)$stageMeta['label']) ?>
+                </li>
+                <?php endforeach; ?>
             </ol>
         </nav>
-        <aside class="m360-rw-flash is-info m360-online-future-timeline" aria-label="مراحل بعد از حضور خودرو">
-            <strong>مراحل بعد از حضور خودرو در مجموعه:</strong>
-            <ol>
-                <li>۵. <?= mirror_h(m360_rw_canonical_intake_step_label('condition')) ?> — قفل تا پذیرش حضوری</li>
-                <li>۶. <?= mirror_h(m360_rw_canonical_intake_step_label('checklist')) ?> — قفل تا پذیرش حضوری</li>
-                <li>۷. <?= mirror_h(m360_rw_canonical_intake_step_label('contract')) ?> — فقط در پروفایل مشتری و با OTP</li>
-                <li>۸. <?= mirror_h(m360_rw_canonical_intake_step_label('hall_jobcard')) ?> — پس از قرارداد و تعیین تکلیف پیش‌پرداخت</li>
-            </ol>
-        </aside>
+        <p class="m360-muted m360-online-customer-note" style="margin:0.75rem 0 1rem">
+            پس از ثبت درخواست، پذیرش مجموعه ادامه فرآیند شامل بررسی خودرو، عکس‌های پذیرش، مدارک، قرارداد و هماهنگی‌های لازم را انجام می‌دهد.
+        </p>
 
         <section id="m360_step_mobile" class="m360-step-card m360-otp-panel m360-step-card--active" aria-labelledby="m360_step_mobile_title">
             <div class="m360-step-header">
