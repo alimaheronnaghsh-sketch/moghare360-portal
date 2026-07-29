@@ -13,5 +13,5 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && p360_csrf_verify()) {
 $rows = p360_rows($conn, 'SELECT * FROM dbo.p360_exit_cases ORDER BY id DESC', []);
 p360_layout_start('خروج', 'exit-cases.php');
 p360_table($rows, ['employee_id'=>'پرسنل','exit_type'=>'نوع','exit_date'=>'تاریخ','exit_status'=>'وضعیت']);
-echo '<form class="card" method="post">'.p360_csrf_field().'<label>employee_id</label><input name="employee_id"><label>exit_type</label><input name="exit_type" value="resignation"><label>exit_date</label><input name="exit_date"><button>ثبت خروج</button></form>';
+echo '<form class="m360-card m360-form" method="post">'.p360_csrf_field().'<label>employee_id</label><input name="employee_id"><label>exit_type</label><input name="exit_type" value="resignation"><label>exit_date</label><input name="exit_date"><button>ثبت خروج</button></form>';
 p360_layout_end();

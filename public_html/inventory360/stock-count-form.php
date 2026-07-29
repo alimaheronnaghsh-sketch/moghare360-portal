@@ -21,7 +21,7 @@ if(($_SERVER['REQUEST_METHOD']??'')==='POST'){
 $items=inv360_items_list($conn,100); $wh=inv360_warehouses_list($conn); $loc=inv360_locations_list($conn);
 inv360_layout_start('فرم انبارگردانی','stock-counts.php'); inv360_flash_render($msg,$ok);
 ?>
-<form method="post" class="inv-form"><?= inv360_csrf_field() ?>
+<form method="post" class="m360-form"><?= inv360_csrf_field() ?>
 <label>کالا<select name="part_id"><?php foreach($items as $it): ?><option value="<?= (int)$it['PartID'] ?>"><?= inv360_h($it['ItemName']) ?></option><?php endforeach; ?></select></label>
 <label>مقدار شمارش‌شده<input type="number" step="0.001" name="counted_qty" required></label>
 <label>انبار<select name="warehouse_id"><option value="0">—</option><?php foreach($wh as $w): ?><option value="<?= (int)$w['WarehouseID'] ?>"><?= inv360_h($w['WarehouseName']) ?></option><?php endforeach; ?></select></label>

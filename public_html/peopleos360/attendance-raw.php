@@ -8,5 +8,5 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && p360_csrf_verify()) {
 $rows = p360_rows($conn, 'SELECT TOP 50 * FROM dbo.p360_raw_attendance_logs ORDER BY id DESC', []);
 p360_layout_start('لاگ خام حضور', 'attendance-devices.php');
 p360_table($rows, ['employee_id'=>'پرسنل','punch_at'=>'زمان','punch_type'=>'نوع']);
-echo '<form class="card" method="post">'.p360_csrf_field().'<label>device_id</label><input name="device_id"><label>employee_id</label><input name="employee_id"><label>punch_at</label><input name="punch_at" placeholder="2026-01-15 08:00:00"><label>نوع</label><select name="punch_type"><option>in</option><option>out</option></select><button>ثبت</button></form>';
+echo '<form class="m360-card m360-form" method="post">'.p360_csrf_field().'<label>device_id</label><input name="device_id"><label>employee_id</label><input name="employee_id"><label>punch_at</label><input name="punch_at" placeholder="2026-01-15 08:00:00"><label>نوع</label><select name="punch_type"><option>in</option><option>out</option></select><button>ثبت</button></form>';
 p360_layout_end();

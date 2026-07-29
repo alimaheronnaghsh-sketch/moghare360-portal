@@ -7,12 +7,12 @@ $wh=inv360_warehouses_list($conn); $rows=inv360_locations_list($conn);
 inv360_layout_start('مکان‌ها / Bin','locations.php');
 inv360_flash_render($msg,$ok);
 ?>
-<form method="post" class="inv-form"><?= inv360_csrf_field() ?>
+<form method="post" class="m360-form"><?= inv360_csrf_field() ?>
 <label>انبار<select name="warehouse_id" required><?php foreach($wh as $w): ?><option value="<?= (int)$w['WarehouseID'] ?>"><?= inv360_h($w['WarehouseName']) ?></option><?php endforeach; ?></select></label>
 <label>کد Bin<input name="bin" required></label>
 <label>نام<input name="name"></label>
 <button type="submit">ثبت Bin</button></form>
-<div class="table-scroll"><table class="data-table"><thead><tr><th>شناسه</th><th>انبار</th><th>کد</th><th>Bin</th></tr></thead><tbody>
+<div class="table-scroll"><table class="m360-table"><thead><tr><th>شناسه</th><th>انبار</th><th>کد</th><th>Bin</th></tr></thead><tbody>
 <?php foreach($rows as $r): ?><tr><td><?= (int)$r['LocationID'] ?></td><td><?= (int)$r['WarehouseID'] ?></td><td><?= inv360_h($r['LocationCode']) ?></td><td><?= inv360_h((string)($r['BinCode']??'')) ?></td></tr><?php endforeach; ?>
 </tbody></table></div>
 <?php inv360_layout_end();

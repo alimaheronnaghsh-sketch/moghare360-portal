@@ -15,7 +15,7 @@ $rows = p360_workflow_pending($conn, null);
 p360_layout_start('تأییدها', 'approvals.php');
 p360_flash($msg, $ok);
 foreach ($rows as $t) {
-    echo '<form class="card" method="post" style="margin-bottom:.5rem">'.p360_csrf_field();
+    echo '<form class="m360-card m360-form" method="post" style="margin-bottom:.5rem">'.p360_csrf_field();
     echo '<div>#' . (int)$t['id'] . ' — ' . p360_h($t['title']) . '</div>';
     echo '<input type="hidden" name="task_id" value="'.(int)$t['id'].'">';
     if ($t['entity_type']==='leave_request') echo '<input type="hidden" name="leave_id" value="'.p360_h($t['entity_id']).'">';

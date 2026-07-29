@@ -9,5 +9,5 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && p360_csrf_verify()) {
 }
 p360_layout_start('فرم قالب قرارداد', 'contract-templates.php');
 p360_flash($msg, $ok);
-echo '<form class="card" method="post">'.p360_csrf_field().'<label>کد</label><input name="template_code" required><label>عنوان</label><input name="template_title" required><label>متن (paste)</label><textarea name="template_body" rows="10" required>قرارداد {{employee_name}} — حقوق {{salary}}</textarea><label>id برای ویرایش</label><input name="id"><button>ذخیره</button></form>';
+echo '<form class="m360-card m360-form" method="post">'.p360_csrf_field().'<label>کد</label><input name="template_code" required><label>عنوان</label><input name="template_title" required><label>متن (paste)</label><textarea name="template_body" rows="10" required>قرارداد {{employee_name}} — حقوق {{salary}}</textarea><label>id برای ویرایش</label><input name="id"><button>ذخیره</button></form>';
 p360_layout_end();

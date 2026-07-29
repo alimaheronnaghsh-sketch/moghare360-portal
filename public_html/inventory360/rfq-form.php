@@ -4,7 +4,7 @@ $sup=inv360_suppliers_list($conn); $items=inv360_items_list($conn,100);
 if(($_SERVER['REQUEST_METHOD']??'')==='POST'){ inv360_csrf_require(); $res=inv360_rfq_create($conn,$_POST,$uid); $ok=!empty($res['ok']); $msg=(string)$res['message']; if($ok){header('Location: rfq.php');exit;} }
 inv360_layout_start('فرم RFQ','rfq.php'); inv360_flash_render($msg,$ok);
 ?>
-<form method="post" class="inv-form"><?= inv360_csrf_field() ?>
+<form method="post" class="m360-form"><?= inv360_csrf_field() ?>
 <label>تأمین‌کننده<select name="supplier_id"><?php foreach($sup as $s): ?><option value="<?= (int)$s['SupplierID'] ?>"><?= inv360_h($s['SupplierName']) ?></option><?php endforeach; ?></select></label>
 <label>کالا<select name="part_id"><option value="0">—</option><?php foreach($items as $it): ?><option value="<?= (int)$it['PartID'] ?>"><?= inv360_h($it['ItemName']) ?></option><?php endforeach; ?></select></label>
 <label>قلم متنی<input name="item_text"></label>

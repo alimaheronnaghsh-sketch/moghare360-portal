@@ -9,10 +9,10 @@ $rows=inv360_quarantine_list($conn);
 $items=inv360_items_list($conn,100); $wh=inv360_warehouses_list($conn); $loc=inv360_locations_list($conn);
 inv360_layout_start('قرنطینه','quarantine.php'); inv360_flash_render($msg,$ok);
 ?>
-<div class="table-scroll"><table class="data-table"><thead><tr><th>کالا</th><th>کد کارگاه</th><th>کد فنی</th><th>قرنطینه</th></tr></thead><tbody>
+<div class="table-scroll"><table class="m360-table"><thead><tr><th>کالا</th><th>کد کارگاه</th><th>کد فنی</th><th>قرنطینه</th></tr></thead><tbody>
 <?php foreach($rows as $r): ?><tr><td><?= inv360_h((string)($r['ItemName']??'')) ?></td><td><?= inv360_h((string)($r['WorkshopCode']??'')) ?></td><td><?= inv360_h((string)($r['TechnicalCode']??'')) ?></td><td><?= inv360_h((string)$r['QuarantineQty']) ?></td></tr><?php endforeach; ?>
 </tbody></table></div>
-<form method="post" class="inv-form" style="margin-top:1rem"><?= inv360_csrf_field() ?>
+<form method="post" class="m360-form" style="margin-top:1rem"><?= inv360_csrf_field() ?>
 <label>کالا<select name="part_id"><?php foreach($items as $it): ?><option value="<?= (int)$it['PartID'] ?>"><?= inv360_h($it['ItemName']) ?></option><?php endforeach; ?></select></label>
 <label>تعداد آزادسازی<input type="number" step="0.001" name="qty" required></label>
 <label>انبار<select name="warehouse_id"><option value="0">—</option><?php foreach($wh as $w): ?><option value="<?= (int)$w['WarehouseID'] ?>"><?= inv360_h($w['WarehouseName']) ?></option><?php endforeach; ?></select></label>

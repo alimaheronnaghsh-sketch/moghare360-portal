@@ -3,7 +3,7 @@ require_once __DIR__.'/includes/inv360-bootstrap.php'; inv360_require_login(); $
 if(($_SERVER['REQUEST_METHOD']??'')==='POST'){ inv360_csrf_require(); $res=inv360_logistics_create($conn,$_POST,$uid); $ok=!empty($res['ok']); $msg=(string)$res['message']; if($ok){header('Location: logistics.php');exit;} }
 inv360_layout_start('فرم لجستیک','logistics.php'); inv360_flash_render($msg,$ok);
 ?>
-<form method="post" class="inv-form"><?= inv360_csrf_field() ?>
+<form method="post" class="m360-form"><?= inv360_csrf_field() ?>
 <label>حامل<input name="carrier"></label>
 <label>وسیله<input name="vehicle"></label>
 <label>راننده<input name="driver_name"></label>

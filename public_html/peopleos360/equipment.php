@@ -6,5 +6,5 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && p360_csrf_verify()) p360_equipment_
 $rows = p360_equipment_list($conn);
 p360_layout_start('تجهیزات', 'equipment.php');
 p360_table($rows, ['equipment_code'=>'کد','equipment_name'=>'نام','serial_no'=>'سریال']);
-echo '<form class="card" method="post">'.p360_csrf_field().'<label>کد</label><input name="equipment_code"><label>نام</label><input name="equipment_name"><button>ثبت</button></form>';
+echo '<form class="m360-card m360-form" method="post">'.p360_csrf_field().'<label>کد</label><input name="equipment_code"><label>نام</label><input name="equipment_name"><button>ثبت</button></form>';
 p360_layout_end();

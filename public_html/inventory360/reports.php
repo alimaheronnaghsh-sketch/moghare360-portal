@@ -21,11 +21,11 @@ inv360_layout_start('گزارش‌ها','reports.php');
   <div class="card"><h3>PO باز</h3><p><?= $openPO ?></p></div>
 </div>
 <h2>پیشنهاد خرید پایه</h2>
-<div class="table-scroll"><table class="data-table"><thead><tr><th>کالا</th><th>کد کارگاه</th><th>آزاد</th><th>نقطه سفارش</th></tr></thead><tbody>
+<div class="table-scroll"><table class="m360-table"><thead><tr><th>کالا</th><th>کد کارگاه</th><th>آزاد</th><th>نقطه سفارش</th></tr></thead><tbody>
 <?php foreach($suggest as $r): ?><tr><td><?= inv360_h($r['ItemName']) ?></td><td><?= inv360_h((string)$r['WorkshopCode']) ?></td><td><?= inv360_h((string)$r['Avail']) ?></td><td><?= inv360_h((string)$r['ReorderPoint']) ?></td></tr><?php endforeach; if(!$suggest) echo '<tr><td colspan="4">موردی نیست</td></tr>'; ?>
 </tbody></table></div>
 <h2>ABC بر اساس ارزش موجودی</h2>
-<div class="table-scroll"><table class="data-table"><thead><tr><th>کالا</th><th>موجودی</th><th>بهای واحد</th><th>ارزش</th></tr></thead><tbody>
+<div class="table-scroll"><table class="m360-table"><thead><tr><th>کالا</th><th>موجودی</th><th>بهای واحد</th><th>ارزش</th></tr></thead><tbody>
 <?php foreach($abc as $r): ?><tr><td><?= inv360_h($r['ItemName']) ?></td><td><?= inv360_h((string)$r['Qty']) ?></td><td><?= inv360_h((string)$r['UnitCost']) ?></td><td><?= inv360_h((string)$r['Val']) ?></td></tr><?php endforeach; ?>
 </tbody></table></div>
 <p class="hint">XYZ / Days on Hand / ایمنی موجودی: زیرساخت آماده؛ اجرای کامل در فاز بعد (نیازمند تاریخچه مصرف پایدار).</p>

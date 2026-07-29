@@ -30,7 +30,7 @@ $wh=inv360_warehouses_list($conn); $loc=inv360_locations_list($conn); $items=inv
 inv360_layout_start('ثبت سند انبار','stock-documents.php');
 inv360_flash_render($msg,$ok);
 ?>
-<form method="post" class="inv-form"><?= inv360_csrf_field() ?><input type="hidden" name="action" value="create">
+<form method="post" class="m360-form"><?= inv360_csrf_field() ?><input type="hidden" name="action" value="create">
 <label>نوع سند<select name="doc_type">
 <option value="purchase_receipt">رسید خرید</option>
 <option value="opening_receipt">رسید اول دوره</option>

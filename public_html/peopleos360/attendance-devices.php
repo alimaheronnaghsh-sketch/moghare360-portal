@@ -6,5 +6,5 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && p360_csrf_verify()) p360_attendance
 $rows = p360_rows($conn, 'SELECT * FROM dbo.p360_attendance_devices ORDER BY id DESC', []);
 p360_layout_start('دستگاه حضور', 'attendance-devices.php');
 p360_table($rows, ['device_code'=>'کد','device_name'=>'نام']);
-echo '<form class="card" method="post">'.p360_csrf_field().'<label>کد</label><input name="device_code"><label>نام</label><input name="device_name"><button>ثبت</button></form>';
+echo '<form class="m360-card m360-form" method="post">'.p360_csrf_field().'<label>کد</label><input name="device_code"><label>نام</label><input name="device_name"><button>ثبت</button></form>';
 p360_layout_end();

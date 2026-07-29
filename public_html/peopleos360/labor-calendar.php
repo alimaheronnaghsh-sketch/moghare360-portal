@@ -11,5 +11,5 @@ $rows = p360_rows($conn, 'SELECT * FROM dbo.p360_jalali_calendar_years ORDER BY 
 p360_layout_start('تقویم کار جلالی', 'labor-calendar.php');
 p360_flash($msg, true);
 p360_table($rows, ['jalali_year'=>'سال جلالی','starts_on_gregorian'=>'شروع','ends_on_gregorian'=>'پایان','status'=>'وضعیت']);
-echo '<form class="card" method="post">'.p360_csrf_field().'<label>سال جلالی</label><input name="jalali_year" type="number" required><label>شروع میلادی</label><input name="starts_on_gregorian" placeholder="YYYY-MM-DD"><label>پایان</label><input name="ends_on_gregorian"><button>ثبت سال</button></form>';
+echo '<form class="m360-card m360-form" method="post">'.p360_csrf_field().'<label>سال جلالی</label><input name="jalali_year" type="number" required><label>شروع میلادی</label><input name="starts_on_gregorian" placeholder="YYYY-MM-DD"><label>پایان</label><input name="ends_on_gregorian"><button>ثبت سال</button></form>';
 p360_layout_end();

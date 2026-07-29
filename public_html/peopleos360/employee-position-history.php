@@ -10,5 +10,5 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && p360_csrf_verify()) {
 $rows = $eid ? p360_employee_position_history($conn, $eid) : [];
 p360_layout_start('سابقه سمت', 'employees.php');
 p360_table($rows, ['position_title'=>'سمت','effective_from'=>'از','effective_to'=>'تا']);
-echo '<form class="card" method="post">'.p360_csrf_field().'<label>employee_id</label><input name="employee_id" value="'.$eid.'"><label>position_id</label><input name="position_id"><label>effective_from</label><input name="effective_from" required><button>افزودن</button></form>';
+echo '<form class="m360-card m360-form" method="post">'.p360_csrf_field().'<label>employee_id</label><input name="employee_id" value="'.$eid.'"><label>position_id</label><input name="position_id"><label>effective_from</label><input name="effective_from" required><button>افزودن</button></form>';
 p360_layout_end();

@@ -16,7 +16,7 @@ if(($_SERVER['REQUEST_METHOD']??'')==='POST'){
 $rows=inv360_qc_list($conn);
 inv360_layout_start('کنترل کیفیت','quality-control.php'); inv360_flash_render($msg,$ok);
 ?>
-<form method="post" class="inv-form"><?= inv360_csrf_field() ?>
+<form method="post" class="m360-form"><?= inv360_csrf_field() ?>
 <label>کالا<select name="part_id"><?php foreach($items as $it): ?><option value="<?= (int)$it['PartID'] ?>"><?= inv360_h($it['ItemName']) ?></option><?php endforeach; ?></select></label>
 <label>تعداد<input type="number" step="0.001" name="qty" required></label>
 <label>انبار<select name="warehouse_id"><option value="0">—</option><?php foreach($wh as $w): ?><option value="<?= (int)$w['WarehouseID'] ?>"><?= inv360_h($w['WarehouseName']) ?></option><?php endforeach; ?></select></label>
@@ -30,7 +30,7 @@ inv360_layout_start('کنترل کیفیت','quality-control.php'); inv360_flash
 <label>نتیجه<select name="qc_action"><option value="accept">پذیرش</option><option value="reject">رد</option><option value="quarantine">قرنطینه</option></select></label>
 <label>یادداشت<textarea name="notes"></textarea></label>
 <button type="submit">ثبت QC</button></form>
-<div class="table-scroll"><table class="data-table"><thead><tr><th>شناسه</th><th>کالا</th><th>نتیجه</th><th>تاریخ</th></tr></thead><tbody>
+<div class="table-scroll"><table class="m360-table"><thead><tr><th>شناسه</th><th>کالا</th><th>نتیجه</th><th>تاریخ</th></tr></thead><tbody>
 <?php foreach($rows as $r): ?><tr><td><?= (int)$r['QCRecordID'] ?></td><td><?= inv360_h((string)($r['ItemName']??'')) ?></td><td><?= inv360_h((string)$r['ResultCode']) ?></td><td><?= inv360_h((string)$r['CreatedAt']) ?></td></tr><?php endforeach; ?>
 </tbody></table></div>
 <?php inv360_layout_end();

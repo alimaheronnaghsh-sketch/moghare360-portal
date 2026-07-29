@@ -9,5 +9,5 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && p360_csrf_verify()) {
 }
 p360_layout_start('اجرای حقوق', 'payroll-slips.php');
 p360_flash($msg, true);
-echo '<form class="card" method="post">'.p360_csrf_field().'<label>employee_id</label><input name="employee_id"><label>period_id</label><input name="period_id"><button>محاسبه فیش</button></form>';
+echo '<form class="m360-card m360-form" method="post">'.p360_csrf_field().'<label>employee_id</label><input name="employee_id"><label>period_id</label><input name="period_id"><button>محاسبه فیش</button></form>';
 p360_layout_end();

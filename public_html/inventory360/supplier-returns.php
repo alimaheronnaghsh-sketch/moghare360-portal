@@ -18,7 +18,7 @@ if(($_SERVER['REQUEST_METHOD']??'')==='POST'){
 $rows=inv360_rows($conn,'SELECT TOP 50 r.supplier_return_id AS SupplierReturnID, r.qty AS Qty, p.item_name_fa AS ItemName, s.supplier_name AS SupplierName FROM dbo.inv360_supplier_returns r LEFT JOIN dbo.inv360_items p ON p.item_id=r.item_id LEFT JOIN dbo.inv360_suppliers s ON s.supplier_id=r.supplier_id ORDER BY r.supplier_return_id DESC',[]);
 inv360_layout_start('مرجوعی به تأمین‌کننده','supplier-returns.php'); inv360_flash_render($msg,$ok);
 ?>
-<form method="post" class="inv-form"><?= inv360_csrf_field() ?>
+<form method="post" class="m360-form"><?= inv360_csrf_field() ?>
 <label>تأمین‌کننده<select name="supplier_id"><?php foreach($sup as $s): ?><option value="<?= (int)$s['SupplierID'] ?>"><?= inv360_h($s['SupplierName']) ?></option><?php endforeach; ?></select></label>
 <label>کالا<select name="part_id"><?php foreach($items as $it): ?><option value="<?= (int)$it['PartID'] ?>"><?= inv360_h($it['ItemName']) ?></option><?php endforeach; ?></select></label>
 <label>تعداد<input type="number" step="0.001" name="qty" required></label>
@@ -26,7 +26,7 @@ inv360_layout_start('مرجوعی به تأمین‌کننده','supplier-return
 <label>مکان<select name="location_id"><option value="0">—</option><?php foreach($loc as $l): ?><option value="<?= (int)$l['LocationID'] ?>"><?= inv360_h($l['LocationCode']) ?></option><?php endforeach; ?></select></label>
 <label>دلیل<textarea name="reason" required></textarea></label>
 <button type="submit">ثبت مرجوعی</button></form>
-<div class="table-scroll"><table class="data-table"><thead><tr><th>شناسه</th><th>تأمین‌کننده</th><th>کالا</th><th>تعداد</th></tr></thead><tbody>
+<div class="table-scroll"><table class="m360-table"><thead><tr><th>شناسه</th><th>تأمین‌کننده</th><th>کالا</th><th>تعداد</th></tr></thead><tbody>
 <?php foreach($rows as $r): ?><tr><td><?= (int)$r['SupplierReturnID'] ?></td><td><?= inv360_h((string)($r['SupplierName']??'')) ?></td><td><?= inv360_h((string)($r['ItemName']??'')) ?></td><td><?= inv360_h((string)$r['Qty']) ?></td></tr><?php endforeach; ?>
 </tbody></table></div>
 <?php inv360_layout_end();

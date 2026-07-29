@@ -8,7 +8,7 @@ if(($_SERVER['REQUEST_METHOD']??'')==='POST'){
 $rows=inv360_landed_cost_list($conn);
 inv360_layout_start('بهای تمام‌شده وارداتی','landed-cost.php'); inv360_flash_render($msg,$ok);
 ?>
-<form method="post" class="inv-form"><?= inv360_csrf_field() ?>
+<form method="post" class="m360-form"><?= inv360_csrf_field() ?>
 <label>کالا<select name="part_id"><?php foreach($items as $it): ?><option value="<?= (int)$it['PartID'] ?>"><?= inv360_h($it['ItemName']) ?></option><?php endforeach; ?></select></label>
 <label>تعداد<input type="number" step="0.001" name="qty" value="1" required></label>
 <label>قیمت خرید<input type="number" step="0.01" name="purchase_price" required></label>
@@ -29,7 +29,7 @@ inv360_layout_start('بهای تمام‌شده وارداتی','landed-cost.php
 <label>درصد دستی<input type="number" step="0.01" name="manual_pct" value="100"></label>
 <button type="submit">محاسبه و ذخیره</button></form>
 <?php if($calc): ?><div class="panel"><p>بهای تمام‌شده کل: <strong><?= inv360_h((string)$calc['total_landed']) ?></strong></p><p>بهای واحد: <strong><?= inv360_h((string)$calc['unit_landed']) ?></strong></p></div><?php endif; ?>
-<div class="table-scroll"><table class="data-table"><thead><tr><th>شناسه</th><th>کالا</th><th>کل</th><th>واحد</th></tr></thead><tbody>
+<div class="table-scroll"><table class="m360-table"><thead><tr><th>شناسه</th><th>کالا</th><th>کل</th><th>واحد</th></tr></thead><tbody>
 <?php foreach($rows as $r): ?><tr><td><?= (int)$r['LandedCostID'] ?></td><td><?= inv360_h((string)($r['ItemName']??'')) ?></td><td><?= inv360_h((string)$r['TotalLanded']) ?></td><td><?= inv360_h((string)$r['UnitLanded']) ?></td></tr><?php endforeach; ?>
 </tbody></table></div>
 <?php inv360_layout_end();

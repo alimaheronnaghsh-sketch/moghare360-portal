@@ -10,11 +10,11 @@ if(($_SERVER['REQUEST_METHOD']??'')==='POST'){
 $assets=inv360_assets_list($conn);
 inv360_layout_start('تحویل / برگشت ابزار','tools-assets.php'); inv360_flash_render($msg,$ok);
 ?>
-<form method="post" class="inv-form"><?= inv360_csrf_field() ?><input type="hidden" name="mode" value="issue">
+<form method="post" class="m360-form"><?= inv360_csrf_field() ?><input type="hidden" name="mode" value="issue">
 <label>ابزار<select name="asset_id"><?php foreach($assets as $a): ?><option value="<?= (int)$a['AssetID'] ?>"><?= inv360_h($a['AssetCode'].' — '.$a['AssetName']) ?></option><?php endforeach; ?></select></label>
 <label>تحویل‌گیرنده<input name="assigned_person" required></label>
 <button type="submit">تحویل</button></form>
-<form method="post" class="inv-form"><?= inv360_csrf_field() ?><input type="hidden" name="mode" value="return">
+<form method="post" class="m360-form"><?= inv360_csrf_field() ?><input type="hidden" name="mode" value="return">
 <label>ابزار<select name="asset_id"><?php foreach($assets as $a): ?><option value="<?= (int)$a['AssetID'] ?>"><?= inv360_h($a['AssetCode'].' — '.$a['AssetName']) ?></option><?php endforeach; ?></select></label>
 <button type="submit">برگشت</button></form>
 <?php inv360_layout_end();

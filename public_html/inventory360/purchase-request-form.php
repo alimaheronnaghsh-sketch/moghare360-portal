@@ -4,7 +4,7 @@ $items=inv360_items_list($conn,100);
 if(($_SERVER['REQUEST_METHOD']??'')==='POST'){ inv360_csrf_require(); $partId=(int)$_POST['part_id']; $stock=(float)(inv360_scalar($conn,'SELECT ISNULL(SUM(physical_qty),0) FROM dbo.inv360_stock_balances WHERE item_id=?',[$partId])??0); $res=inv360_pr_create($conn,array_merge($_POST,['current_stock'=>$stock]),$uid); $ok=!empty($res['ok']); $msg=(string)$res['message']; if($ok){header('Location: purchase-requests.php');exit;} }
 inv360_layout_start('فرم درخواست خرید','purchase-requests.php'); inv360_flash_render($msg,$ok);
 ?>
-<form method="post" class="inv-form"><?= inv360_csrf_field() ?>
+<form method="post" class="m360-form"><?= inv360_csrf_field() ?>
 <label>درخواست‌کننده<input name="requester" required></label>
 <label>واحد<input name="department"></label>
 <label>تاریخ نیاز<input type="date" name="needed_date"></label>

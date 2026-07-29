@@ -10,5 +10,5 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && p360_csrf_verify()) {
 }
 p360_layout_start('بارگذاری متن حقوقی', 'legal-rule-center.php');
 echo p360_legal_disclaimer_html(); if ($msg) p360_flash($msg, true);
-echo '<form class="card" method="post">'.p360_csrf_field().'<label>عنوان</label><input name="rule_title"><label>متن</label><textarea name="rule_text" rows="8" required></textarea><button>بارگذاری</button></form>';
+echo '<form class="m360-card m360-form" method="post">'.p360_csrf_field().'<label>عنوان</label><input name="rule_title"><label>متن</label><textarea name="rule_text" rows="8" required></textarea><button>بارگذاری</button></form>';
 p360_layout_end();

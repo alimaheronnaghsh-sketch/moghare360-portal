@@ -21,7 +21,7 @@ if(($_SERVER['REQUEST_METHOD']??'')==='POST'){
 }
 inv360_layout_start('فرم دریافت کالا','goods-receipts.php'); inv360_flash_render($msg,$ok);
 ?>
-<form method="post" class="inv-form"><?= inv360_csrf_field() ?>
+<form method="post" class="m360-form"><?= inv360_csrf_field() ?>
 <label>نوع<select name="receipt_type"><option value="from_purchase">از خرید</option><option value="opening">افتتاحیه</option><option value="transfer">انتقالی</option><option value="return">برگشتی</option></select></label>
 <label>PO<select name="po_id"><option value="0">—</option><?php foreach($pos as $p): ?><option value="<?= (int)$p['PurchaseOrderID'] ?>"><?= inv360_h($p['PONo']) ?></option><?php endforeach; ?></select></label>
 <label>کالا<select name="part_id"><?php foreach($items as $it): ?><option value="<?= (int)$it['PartID'] ?>"><?= inv360_h($it['ItemName']) ?></option><?php endforeach; ?></select></label>

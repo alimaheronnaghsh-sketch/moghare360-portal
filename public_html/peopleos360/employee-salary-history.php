@@ -13,5 +13,5 @@ $rows = $eid ? p360_employee_salary_history($conn, $eid) : [];
 p360_layout_start('سابقه حقوق', 'employees.php');
 p360_flash($msg, true);
 p360_table($rows, ['base_salary'=>'حقوق','effective_from'=>'از','effective_to'=>'تا','change_reason'=>'دلیل']);
-echo '<form class="card" method="post">'.p360_csrf_field().'<label>employee_id</label><input name="employee_id" value="'.$eid.'" required><label>حقوق</label><input name="base_salary"><label>effective_from</label><input name="effective_from" required><button>افزودن</button></form>';
+echo '<form class="m360-card m360-form" method="post">'.p360_csrf_field().'<label>employee_id</label><input name="employee_id" value="'.$eid.'" required><label>حقوق</label><input name="base_salary"><label>effective_from</label><input name="effective_from" required><button>افزودن</button></form>';
 p360_layout_end();

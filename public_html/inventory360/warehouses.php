@@ -7,7 +7,7 @@ inv360_layout_start('انبارها','warehouses.php');
 inv360_flash_render($msg,$ok);
 ?>
 <p><a class="btn" href="warehouse-form.php">انبار جدید</a></p>
-<div class="table-scroll"><table class="data-table"><thead><tr><th>شناسه</th><th>کد</th><th>نام</th><th>نوع</th></tr></thead><tbody>
+<div class="table-scroll"><table class="m360-table"><thead><tr><th>شناسه</th><th>کد</th><th>نام</th><th>نوع</th></tr></thead><tbody>
 <?php foreach($rows as $r): ?><tr><td><?= (int)$r['WarehouseID'] ?></td><td><?= inv360_h($r['WarehouseCode']) ?></td><td><?= inv360_h($r['WarehouseName']) ?></td><td><?= inv360_h(inv360_status_fa((string)($r['WarehouseType']??'main'))) ?></td></tr><?php endforeach; ?>
 </tbody></table></div>
 <?php inv360_layout_end();

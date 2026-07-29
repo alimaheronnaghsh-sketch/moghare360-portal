@@ -15,5 +15,5 @@ $rows = p360_candidate_list($conn);
 p360_layout_start('کاندیدها', 'recruitment.php');
 p360_flash($msg, true);
 p360_table($rows, ['full_name'=>'نام','candidate_status'=>'وضعیت']);
-echo '<form class="card" method="post">'.p360_csrf_field().'<label>نام</label><input name="full_name"><button>کاندید جدید</button></form>';
+echo '<form class="m360-card m360-form" method="post">'.p360_csrf_field().'<label>نام</label><input name="full_name"><button>کاندید جدید</button></form>';
 p360_layout_end();

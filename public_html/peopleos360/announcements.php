@@ -6,5 +6,5 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && p360_csrf_verify()) p360_announceme
 $rows = p360_announcements_list($conn);
 p360_layout_start('اطلاعیه', 'announcements.php');
 p360_table($rows, ['title'=>'عنوان','created_at'=>'تاریخ']);
-echo '<form class="card" method="post">'.p360_csrf_field().'<label>عنوان</label><input name="title"><label>متن</label><textarea name="body_text"></textarea><button>انتشار</button></form>';
+echo '<form class="m360-card m360-form" method="post">'.p360_csrf_field().'<label>عنوان</label><input name="title"><label>متن</label><textarea name="body_text"></textarea><button>انتشار</button></form>';
 p360_layout_end();

@@ -6,7 +6,7 @@ if(($_SERVER["REQUEST_METHOD"]??"")==="POST"){inv360_csrf_require();$res=inv360_
 inv360_layout_start('ثبت انبار','warehouses.php');
 inv360_flash_render($msg,$ok);
 ?>
-<form method="post" class="inv-form"><?= inv360_csrf_field() ?>
+<form method="post" class="m360-form"><?= inv360_csrf_field() ?>
 <label>کد انبار<input name="code" required></label>
 <label>نام انبار<input name="name" required></label>
 <label>نوع<select name="type"><option value="main">اصلی</option><option value="parts">قطعات</option><option value="tools">ابزار</option><option value="quarantine">قرنطینه</option><option value="returns">مرجوعی</option><option value="scrap">ضایعات</option><option value="consignment">امانی</option><option value="project">پروژه</option><option value="mobile">سیار</option><option value="in_transit">در مسیر</option></select></label>

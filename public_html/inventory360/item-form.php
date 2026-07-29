@@ -11,7 +11,7 @@ if(($_SERVER['REQUEST_METHOD']??'')==='POST'){
 inv360_layout_start('ثبت / ویرایش کالا','items.php');
 inv360_flash_render($msg,$ok);
 ?>
-<form method="post" class="inv-form">
+<form method="post" class="m360-form">
 <?= inv360_csrf_field() ?>
 <label>کد کارگاه<input name="workshop_code" required></label>
 <label>کد فنی<input name="technical_code" required></label>
