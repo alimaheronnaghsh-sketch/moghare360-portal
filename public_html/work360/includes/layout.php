@@ -30,11 +30,25 @@ function work360_nav_items(array $user): array
 
 function work360_layout_start(string $title, string $active = ''): void
 {
+    if (!headers_sent()) {
+        header('Content-Type: text/html; charset=UTF-8');
+    }
     $user = work360_current_user();
     $name = work360_h((string)($user['full_name'] ?? ''));
     $role = work360_h(work360_role_fa((string)($user['role_code'] ?? '')));
     $current = basename((string)($_SERVER['PHP_SELF'] ?? ''));
-    echo '<!DOCTYPE html><html lang="fa" dir="rtl"><head><meta charset="UTF-8">';
+    $crumb = 'داشبورد';
+    if ($current === 'my-tasks.php') { $crumb = 'کارهای من'; }
+    elseif ($current === 'supervisor-board.php') { $crumb = 'برد سرپرست'; }
+    elseif ($current === 'manager-report.php') { $crumb = 'گزارش مدیریت'; }
+    elseif ($current === 'daily-performance.php') { $crumb = 'عملکرد روزانه'; }
+    elseif ($current === 'task-create.php') { $crumb = 'ثبت کار'; }
+    elseif ($current === 'users.php' || $current === 'user-form.php') { $crumb = 'کاربران'; }
+    elseif ($current === 'departments.php') { $crumb = 'واحدها'; }
+    elseif ($current === 'reports.php') { $crumb = 'گزارش‌ها'; }
+    elseif (str_starts_with($current, 'task-')) { $crumb = 'کار'; }
+    echo '<!DOCTYPE html><html lang="fa" dir="rtl"><head><meta charset="utf-8">';
+    echo '<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">';
     echo '<meta name="viewport" content="width=device-width, initial-scale=1">';
     echo '<title>' . work360_h($title) . ' | Work360</title>';
     echo '<link rel="stylesheet" href="../assets/css/m360-suite-theme.css">';
@@ -47,6 +61,7 @@ function work360_layout_start(string $title, string $active = ''): void
     }
     echo '<div class="m360-sidebar-foot"><span>' . $name . ' · ' . $role . '</span><a href="logout.php">خروج</a></div>';
     echo '</aside><main class="m360-main">';
+    echo '<div class="w360-breadcrumb">پرسنل / Work360 / ' . work360_h($crumb) . ' · <a href="../personnel.html">بازگشت به صفحه پرسنل</a></div>';
     echo '<div class="m360-page-header"><h1 class="m360-page-title">' . work360_h($title) . '</h1></div>';
 }
 

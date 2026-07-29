@@ -35,7 +35,7 @@ function work360_db()
     $user = (string)($db['username'] ?? '');
     $pass = (string)($db['password'] ?? '');
     foreach (['ODBC Driver 18 for SQL Server', 'ODBC Driver 17 for SQL Server'] as $driver) {
-        $dsn = 'Driver={' . $driver . '};Server=' . $server . ';Database=' . $name . ';';
+        $dsn = 'Driver={' . $driver . '};Server=' . $server . ';Database=' . $name . ';CharacterSet=UTF-8;';
         if ($trusted) {
             $dsn .= 'Trusted_Connection=Yes;';
         }
