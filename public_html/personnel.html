@@ -17,7 +17,7 @@
     .m360-master-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1.15rem;margin:1.35rem 0 1.75rem}
     .m360-master-card{display:flex;flex-direction:column;min-height:280px;padding:1.25rem 1.15rem;border-radius:calc(var(--m360-radius) + 4px);background:linear-gradient(165deg,#1f3229 0%,var(--m360-card) 45%,#132019 100%);border:1px solid rgba(34,197,94,.18);box-shadow:0 14px 36px rgba(0,0,0,.32)}
     .m360-master-card h3{margin:0 0 .4rem;font-size:1.02rem;font-weight:700}
-    .m360-master-card .m360-master-sub{margin:0 0 .85rem;font-size:.82rem;line-height:1.65;color:var(--m360-muted)}
+    .m360-master-card .m360-master-sub{margin:0 0 .85rem;font-size:.82rem;line-height:1.5;color:var(--m360-muted)}
     .m360-master-primary{margin:.15rem 0 .85rem}
     .m360-master-primary .m360-btn{margin-top:0;font-size:.84rem;padding:.55rem 1rem}
     .m360-key-chips{display:flex;flex-wrap:wrap;gap:.4rem;max-height:220px;overflow:auto;padding:.15rem .1rem .35rem;margin-top:auto}
@@ -57,14 +57,11 @@
         <div class="m360-home-hero__brand">
           <div class="m360-home-hero__copy">
             <h1 id="personnel-title" class="m360-home-title">پرسنل</h1>
-            <span class="m360-home-latin m360-brand-latin" lang="en" dir="ltr">Master Key Map</span>
             <p class="m360-home-subtitle">نقشه کلیدهای داخلی MOGHARE360</p>
-            <p class="m360-home-subtitle" style="margin-top:.65rem;">این صفحه فقط نقشه ورود و کلیدهای مادر سامانه است. هر کلید می‌تواند در آینده به یک ماژول عملیاتی وصل شود، اما در این مرحله فقط مسیرها و ساختار مدیریتی نمایش داده می‌شود. هیچ اتصال عملیاتی بین CRM، کارت کار، انبار، مالی و منابع انسانی فعال نشده است.</p>
             <div class="m360-key-badges">
-              <span class="m360-key-badge">پایگاه داده مشترک: moghare360_ERP</span>
-              <span class="m360-key-badge">وضعیت: مستقل</span>
+              <span class="m360-key-badge">مستقل</span>
+              <span class="m360-key-badge">دیتابیس مشترک: moghare360_ERP</span>
               <span class="m360-key-badge">اتصال عملیاتی: غیرفعال</span>
-              <span class="m360-key-badge">مرحله: Navigation Blueprint</span>
             </div>
           </div>
         </div>
@@ -72,10 +69,9 @@
 
       <div class="m360-master-grid">
 
-        <!-- 1. CRM -->
         <article class="m360-master-card">
-          <h3>CRM و تجربه مشتری</h3>
-          <p class="m360-master-sub">مدیریت مسیر مشتری از درخواست اولیه تا پیگیری، رضایت، بازگشت و فروش مجدد</p>
+          <h3>CRM و پذیرش</h3>
+          <p class="m360-master-sub">مدیریت مسیر مشتری از درخواست تا پیگیری</p>
           <div class="m360-master-primary"><a class="m360-btn" href="staff-login.php">ورود به پذیرش</a></div>
           <div class="m360-key-chips">
             <a class="m360-key-chip is-active" href="customer-request.php">درخواست مشتری <span class="tag">فعال</span></a>
@@ -98,10 +94,9 @@
           </div>
         </article>
 
-        <!-- 2. Operations / JobCard -->
         <article class="m360-master-card">
-          <h3>عملیات خدمات و کارت کار</h3>
-          <p class="m360-master-sub">مدیریت مسیر فنی خودرو از ایجاد کارت کار تا اجرای مکانیک، برق، خدمات بیرونی و توقف کار</p>
+          <h3>عملیات خدمات</h3>
+          <p class="m360-master-sub">کارت کار، سالن، تکنسین و اجرای خدمات</p>
           <div class="m360-master-primary"><a class="m360-btn" href="erp-hall-cartable.php">ورود به سالن عملیات</a></div>
           <div class="m360-key-chips">
             <a class="m360-key-chip is-active" href="erp-hall-cartable.php">کارت کار <span class="tag">فعال</span></a>
@@ -126,10 +121,9 @@
           </div>
         </article>
 
-        <!-- 3. QC / Delivery -->
         <article class="m360-master-card">
           <h3>کنترل کیفیت و ترخیص</h3>
-          <p class="m360-master-sub">کنترل نهایی کیفیت، آماده‌سازی خروج، فاکتور نهایی، تسویه و تحویل خودرو</p>
+          <p class="m360-master-sub">QC، فاکتور نهایی، تسویه و تحویل خودرو</p>
           <div class="m360-master-primary"><a class="m360-btn" href="erp-qc-board.php">ورود به QC</a></div>
           <div class="m360-key-chips">
             <a class="m360-key-chip is-active" href="erp-qc-board.php">کنترل کیفی QC <span class="tag">فعال</span></a>
@@ -149,10 +143,9 @@
           </div>
         </article>
 
-        <!-- 4. Inventory -->
         <article class="m360-master-card">
-          <h3>انبار، خرید و لجستیک</h3>
-          <p class="m360-master-sub">مدیریت کالا، موجودی، خرید، تأمین‌کننده، دریافت، QC قطعه، بهای تمام‌شده و لجستیک</p>
+          <h3>انبار و خرید</h3>
+          <p class="m360-master-sub">کالا، موجودی، خرید، تأمین و لجستیک</p>
           <div class="m360-master-primary"><a class="m360-btn" href="inventory360/login.php">ورود به Inventory360</a></div>
           <div class="m360-key-chips">
             <a class="m360-key-chip is-active" href="inventory360/login.php">ورود به Inventory360 <span class="tag">فعال</span></a>
@@ -183,10 +176,9 @@
           </div>
         </article>
 
-        <!-- 5. Finance -->
         <article class="m360-master-card">
-          <h3>مالی و حسابداری</h3>
-          <p class="m360-master-sub">کنترل دریافت، پرداخت، فاکتور، تسویه، هزینه، حقوق، پورسانت، و گزارش مالی</p>
+          <h3>مالی و صندوق</h3>
+          <p class="m360-master-sub">دریافت، پرداخت، فاکتور، تسویه و گزارش</p>
           <div class="m360-master-primary"><a class="m360-btn" href="erp-final-invoice-board.php">ورود به فاکتور نهایی</a></div>
           <div class="m360-key-chips">
             <a class="m360-key-chip is-active" href="erp-management-dashboard.php">داشبورد مالی <span class="tag">فعال</span></a>
@@ -221,10 +213,9 @@
           </div>
         </article>
 
-        <!-- 6. HR / Admin -->
         <article class="m360-master-card">
-          <h3>اداری و منابع انسانی</h3>
-          <p class="m360-master-sub">مدیریت شرکت، ساختار سازمانی، پرونده پرسنلی، قرارداد، حضور، حقوق، مرخصی، وام، عملکرد و اسناد</p>
+          <h3>منابع انسانی</h3>
+          <p class="m360-master-sub">پرسنل، قرارداد، حضور، حقوق و عملکرد</p>
           <div class="m360-master-primary"><a class="m360-btn" href="peopleos360/login.php">ورود به PeopleOS360</a></div>
           <div class="m360-key-chips">
             <a class="m360-key-chip is-active" href="peopleos360/login.php">ورود به PeopleOS360 <span class="tag">فعال</span></a>
@@ -262,15 +253,10 @@
           </div>
         </article>
 
-        <!-- 7. Management / Access -->
         <article class="m360-master-card">
-          <h3>مدیریت، گزارش و دسترسی</h3>
-          <p class="m360-master-sub">مدیریت کل سیستم، دسترسی‌ها، گزارش مدیریتی، Audit، KPI و تنظیمات کلان</p>
-          <div class="m360-master-primary">
-            <a class="m360-btn" href="work360/login.php">مرکز کار و پیگیری روزانه</a>
-            <a class="m360-btn m360-btn-secondary" href="erp-management-dashboard.php" style="margin-right:.4rem">ورود به داشبورد مالک</a>
-          </div>
-          <p class="m360-master-sub" style="margin-top:.35rem">چراغ عملیات، یادآوری کارهای امروز، پیگیری سرپرست و گزارش عملکرد افراد</p>
+          <h3>مرکز کار و پیگیری روزانه</h3>
+          <p class="m360-master-sub">چراغ عملیات، کارهای امروز، پیگیری سرپرست و گزارش عملکرد</p>
+          <div class="m360-master-primary"><a class="m360-btn" href="work360/login.php">ورود به Work360</a></div>
           <div class="m360-key-chips">
             <a class="m360-key-chip is-active" href="work360/login.php">Work360 <span class="tag">فعال</span></a>
             <a class="m360-key-chip is-active" href="erp-management-dashboard.php">داشبورد مالک <span class="tag">فعال</span></a>
