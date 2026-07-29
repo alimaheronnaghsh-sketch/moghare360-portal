@@ -3,7 +3,7 @@ require_once __DIR__ . '/includes/bootstrap.php';
 work360_require_login();
 $user = work360_current_user();
 $conn = work360_db();
-$id = (int)($_GET['id'] ?? 0);
+$id = (int)($_GET['id'] ?? $_POST['task_id'] ?? 0);
 $task = work360_one($conn, 'SELECT TOP 1 t.*, d.department_name_fa, a.full_name AS assignee_name, s.full_name AS supervisor_name
   FROM dbo.work360_tasks t
   JOIN dbo.work360_departments d ON d.department_id=t.department_id
@@ -15,20 +15,60 @@ if (!$task || !work360_can_access_task($user, $task)) {
     echo 'کار یافت نشد.';
     exit;
 }
+
+$msg = ''; $ok = true;
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['complete_task'])) {
+    work360_csrf_require();
+    $res = work360_complete_task($conn, $user, $id, trim((string)($_POST['completion_note'] ?? '')));
+    $ok = !empty($res['ok']);
+    $msg = (string)($res['message'] ?? '');
+    if ($ok) {
+        header('Location: task-view.php?id=' . $id);
+        exit;
+    }
+    $task = work360_one($conn, 'SELECT TOP 1 t.*, d.department_name_fa, a.full_name AS assignee_name, s.full_name AS supervisor_name
+      FROM dbo.work360_tasks t
+      JOIN dbo.work360_departments d ON d.department_id=t.department_id
+      LEFT JOIN dbo.work360_users a ON a.user_id=t.assigned_to_user_id
+      LEFT JOIN dbo.work360_users s ON s.user_id=t.supervisor_user_id
+      WHERE t.task_id=?', [$id]);
+}
+
+$auth = work360_can_complete_task($conn, $user, $task);
 $hist = work360_rows($conn, 'SELECT h.*, u.full_name FROM dbo.work360_task_status_history h LEFT JOIN dbo.work360_users u ON u.user_id=h.changed_by_user_id WHERE h.task_id=? ORDER BY h.history_id DESC', [$id]);
 $fus = work360_rows($conn, 'SELECT f.*, u.full_name FROM dbo.work360_task_followups f LEFT JOIN dbo.work360_users u ON u.user_id=f.followup_by_user_id WHERE f.task_id=? ORDER BY f.followup_id DESC', [$id]);
+$doneMode = strtoupper((string)$task['status_code']) === 'DONE' ? work360_detect_completion_mode_from_history($conn, $id) : null;
 work360_layout_start('جزئیات کار', 'task-view.php');
+work360_flash($msg, $ok);
 ?>
 <div class="m360-card">
-  <h3><?= work360_h((string)$task['title']) ?> <span class="m360-badge"><?= work360_h((string)$task['task_code']) ?></span></h3>
+  <h3><?= work360_h((string)$task['title']) ?> <span class="m360-badge"><?= work360_h((string)$task['task_code']) ?></span>
+  <?php if (strtoupper((string)$task['status_code']) === 'DONE'): ?>
+    <span class="m360-badge m360-badge-ok">بسته‌شده</span>
+    <?php if ($doneMode && $doneMode !== 'SELF'): ?>
+      <span class="m360-badge m360-badge-warn"><?= work360_h(work360_completion_badge_fa($doneMode)) ?></span>
+    <?php endif; ?>
+  <?php endif; ?>
+  </h3>
   <p>واحد: <?= work360_h((string)$task['department_name_fa']) ?></p>
   <p>مسئول: <?= work360_h((string)($task['assignee_name'] ?? '—')) ?> · سرپرست: <?= work360_h((string)($task['supervisor_name'] ?? '—')) ?></p>
   <p>وضعیت: <?= work360_h(work360_status_fa((string)$task['status_code'])) ?> · اولویت: <?= work360_h(work360_priority_fa((string)$task['priority_code'])) ?></p>
   <p>سررسید: <?= work360_h((string)$task['due_date']) ?> <?= work360_h((string)($task['due_time'] ?? '')) ?></p>
   <p>منبع: <?= work360_h((string)($task['source_type'] ?? 'MANUAL')) ?> · ارجاع: <?= work360_h((string)($task['reference_text'] ?? '—')) ?></p>
   <p>نتیجه مورد انتظار: <?= work360_h((string)($task['expected_result'] ?? '—')) ?></p>
+  <?php if (!empty($task['completion_note'])): ?><p>یادداشت اتمام: <?= work360_h((string)$task['completion_note']) ?></p><?php endif; ?>
   <p><?= nl2br(work360_h((string)($task['description'] ?? ''))) ?></p>
   <div class="w360-actions">
+    <?php if (!empty($auth['ok'])): ?>
+    <form method="post" style="display:inline-flex;gap:.4rem;align-items:center;flex-wrap:wrap">
+      <?= work360_csrf_field() ?>
+      <input type="hidden" name="complete_task" value="1">
+      <?php if (!empty($auth['note_required'])): ?>
+      <input type="text" name="completion_note" placeholder="یادداشت اتمام" required style="min-width:180px">
+      <?php endif; ?>
+      <button type="submit" class="m360-btn m360-btn-primary"><?= work360_h((string)$auth['label_fa']) ?></button>
+    </form>
+    <?php endif; ?>
     <a class="m360-btn m360-btn-secondary" href="task-status.php?id=<?= $id ?>">تغییر وضعیت</a>
     <a class="m360-btn m360-btn-secondary" href="task-followup.php?id=<?= $id ?>">ثبت پیگیری</a>
     <a class="m360-btn m360-btn-secondary" href="task-edit.php?id=<?= $id ?>">ویرایش</a>

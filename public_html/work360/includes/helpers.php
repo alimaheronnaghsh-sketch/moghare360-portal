@@ -190,3 +190,256 @@ function work360_can_access_task(array $user, array $task): bool
     }
     return ((int)($task['assigned_to_user_id'] ?? 0) === $uid);
 }
+
+/**
+ * Hierarchical completion authority.
+ * Returns: ok, reason, mode (SELF|SUPERVISOR|MANAGER|OWNER), label_fa, note_required, already_closed
+ */
+function work360_can_complete_task($conn, array $user, array $task): array
+{
+    $role = strtoupper((string)($user['role_code'] ?? 'STAFF'));
+    $uid = (int)($user['user_id'] ?? 0);
+    $status = strtoupper((string)($task['status_code'] ?? ''));
+    $assigneeId = (int)($task['assigned_to_user_id'] ?? 0);
+    $taskSupId = (int)($task['supervisor_user_id'] ?? 0);
+    $taskDept = (int)($task['department_id'] ?? 0);
+    $userDept = $user['department_id'] !== null ? (int)$user['department_id'] : 0;
+
+    if (in_array($status, ['DONE', 'CANCELLED'], true)) {
+        return [
+            'ok' => false,
+            'reason' => 'این کار قبلاً بسته شده است.',
+            'mode' => null,
+            'label_fa' => '',
+            'note_required' => false,
+            'already_closed' => true,
+        ];
+    }
+
+    $assignee = $assigneeId > 0
+        ? work360_one($conn, 'SELECT TOP 1 user_id, role_code, department_id, supervisor_user_id FROM dbo.work360_users WHERE user_id=?', [$assigneeId])
+        : null;
+    $assigneeRole = strtoupper((string)($assignee['role_code'] ?? ''));
+    $assigneeSup = (int)($assignee['supervisor_user_id'] ?? 0);
+    $assigneeDept = (int)($assignee['department_id'] ?? 0);
+    $isSelf = ($assigneeId === $uid);
+
+    if ($role === 'OWNER') {
+        return [
+            'ok' => true,
+            'reason' => '',
+            'mode' => $isSelf ? 'SELF' : 'OWNER',
+            'label_fa' => $isSelf ? 'اتمام کار من' : 'اتمام توسط مالک',
+            'note_required' => !$isSelf,
+            'already_closed' => false,
+        ];
+    }
+
+    if ($role === 'MANAGER') {
+        if ($assigneeRole === 'OWNER') {
+            return [
+                'ok' => false,
+                'reason' => 'شما مجوز اتمام این کار را ندارید.',
+                'mode' => null,
+                'label_fa' => '',
+                'note_required' => false,
+                'already_closed' => false,
+            ];
+        }
+        return [
+            'ok' => true,
+            'reason' => '',
+            'mode' => $isSelf ? 'SELF' : 'MANAGER',
+            'label_fa' => $isSelf ? 'اتمام کار من' : 'اتمام توسط مدیر',
+            'note_required' => !$isSelf,
+            'already_closed' => false,
+        ];
+    }
+
+    if ($role === 'SUPERVISOR') {
+        if ($isSelf) {
+            return [
+                'ok' => true,
+                'reason' => '',
+                'mode' => 'SELF',
+                'label_fa' => 'اتمام کار من',
+                'note_required' => false,
+                'already_closed' => false,
+            ];
+        }
+        // Cannot close manager/owner tasks
+        if (in_array($assigneeRole, ['OWNER', 'MANAGER'], true)) {
+            return [
+                'ok' => false,
+                'reason' => 'شما مجوز اتمام این کار را ندارید.',
+                'mode' => null,
+                'label_fa' => '',
+                'note_required' => false,
+                'already_closed' => false,
+            ];
+        }
+        // Cannot close another supervisor's assigned task unless self is task supervisor
+        if ($assigneeRole === 'SUPERVISOR' && $assigneeId !== $uid && $taskSupId !== $uid) {
+            return [
+                'ok' => false,
+                'reason' => 'شما مجوز اتمام این کار را ندارید.',
+                'mode' => null,
+                'label_fa' => '',
+                'note_required' => false,
+                'already_closed' => false,
+            ];
+        }
+        $teamOk = ($assigneeSup === $uid)
+            || ($taskSupId === $uid)
+            || ($userDept > 0 && $taskDept === $userDept && $assigneeDept === $userDept && $assigneeRole === 'STAFF');
+        if ($teamOk) {
+            return [
+                'ok' => true,
+                'reason' => '',
+                'mode' => 'SUPERVISOR',
+                'label_fa' => 'اتمام توسط سرپرست',
+                'note_required' => true,
+                'already_closed' => false,
+            ];
+        }
+        return [
+            'ok' => false,
+            'reason' => 'شما مجوز اتمام این کار را ندارید.',
+            'mode' => null,
+            'label_fa' => '',
+            'note_required' => false,
+            'already_closed' => false,
+        ];
+    }
+
+    // STAFF: own only
+    if ($isSelf) {
+        return [
+            'ok' => true,
+            'reason' => '',
+            'mode' => 'SELF',
+            'label_fa' => 'اتمام کار من',
+            'note_required' => false,
+            'already_closed' => false,
+        ];
+    }
+    return [
+        'ok' => false,
+        'reason' => 'شما مجوز اتمام این کار را ندارید.',
+        'mode' => null,
+        'label_fa' => '',
+        'note_required' => false,
+        'already_closed' => false,
+    ];
+}
+
+function work360_completion_history_tag(string $mode): string
+{
+    $map = [
+        'SELF' => 'DONE_BY_SELF',
+        'SUPERVISOR' => 'DONE_BY_SUPERVISOR',
+        'MANAGER' => 'DONE_BY_MANAGER',
+        'OWNER' => 'DONE_BY_OWNER',
+    ];
+    return $map[$mode] ?? 'DONE_BY_SELF';
+}
+
+function work360_completion_followup_note(string $mode): string
+{
+    $map = [
+        'SELF' => 'کار توسط خود کاربر انجام شد.',
+        'SUPERVISOR' => 'کار توسط سرپرست بسته شد.',
+        'MANAGER' => 'کار توسط مدیر بسته شد.',
+        'OWNER' => 'کار توسط مالک بسته شد.',
+    ];
+    return $map[$mode] ?? 'کار بسته شد.';
+}
+
+function work360_completion_badge_fa(string $mode): string
+{
+    $map = [
+        'SELF' => 'اتمام توسط خود کاربر',
+        'SUPERVISOR' => 'اتمام توسط سرپرست',
+        'MANAGER' => 'اتمام توسط مدیر',
+        'OWNER' => 'اتمام توسط مالک',
+    ];
+    return $map[$mode] ?? '';
+}
+
+/**
+ * Complete a task with hierarchical authority. Returns ['ok'=>bool,'message'=>string]
+ */
+function work360_complete_task($conn, array $user, int $taskId, ?string $note = null): array
+{
+    $task = work360_one($conn, 'SELECT TOP 1 * FROM dbo.work360_tasks WHERE task_id=?', [$taskId]);
+    if (!$task) {
+        return ['ok' => false, 'message' => 'کار یافت نشد.'];
+    }
+    $auth = work360_can_complete_task($conn, $user, $task);
+    if (!$auth['ok']) {
+        return ['ok' => false, 'message' => (string)$auth['reason']];
+    }
+    $note = trim((string)$note);
+    if (!empty($auth['note_required']) && $note === '') {
+        $defaults = [
+            'SUPERVISOR' => 'اتمام توسط سرپرست',
+            'MANAGER' => 'اتمام توسط مدیر',
+            'OWNER' => 'اتمام توسط مالک',
+        ];
+        $mode = (string)$auth['mode'];
+        if (isset($defaults[$mode])) {
+            $note = $defaults[$mode];
+        } else {
+            return ['ok' => false, 'message' => 'برای اتمام کار دیگران، یادداشت الزامی است.'];
+        }
+    }
+    if ($note === '') {
+        $note = work360_completion_followup_note((string)$auth['mode']);
+    }
+
+    $uid = (int)$user['user_id'];
+    $old = (string)$task['status_code'];
+    $mode = (string)$auth['mode'];
+    $tag = work360_completion_history_tag($mode);
+    $histNote = $tag . ' | ' . $note;
+    $now = date('Y-m-d H:i:s');
+
+    work360_exec(
+        $conn,
+        'UPDATE dbo.work360_tasks SET status_code=N\'DONE\', completed_at=?, completion_note=?, approved_by_user_id=?, approved_at=?, updated_at=SYSUTCDATETIME() WHERE task_id=?',
+        [$now, $note, $uid, $now, $taskId]
+    );
+    work360_exec(
+        $conn,
+        'INSERT INTO dbo.work360_task_status_history (task_id, old_status_code, new_status_code, changed_by_user_id, note) VALUES (?,?,N\'DONE\',?,?)',
+        [$taskId, $old, $uid, $histNote]
+    );
+    work360_exec(
+        $conn,
+        'INSERT INTO dbo.work360_task_followups (task_id, followup_by_user_id, followup_type, note) VALUES (?,?,N\'APPROVAL_NOTE\',?)',
+        [$taskId, $uid, work360_completion_followup_note($mode) . ($note !== '' ? (' ' . $note) : '')]
+    );
+    return ['ok' => true, 'message' => 'کار با موفقیت بسته شد.', 'mode' => $mode];
+}
+
+function work360_detect_completion_mode_from_history($conn, int $taskId): ?string
+{
+    $row = work360_one($conn, "SELECT TOP 1 note FROM dbo.work360_task_status_history WHERE task_id=? AND new_status_code=N'DONE' ORDER BY history_id DESC", [$taskId]);
+    if (!$row) {
+        return null;
+    }
+    $note = (string)($row['note'] ?? '');
+    if (str_contains($note, 'DONE_BY_OWNER')) {
+        return 'OWNER';
+    }
+    if (str_contains($note, 'DONE_BY_MANAGER')) {
+        return 'MANAGER';
+    }
+    if (str_contains($note, 'DONE_BY_SUPERVISOR')) {
+        return 'SUPERVISOR';
+    }
+    if (str_contains($note, 'DONE_BY_SELF')) {
+        return 'SELF';
+    }
+    return null;
+}
