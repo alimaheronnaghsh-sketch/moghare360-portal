@@ -1,0 +1,17 @@
+:root{--bg:#0f1419;--panel:#1a2332;--text:#e8eef5;--accent:#3d9cf5;--muted:#8fa3b8;--ok:#3ecf8e;--err:#f07178}
+*{box-sizing:border-box}body{margin:0;font-family:Tahoma,"Segoe UI",sans-serif;background:var(--bg);color:var(--text)}
+.p360-shell{display:flex;min-height:100vh}.p360-nav{width:240px;background:var(--panel);padding:1rem;display:flex;flex-direction:column;gap:.5rem}
+.p360-nav .brand{font-weight:700;color:var(--accent);margin-bottom:.5rem}.p360-nav a{color:var(--muted);text-decoration:none;padding:.35rem .5rem;border-radius:6px;font-size:.9rem}
+.p360-nav a.active,.p360-nav a:hover{background:#243044;color:var(--text)}.nav-foot{margin-top:auto;font-size:.85rem;color:var(--muted)}
+.p360-main{flex:1;padding:1rem 1.5rem}.p360-top h1{margin:0 0 1rem;font-size:1.35rem}
+.kpi-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:.75rem;margin-bottom:1rem}
+.kpi{background:var(--panel);padding:.75rem;border-radius:8px}.kpi span{display:block;color:var(--muted);font-size:.8rem}.kpi strong{font-size:1.2rem}
+.steps{display:flex;flex-wrap:wrap;gap:.5rem}.steps a{background:#243044;padding:.4rem .6rem;border-radius:6px;color:var(--accent);text-decoration:none;font-size:.85rem}
+table.data{width:100%;border-collapse:collapse;background:var(--panel);border-radius:8px;overflow:hidden}
+table.data th,table.data td{padding:.5rem .65rem;border-bottom:1px solid #2a3548;text-align:right;font-size:.9rem}
+.notice{padding:.6rem .8rem;border-radius:6px;margin-bottom:.75rem}.notice.ok{background:#1e3a2f;color:var(--ok)}.notice.err{background:#3a1e22;color:var(--err)}
+.legal-disclaimer{background:#2a2418;border:1px solid #6b5a2a;padding:.75rem;border-radius:8px;margin-bottom:1rem;font-size:.85rem;line-height:1.6}
+form.card{background:var(--panel);padding:1rem;border-radius:8px;max-width:640px}form.card label{display:block;margin:.5rem 0 .2rem;color:var(--muted);font-size:.85rem}
+form.card input,form.card select,form.card textarea{width:100%;padding:.45rem;border-radius:6px;border:1px solid #334; background:#111827;color:var(--text)}
+form.card button{margin-top:.75rem;background:var(--accent);color:#fff;border:0;padding:.5rem 1rem;border-radius:6px;cursor:pointer}
+.login-wrap{max-width:380px;margin:4rem auto;background:var(--panel);padding:1.5rem;border-radius:10px}

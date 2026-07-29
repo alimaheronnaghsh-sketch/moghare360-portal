@@ -5,7 +5,14 @@ require_once __DIR__ . '/inv360-workflow.php';
 
 function inv360_gr_list($conn): array
 {
-    return inv360_rows($conn, 'SELECT TOP 100 * FROM dbo.Inv360GoodsReceipts ORDER BY GoodsReceiptID DESC', []);
+    $rows = inv360_rows($conn, 'SELECT TOP 100 * FROM dbo.inv360_goods_receipts ORDER BY gr_id DESC', []);
+    foreach ($rows as &$r) {
+        $r['GRNo'] = $r['gr_no'];
+        $r['ReceiptType'] = $r['receipt_type'];
+        $r['GRStatus'] = $r['gr_status'];
+    }
+    unset($r);
+    return $rows;
 }
 
 function inv360_gr_create($conn, array $d, int $userId): array
@@ -13,18 +20,17 @@ function inv360_gr_create($conn, array $d, int $userId): array
     $no = 'GR-' . gmdate('YmdHis') . '-' . random_int(10, 99);
     $ok = inv360_exec(
         $conn,
-        'INSERT INTO dbo.Inv360GoodsReceipts
-            (GRNo, PurchaseOrderID, WarehouseID, LocationID, GRStatus, QtyControlNote, QualityControlNote, DocumentControlNote, CreatedByUserID)
-         VALUES (?,?,?,?,N\'draft\',?,?,?,?)',
+        'INSERT INTO dbo.inv360_goods_receipts (gr_no, po_id, warehouse_id, location_id, receipt_type, gr_status, qty_control_note, created_by)
+         VALUES (?,?,?,?,?,N\'draft\',?,?)',
         [
-            $no, ((int)($d['po_id'] ?? 0)) ?: null, ((int)($d['warehouse_id'] ?? 0)) ?: null, ((int)($d['location_id'] ?? 0)) ?: null,
-            $d['qty_note'] ?? ($d['notes'] ?? null), $d['quality_note'] ?? null, $d['doc_note'] ?? null, $userId,
+            $no, ((int)($d['po_id'] ?? 0)) ?: null, ((int)($d['warehouse_id'] ?? 0)) ?: null,
+            ((int)($d['location_id'] ?? 0)) ?: null, $d['receipt_type'] ?? 'from_purchase', $d['notes'] ?? null, $userId,
         ]
     );
     if ($ok === false) {
         return ['ok' => false, 'message' => 'ثبت رسید ناموفق بود.'];
     }
-    $id = (int)(inv360_scalar($conn, 'SELECT TOP 1 GoodsReceiptID FROM dbo.Inv360GoodsReceipts WHERE GRNo=?', [$no]) ?? 0);
+    $id = (int)(inv360_scalar($conn, 'SELECT TOP 1 gr_id FROM dbo.inv360_goods_receipts WHERE gr_no=?', [$no]) ?? 0);
     if (((int)($d['part_id'] ?? 0)) > 0) {
         inv360_gr_add_line($conn, $id, $d);
     }
@@ -40,11 +46,11 @@ function inv360_gr_add_line($conn, int $grId, array $d): array
     }
     $ok = inv360_exec(
         $conn,
-        'INSERT INTO dbo.Inv360GoodsReceiptLines (GoodsReceiptID, POLineID, PartID, ItemText, ReceivedQty, AcceptedQty, RejectedQty, QuarantineQty, UnitCost)
-         VALUES (?,?,?,?,?,?,?,?,?)',
+        'INSERT INTO dbo.inv360_goods_receipt_lines (gr_id, po_line_id, item_id, item_text, received_qty, unit_cost)
+         VALUES (?,?,?,?,?,?)',
         [
-            $grId, ((int)($d['po_line_id'] ?? 0)) ?: null, ((int)($d['part_id'] ?? 0)) ?: null, $d['item_text'] ?? 'قلم دریافت',
-            $qty, 0, 0, 0, (float)($d['unit_cost'] ?? 0),
+            $grId, ((int)($d['po_line_id'] ?? 0)) ?: null, ((int)($d['part_id'] ?? 0)) ?: null,
+            $d['item_text'] ?? 'قلم دریافت', $qty, (float)($d['unit_cost'] ?? 0),
         ]
     );
     return $ok === false ? ['ok' => false, 'message' => 'افزودن قلم دریافت ناموفق بود.'] : ['ok' => true, 'message' => 'قلم دریافت ثبت شد.'];
@@ -54,114 +60,76 @@ function inv360_qc_list($conn): array
 {
     return inv360_rows(
         $conn,
-        'SELECT TOP 100 q.*, p.ItemName,
-                q.QcEventID AS QCRecordID, q.ActionCode AS ResultCode
-         FROM dbo.Inv360QcEvents q
-         LEFT JOIN dbo.Parts p ON p.PartID=q.PartID
-         ORDER BY q.QcEventID DESC',
+        'SELECT TOP 100 q.qc_event_id AS QCRecordID, q.action_code AS ResultCode, q.created_at AS CreatedAt, i.item_name_fa AS ItemName
+         FROM dbo.inv360_qc_events q LEFT JOIN dbo.inv360_items i ON i.item_id=q.item_id ORDER BY q.qc_event_id DESC',
         []
     );
 }
 
 function inv360_qc_create($conn, array $d, int $userId): array
 {
-    $action = strtolower((string)($d['result'] ?? 'accept'));
-    $partId = (int)($d['part_id'] ?? 0);
-    $qty = (float)($d['qty'] ?? 0);
-    $note = trim(implode(' | ', array_filter([
-        (string)($d['notes'] ?? ''),
-        !empty($d['qty_ok']) ? 'qty_ok' : 'qty_fail:' . ($d['qty_notes'] ?? ''),
-        !empty($d['quality_ok']) ? 'quality_ok' : 'quality_fail:' . ($d['quality_notes'] ?? ''),
-        !empty($d['doc_ok']) ? 'doc_ok' : 'doc_fail:' . ($d['doc_notes'] ?? ''),
-    ])));
     return inv360_qc_action(
         $conn,
         (int)($d['gr_id'] ?? 0),
-        $action,
-        $qty,
-        $partId > 0 ? $partId : null,
+        strtolower((string)($d['result'] ?? 'accept')),
+        (float)($d['qty'] ?? 0),
+        ((int)($d['part_id'] ?? 0)) ?: null,
         ((int)($d['warehouse_id'] ?? 0)) ?: null,
         ((int)($d['location_id'] ?? 0)) ?: null,
-        $note,
+        (string)($d['notes'] ?? ''),
         $userId
     );
 }
 
-function inv360_qc_action($conn, int $grId, string $action, float $qty, ?int $partId, ?int $warehouseId, ?int $locationId, string $note, int $userId): array
+function inv360_qc_action($conn, int $grId, string $action, float $qty, ?int $itemId, ?int $warehouseId, ?int $locationId, string $note, int $userId): array
 {
     $action = strtolower(trim($action));
     if (!in_array($action, ['accept', 'reject', 'quarantine', 'release', 'return_supplier'], true)) {
         return ['ok' => false, 'message' => 'اقدام QC نامعتبر است.'];
     }
-    if ($qty <= 0 || !$partId) {
+    if ($qty <= 0 || !$itemId) {
         return ['ok' => false, 'message' => 'کالا و مقدار الزامی است.'];
     }
     inv360_exec(
         $conn,
-        'INSERT INTO dbo.Inv360QcEvents (GoodsReceiptID, PartID, ActionCode, Qty, NoteText, CreatedByUserID) VALUES (?,?,?,?,?,?)',
-        [$grId > 0 ? $grId : null, $partId, $action, $qty, $note, $userId]
+        'INSERT INTO dbo.inv360_qc_events (gr_id, item_id, action_code, qty, note_text, created_by) VALUES (?,?,?,?,?,?)',
+        [$grId > 0 ? $grId : null, $itemId, $action, $qty, $note, $userId]
     );
-
-    if ($action === 'accept') {
-        // Accept does not auto-increase stock here when goods already received via GR post.
-        if ($grId > 0) {
-            inv360_exec($conn, 'UPDATE dbo.Inv360GoodsReceipts SET QCResult=N\'accepted\', GRStatus=N\'posted\', PostedAt=SYSUTCDATETIME() WHERE GoodsReceiptID=?', [$grId]);
-        }
-    } elseif ($action === 'quarantine') {
-        $r = inv360_balance_adjust($conn, $partId, $warehouseId, $locationId, 0, 0, $qty);
+    if ($action === 'quarantine') {
+        $r = inv360_balance_adjust($conn, $itemId, $warehouseId, $locationId, 0, 0, $qty);
         if (empty($r['ok'])) {
             return $r;
-        }
-        if ($grId > 0) {
-            inv360_exec($conn, 'UPDATE dbo.Inv360GoodsReceipts SET QCResult=N\'quarantine\', GRStatus=N\'quarantine\' WHERE GoodsReceiptID=?', [$grId]);
         }
     } elseif ($action === 'release') {
-        $r = inv360_balance_adjust($conn, $partId, $warehouseId, $locationId, 0, 0, -$qty);
+        $r = inv360_balance_adjust($conn, $itemId, $warehouseId, $locationId, 0, 0, -$qty);
         if (empty($r['ok'])) {
             return $r;
         }
-        if ($grId > 0) {
-            inv360_exec($conn, 'UPDATE dbo.Inv360GoodsReceipts SET QCResult=N\'released\', GRStatus=N\'posted\' WHERE GoodsReceiptID=?', [$grId]);
-        }
-    } elseif ($action === 'reject' || $action === 'return_supplier') {
-        if ($grId > 0) {
-            inv360_exec($conn, 'UPDATE dbo.Inv360GoodsReceipts SET QCResult=?, GRStatus=N\'rejected\' WHERE GoodsReceiptID=?', [$action, $grId]);
-        }
-        if ($action === 'return_supplier') {
-            $retNo = 'SR-' . gmdate('YmdHis');
-            inv360_exec(
-                $conn,
-                'INSERT INTO dbo.Inv360SupplierReturns (ReturnNo, PartID, Qty, ReasonText, ReturnStatus, CreatedByUserID)
-                 VALUES (?,?,?,?,N\'submitted\',?)',
-                [$retNo, $partId, $qty, $note !== '' ? $note : 'مرجوعی QC', $userId]
-            );
-        }
+    }
+    if ($grId > 0) {
+        inv360_exec($conn, 'UPDATE dbo.inv360_goods_receipts SET qc_result=?, gr_status=? WHERE gr_id=?', [$action, $action === 'reject' ? 'rejected' : 'posted', $grId]);
     }
     inv360_audit($conn, 'QC', (string)$grId, strtoupper($action), $note, $userId);
     return ['ok' => true, 'message' => 'اقدام کنترل کیفیت ثبت شد.'];
 }
 
-function inv360_qc_quarantine($conn, int $partId, float $qty, ?int $warehouseId, ?int $locationId, int $userId): array
+function inv360_qc_quarantine($conn, int $itemId, float $qty, ?int $warehouseId, ?int $locationId, int $userId): array
 {
-    return inv360_qc_action($conn, 0, 'quarantine', $qty, $partId, $warehouseId, $locationId, 'quarantine', $userId);
+    return inv360_qc_action($conn, 0, 'quarantine', $qty, $itemId, $warehouseId, $locationId, 'quarantine', $userId);
 }
 
-function inv360_qc_release_quarantine($conn, int $partId, float $qty, ?int $warehouseId, ?int $locationId, int $userId): array
+function inv360_qc_release_quarantine($conn, int $itemId, float $qty, ?int $warehouseId, ?int $locationId, int $userId): array
 {
-    return inv360_qc_action($conn, 0, 'release', $qty, $partId, $warehouseId, $locationId, 'release', $userId);
+    return inv360_qc_action($conn, 0, 'release', $qty, $itemId, $warehouseId, $locationId, 'release', $userId);
 }
 
 function inv360_quarantine_list($conn): array
 {
     return inv360_rows(
         $conn,
-        'SELECT b.*,
-                (b.PhysicalQty - b.ReservedQty - b.QuarantineQty - b.BlockedQty) AS AvailableQty,
-                p.ItemName, p.WorkshopCode, p.TechnicalCode
-         FROM dbo.Inv360StockBalances b
-         LEFT JOIN dbo.Parts p ON p.PartID=b.PartID
-         WHERE b.QuarantineQty > 0
-         ORDER BY b.BalanceID DESC',
+        'SELECT b.*, i.item_name_fa AS ItemName, i.workshop_code AS WorkshopCode, i.technical_code AS TechnicalCode, b.quarantine_qty AS QuarantineQty
+         FROM dbo.inv360_stock_balances b LEFT JOIN dbo.inv360_items i ON i.item_id=b.item_id
+         WHERE b.quarantine_qty > 0 ORDER BY b.balance_id DESC',
         []
     );
 }

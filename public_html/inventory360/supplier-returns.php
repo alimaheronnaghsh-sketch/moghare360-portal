@@ -10,12 +10,12 @@ if(($_SERVER['REQUEST_METHOD']??'')==='POST'){
     inv360_add_document_line($conn,(int)$doc['document_id'],$partId,$qty);
     $p=inv360_post_document($conn,(int)$doc['document_id'],$uid);
     if(!empty($p['ok'])){
-      inv360_exec($conn,'INSERT INTO dbo.Inv360SupplierReturns (ReturnNo,SupplierID,PartID,Qty,ReasonText,ReturnStatus,CreatedByUserID) VALUES (?,?,?,?,?,N\'posted\',?)',['SR-'.gmdate('YmdHis'),((int)$_POST['supplier_id'])?:null,$partId,$qty,$reason,$uid]);
+      inv360_exec($conn,'INSERT INTO dbo.inv360_supplier_returns (return_no,supplier_id,item_id,qty,reason_text,return_status,created_by) VALUES (?,?,?,?,?,N\'posted\',?)',['SR-'.gmdate('YmdHis'),((int)$_POST['supplier_id'])?:null,$partId,$qty,$reason,$uid]);
       $ok=true; $msg='مرجوعی به تأمین‌کننده ثبت شد.';
     } else { $msg=(string)$p['message']; }
   }
 }
-$rows=inv360_rows($conn,'SELECT TOP 50 r.*, p.ItemName, s.SupplierName FROM dbo.Inv360SupplierReturns r LEFT JOIN dbo.Parts p ON p.PartID=r.PartID LEFT JOIN dbo.Inv360Suppliers s ON s.SupplierID=r.SupplierID ORDER BY r.SupplierReturnID DESC',[]);
+$rows=inv360_rows($conn,'SELECT TOP 50 r.supplier_return_id AS SupplierReturnID, r.qty AS Qty, p.item_name_fa AS ItemName, s.supplier_name AS SupplierName FROM dbo.inv360_supplier_returns r LEFT JOIN dbo.inv360_items p ON p.item_id=r.item_id LEFT JOIN dbo.inv360_suppliers s ON s.supplier_id=r.supplier_id ORDER BY r.supplier_return_id DESC',[]);
 inv360_layout_start('مرجوعی به تأمین‌کننده','supplier-returns.php'); inv360_flash_render($msg,$ok);
 ?>
 <form method="post" class="inv-form"><?= inv360_csrf_field() ?>

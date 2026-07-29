@@ -4,7 +4,6 @@ require_once __DIR__ . '/inv360-audit.php';
 
 function inv360_landed_cost_calculate($connOrData, $maybeData = null, int $userId = 0)
 {
-    // Support both calculate(array) and calculate($conn, array, $userId)
     if (is_array($connOrData) && $maybeData === null) {
         $d = $connOrData;
         $sum = 0.0;
@@ -14,10 +13,8 @@ function inv360_landed_cost_calculate($connOrData, $maybeData = null, int $userI
         ] as $k) {
             $sum += (float)($d[$k] ?? 0);
         }
-        $qty = max(0.0001, (float)($d['qty'] ?? 1));
-        return $sum / $qty;
+        return $sum / max(0.0001, (float)($d['qty'] ?? 1));
     }
-
     $conn = $connOrData;
     $d = is_array($maybeData) ? $maybeData : [];
     $unit = inv360_landed_cost_calculate($d);
@@ -26,15 +23,7 @@ function inv360_landed_cost_calculate($connOrData, $maybeData = null, int $userI
     if (empty($save['ok'])) {
         return $save;
     }
-    return [
-        'ok' => true,
-        'message' => $save['message'],
-        'result' => [
-            'total_landed' => $sum,
-            'unit_landed' => $unit,
-        ],
-        'id' => $save['id'] ?? null,
-    ];
+    return ['ok' => true, 'message' => $save['message'], 'result' => ['total_landed' => $sum, 'unit_landed' => $unit], 'id' => $save['id'] ?? null];
 }
 
 function inv360_landed_cost_save($conn, array $d, int $userId): array
@@ -43,9 +32,9 @@ function inv360_landed_cost_save($conn, array $d, int $userId): array
     $unit = inv360_landed_cost_calculate($d);
     $ok = inv360_exec(
         $conn,
-        'INSERT INTO dbo.Inv360LandedCosts
-            (RefNo, PartID, ValuationMethod, PurchasePrice, ForeignFreight, InsuranceAmount, BankFee, InspectionFee, CustomsFee, DutiesAmount,
-             WarehousingFee, ClearanceFee, InlandFreight, BrokerFee, OtherDirectCost, AllocationMethod, Qty, LandedUnitCost, CreatedByUserID)
+        'INSERT INTO dbo.inv360_landed_costs
+            (ref_no, item_id, valuation_method, purchase_price, foreign_freight, insurance_amount, bank_fee, inspection_fee, customs_fee, duties_amount,
+             warehousing_fee, clearance_fee, inland_freight, broker_fee, other_direct_cost, allocation_method, qty, landed_unit_cost, created_by)
          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
         [
             $ref, ((int)($d['part_id'] ?? 0)) ?: null, $d['valuation_method'] ?? 'weighted_average',
@@ -59,23 +48,21 @@ function inv360_landed_cost_save($conn, array $d, int $userId): array
     if ($ok === false) {
         return ['ok' => false, 'message' => 'ثبت بهای تمام‌شده ناموفق بود.'];
     }
-    $id = (int)(inv360_scalar($conn, 'SELECT TOP 1 LandedCostID FROM dbo.Inv360LandedCosts WHERE RefNo=?', [$ref]) ?? 0);
-    inv360_audit($conn, 'LANDED_COST', (string)$id, 'CREATED', $ref . ';unit=' . $unit, $userId);
+    $id = (int)(inv360_scalar($conn, 'SELECT TOP 1 landed_cost_id FROM dbo.inv360_landed_costs WHERE ref_no=?', [$ref]) ?? 0);
+    inv360_audit($conn, 'LANDED_COST', (string)$id, 'CREATED', $ref, $userId);
     return ['ok' => true, 'message' => 'بهای تمام‌شده محاسبه و ثبت شد.', 'landed_unit_cost' => $unit, 'id' => $id];
 }
 
 function inv360_landed_cost_list($conn): array
 {
-    $rows = inv360_rows(
+    return inv360_rows(
         $conn,
-        'SELECT TOP 50 lc.*, p.ItemName, lc.LandedUnitCost AS UnitLanded,
-                (lc.LandedUnitCost * lc.Qty) AS TotalLanded
-         FROM dbo.Inv360LandedCosts lc
-         LEFT JOIN dbo.Parts p ON p.PartID=lc.PartID
-         ORDER BY lc.LandedCostID DESC',
+        'SELECT lc.landed_cost_id AS LandedCostID, i.item_name_fa AS ItemName, lc.landed_unit_cost AS UnitLanded,
+                (lc.landed_unit_cost * lc.qty) AS TotalLanded
+         FROM dbo.inv360_landed_costs lc LEFT JOIN dbo.inv360_items i ON i.item_id=lc.item_id
+         ORDER BY lc.landed_cost_id DESC',
         []
     );
-    return $rows;
 }
 
 function inv360_costing_overview($conn, string $method = 'weighted_average'): array
@@ -85,24 +72,20 @@ function inv360_costing_overview($conn, string $method = 'weighted_average'): ar
         $method = 'weighted_average';
     }
     if ($method === 'last_purchase_price') {
-        $unitExpr = 'ISNULL(p.LastPurchasePrice,0)';
+        $unit = 'ISNULL(i.last_purchase_price,0)';
     } elseif ($method === 'standard_cost') {
-        $unitExpr = 'ISNULL(p.StandardCost,0)';
-    } elseif ($method === 'replacement_cost') {
-        $unitExpr = 'ISNULL(NULLIF(p.StandardCost,0), ISNULL(p.LastPurchasePrice,0))';
+        $unit = 'ISNULL(i.standard_cost,0)';
     } else {
-        $unitExpr = 'ISNULL(AVG(b.UnitCost), ISNULL(p.StandardCost, ISNULL(p.LastPurchasePrice,0)))';
+        $unit = 'ISNULL(AVG(b.unit_cost), ISNULL(i.standard_cost, ISNULL(i.last_purchase_price,0)))';
     }
     return inv360_rows(
         $conn,
-        "SELECT p.PartID, p.ItemName,
-                ISNULL(SUM(b.PhysicalQty),0) AS Qty,
-                $unitExpr AS UnitCost,
-                ISNULL(SUM(b.PhysicalQty),0) * ($unitExpr) AS Value
-         FROM dbo.Parts p
-         LEFT JOIN dbo.Inv360StockBalances b ON b.PartID=p.PartID
-         WHERE ISNULL(p.IsDeleted,0)=0
-         GROUP BY p.PartID, p.ItemName, p.LastPurchasePrice, p.StandardCost
+        "SELECT i.item_id AS PartID, i.item_name_fa AS ItemName, ISNULL(SUM(b.physical_qty),0) AS Qty,
+                $unit AS UnitCost, ISNULL(SUM(b.physical_qty),0)*($unit) AS Value
+         FROM dbo.inv360_items i
+         LEFT JOIN dbo.inv360_stock_balances b ON b.item_id=i.item_id
+         WHERE i.is_deleted=0
+         GROUP BY i.item_id, i.item_name_fa, i.last_purchase_price, i.standard_cost
          ORDER BY Value DESC",
         []
     );

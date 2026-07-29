@@ -7,20 +7,20 @@ if(($_SERVER['REQUEST_METHOD']??'')==='POST'){
   if($act==='reserve'){
     $doc=inv360_create_document($conn,['prefix'=>'RSV','doc_type'=>'reserve','source_warehouse_id'=>((int)$_POST['warehouse_id'])?:null,'source_location_id'=>((int)$_POST['location_id'])?:null,'reason'=>$_POST['purpose']??'manual'],$uid);
     if(!empty($doc['ok'])){ inv360_add_document_line($conn,(int)$doc['document_id'],(int)$_POST['part_id'],(float)$_POST['qty']); $p=inv360_post_document($conn,(int)$doc['document_id'],$uid); $ok=!empty($p['ok']); $msg=(string)$p['message'];
-      if($ok){ inv360_exec($conn,'INSERT INTO dbo.Inv360Reservations (PartID,WarehouseID,LocationID,Qty,PurposeCode,PurposeRef,ResStatus,CreatedByUserID) VALUES (?,?,?,?,?,?,N\'active\',?)',[(int)$_POST['part_id'],((int)$_POST['warehouse_id'])?:null,((int)$_POST['location_id'])?:null,(float)$_POST['qty'],$_POST['purpose']??'manual',$_POST['purpose_ref']??null,$uid]); }
+      if($ok){ inv360_exec($conn,'INSERT INTO dbo.inv360_reservations (item_id,warehouse_id,location_id,qty,purpose_code,purpose_ref,res_status,created_by) VALUES (?,?,?,?,?,?,N\'active\',?)',[(int)$_POST['part_id'],((int)$_POST['warehouse_id'])?:null,((int)$_POST['location_id'])?:null,(float)$_POST['qty'],$_POST['purpose']??'manual',$_POST['purpose_ref']??null,$uid]); }
     } else { $msg=(string)$doc['message']; }
   } elseif($act==='release'){
-    $rid=(int)$_POST['reservation_id']; $row=inv360_one($conn,'SELECT TOP 1 * FROM dbo.Inv360Reservations WHERE ReservationID=? AND ResStatus=N\'active\'',[$rid]);
+    $rid=(int)$_POST['reservation_id']; $row=inv360_one($conn,'SELECT TOP 1 reservation_id AS ReservationID, item_id AS PartID, warehouse_id AS WarehouseID, location_id AS LocationID, qty AS Qty, res_status AS ResStatus FROM dbo.inv360_reservations WHERE reservation_id=? AND res_status=N\'active\'',[$rid]);
     if($row){
       $doc=inv360_create_document($conn,['prefix'=>'REL','doc_type'=>'release_reserve','source_warehouse_id'=>$row['WarehouseID'],'source_location_id'=>$row['LocationID'],'reason'=>'release'],$uid);
       inv360_add_document_line($conn,(int)$doc['document_id'],(int)$row['PartID'],(float)$row['Qty']);
       $p=inv360_post_document($conn,(int)$doc['document_id'],$uid); $ok=!empty($p['ok']); $msg=(string)$p['message'];
-      if($ok) inv360_exec($conn,'UPDATE dbo.Inv360Reservations SET ResStatus=N\'released\', ReleasedAt=SYSUTCDATETIME() WHERE ReservationID=?',[$rid]);
+      if($ok) inv360_exec($conn,'UPDATE dbo.inv360_reservations SET res_status=N\'released\', released_at=SYSUTCDATETIME() WHERE reservation_id=?',[$rid]);
     } else { $msg='رزرو فعال یافت نشد.'; }
   }
 }
 $items=inv360_items_list($conn,100); $wh=inv360_warehouses_list($conn); $loc=inv360_locations_list($conn);
-$rows=inv360_rows($conn,'SELECT TOP 50 r.*, p.ItemName FROM dbo.Inv360Reservations r LEFT JOIN dbo.Parts p ON p.PartID=r.PartID ORDER BY r.ReservationID DESC',[]);
+$rows=inv360_rows($conn,'SELECT TOP 50 r.reservation_id AS ReservationID, r.qty AS Qty, r.res_status AS ResStatus, p.item_name_fa AS ItemName FROM dbo.inv360_reservations r LEFT JOIN dbo.inv360_items p ON p.item_id=r.item_id ORDER BY r.reservation_id DESC',[]);
 inv360_layout_start('رزروها','reservations.php'); inv360_flash_render($msg,$ok);
 ?>
 <form method="post" class="inv-form"><?= inv360_csrf_field() ?><input type="hidden" name="action" value="reserve">

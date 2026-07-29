@@ -5,7 +5,7 @@ if(($_SERVER['REQUEST_METHOD']??'')==='POST'){
   $res=inv360_qc_release_quarantine($conn,(int)$_POST['part_id'],(float)$_POST['qty'],((int)$_POST['warehouse_id'])?:null,((int)$_POST['location_id'])?:null,$uid);
   $ok=!empty($res['ok']); $msg=(string)$res['message'];
 }
-$rows=inv360_rows($conn,'SELECT b.*, p.ItemName, p.WorkshopCode, p.TechnicalCode FROM dbo.Inv360StockBalances b LEFT JOIN dbo.Parts p ON p.PartID=b.PartID WHERE b.QuarantineQty>0 ORDER BY b.BalanceID DESC',[]);
+$rows=inv360_quarantine_list($conn);
 $items=inv360_items_list($conn,100); $wh=inv360_warehouses_list($conn); $loc=inv360_locations_list($conn);
 inv360_layout_start('قرنطینه','quarantine.php'); inv360_flash_render($msg,$ok);
 ?>

@@ -2,11 +2,11 @@
 require_once __DIR__ . '/includes/inv360-bootstrap.php';
 inv360_require_login();
 $conn = inv360_db();
-$parts=(int)(inv360_scalar($conn,'SELECT COUNT(*) FROM dbo.Parts WHERE ISNULL(IsDeleted,0)=0',[])??0);
-$wh=(int)(inv360_scalar($conn,'SELECT COUNT(*) FROM dbo.Warehouses WHERE IsActive=1',[])??0);
-$openDocs=(int)(inv360_scalar($conn,"SELECT COUNT(*) FROM dbo.Inv360StockDocuments WHERE DocStatus IN (N'draft',N'submitted',N'approved')",[])??0);
-$qua=(float)(inv360_scalar($conn,'SELECT ISNULL(SUM(QuarantineQty),0) FROM dbo.Inv360StockBalances',[])??0);
-$low=(int)(inv360_scalar($conn,'SELECT COUNT(*) FROM dbo.Parts p WHERE ISNULL(p.IsDeleted,0)=0 AND ISNULL(p.ReorderPoint,0)>0 AND ISNULL(p.Quantity,0) <= ISNULL(p.ReorderPoint,0)',[])??0);
+$parts=(int)(inv360_scalar($conn,'SELECT COUNT(*) FROM dbo.inv360_items WHERE ISNULL(is_deleted,0)=0',[])??0);
+$wh=(int)(inv360_scalar($conn,'SELECT COUNT(*) FROM dbo.inv360_warehouses WHERE is_active=1',[])??0);
+$openDocs=(int)(inv360_scalar($conn,"SELECT COUNT(*) FROM dbo.inv360_stock_documents WHERE doc_status IN (N'draft',N'submitted',N'approved')",[])??0);
+$qua=(float)(inv360_scalar($conn,'SELECT ISNULL(SUM(quarantine_qty),0) FROM dbo.inv360_stock_balances',[])??0);
+$low=(int)(inv360_scalar($conn,'SELECT COUNT(*) FROM dbo.inv360_items p WHERE ISNULL(p.is_deleted,0)=0 AND ISNULL(p.reorder_point,0)>0 AND ISNULL(p.quantity,0) <= ISNULL(p.reorder_point,0)',[])??0);
 inv360_layout_start('داشبورد Inventory360','dashboard.php');
 ?>
 <div class="kpi-grid">

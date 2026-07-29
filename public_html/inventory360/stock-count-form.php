@@ -6,10 +6,10 @@ if(($_SERVER['REQUEST_METHOD']??'')==='POST'){
   $partId=(int)$_POST['part_id']; $counted=(float)$_POST['counted_qty']; $reason=trim((string)$_POST['reason']);
   if($reason===''){ $msg='دلیل انبارگردانی الزامی است.'; }
   else {
-    $system=(float)(inv360_scalar($conn,'SELECT ISNULL(SUM(PhysicalQty),0) FROM dbo.Inv360StockBalances WHERE PartID=?',[$partId])??0);
+    $system=(float)(inv360_scalar($conn,'SELECT ISNULL(SUM(physical_qty),0) FROM dbo.inv360_stock_balances WHERE item_id=?',[$partId])??0);
     $variance=$counted-$system;
-    inv360_exec($conn,'INSERT INTO dbo.InventoryCounts (PartID, CountedQuantity, CountedByUserID, CountedAt, WarehouseLocationID, WorkflowStatus, Notes, CreatedByUserID, CreatedAt, IsDeleted) VALUES (?,?,?,SYSUTCDATETIME(),?,N\'Approved\',?,?,SYSUTCDATETIME(),0)',
-      [$partId,$counted,$uid,((int)$_POST['location_id'])?:null,$reason.' | system='.$system.' | variance='.$variance,$uid]);
+    inv360_exec($conn,'INSERT INTO dbo.inv360_stock_counts (item_id, warehouse_id, location_id, system_qty, counted_qty, variance_qty, reason_text, count_status, created_by) VALUES (?,?,?,?,?,?,?,N\'approved\',?)',
+      [$partId,((int)$_POST['warehouse_id'])?:null,((int)$_POST['location_id'])?:null,$system,$counted,$variance,$reason.' | system='.$system.' | variance='.$variance,$uid]);
     if(abs($variance)>0.0001){
       $type=$variance>0?'adjustment_increase':'adjustment_decrease';
       $doc=inv360_create_document($conn,['prefix'=>'CNT','doc_type'=>$type,'target_warehouse_id'=>((int)$_POST['warehouse_id'])?:null,'target_location_id'=>((int)$_POST['location_id'])?:null,'source_warehouse_id'=>((int)$_POST['warehouse_id'])?:null,'source_location_id'=>((int)$_POST['location_id'])?:null,'reason'=>$reason],$uid);

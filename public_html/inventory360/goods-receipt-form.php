@@ -14,7 +14,7 @@ if(($_SERVER['REQUEST_METHOD']??'')==='POST'){
     $p=inv360_post_document($conn,(int)$doc['document_id'],$uid);
     if(!empty($p['ok'])){
       if($poId) inv360_po_receive_partial($conn,$poId,$partId,$qty,$uid);
-      inv360_exec($conn,'UPDATE dbo.Inv360GoodsReceipts SET GRStatus=N\'posted\' WHERE GoodsReceiptID=?',[$grId]);
+      inv360_exec($conn,'UPDATE dbo.inv360_goods_receipts SET gr_status=N\'posted\' WHERE gr_id=?',[$grId]);
       $ok=true; $msg='دریافت ثبت و موجودی افزایش یافت.';
     } else { $msg=(string)$p['message']; }
   } else { $msg=(string)$res['message']; }
