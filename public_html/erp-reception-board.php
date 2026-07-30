@@ -154,64 +154,30 @@ foreach ($cartable as $cbRow) {
 }
 $hubAudits = array_slice($audits, 0, 5);
 $receptionCards = [
-    [
-        'title' => 'درخواست‌های آنلاین',
-        'hint' => 'فهرست مسیر موجود آنلاین',
-        'href' => 'erp-reception-online-requests.php',
-        'badge' => 'مسیر موجود',
-        'badge2' => 'فقط خواندنی / تبدیل از مسیر موجود',
-    ],
-    [
-        'title' => 'پذیرش حضوری',
-        'hint' => 'ثبت حضوری از مسیر موجود',
-        'href' => 'erp-reception-walkin-create.php',
-        'badge' => 'پذیرش حضوری',
-        'badge2' => 'مسیر موجود',
-    ],
-    [
-        'title' => 'تکمیل پرونده پذیرش',
-        'hint' => 'ادامه تکمیل از فهرست موجود',
-        'href' => 'erp-reception-online-requests.php',
-        'badge' => 'تکمیل پرونده',
-        'badge2' => 'بدون مسیر موازی',
-    ],
-    [
-        'title' => 'پرونده‌های در جریان',
-        'hint' => 'کارت کار و پرونده‌های فعال',
-        'href' => 'erp-reception-jobcards.php',
-        'badge' => 'مسیر موجود',
-        'badge2' => '',
-    ],
-    [
-        'title' => 'قرارداد و مدارک',
-        'hint' => 'قراردادهای پذیرش موجود',
-        'href' => 'erp-intake-contracts.php',
-        'badge' => 'مسیر موجود',
-        'badge2' => '',
-    ],
-    [
-        'title' => 'کارتابل مشتری',
-        'hint' => 'پیگیری تماس و مدارک',
-        'href' => 'erp-crm-cartable.php',
-        'badge' => 'پیگیری مشتری',
-        'badge2' => '',
-    ],
+    ['title' => 'درخواست‌های آنلاین', 'href' => 'erp-reception-online-requests.php', 'count' => (int)$rx['online_new'], 'unit' => 'جدید'],
+    ['title' => 'پذیرش حضوری', 'href' => 'erp-reception-walkin-create.php', 'count' => (int)$rx['walkin_today'], 'unit' => 'امروز'],
+    ['title' => 'تکمیل پرونده پذیرش', 'href' => 'erp-reception-online-requests.php', 'count' => (int)$rx['online_pending'], 'unit' => 'در انتظار'],
+    ['title' => 'پرونده‌های در جریان', 'href' => 'erp-reception-jobcards.php', 'count' => (int)$rx['ready_jobcard'], 'unit' => 'آماده سالن'],
+    ['title' => 'قرارداد و مدارک', 'href' => 'erp-intake-contracts.php', 'count' => (int)$rx['contract_unsigned'], 'unit' => 'امضانشده'],
+    ['title' => 'کارتابل مشتری', 'href' => 'erp-crm-cartable.php', 'count' => (int)$kpi['cartable_open'], 'unit' => 'باز'],
 ];
-$hubExperience = [
-    ['پروفایل مشتری', 'erp-crm-customer-profile.php', 'ثبت و مشاهده پروفایل'],
-    ['پروفایل خودرو', 'erp-crm-vehicle-profile.php', 'خودرو و پلاک'],
-    ['تکمیل پرونده پذیرش', 'erp-crm-case.php', 'غنی‌سازی پرونده CRM'],
-    ['قرارداد و مدارک', 'erp-crm-documents.php', 'چک‌لیست مدارک CRM'],
-    ['کارتابل مشتری', 'erp-crm-cartable.php', 'پیگیری کارتابل'],
-    ['رضایت‌سنجی', 'erp-crm-satisfaction.php', 'تجربه مشتری'],
-    ['شکایت و اصلاحیه', 'erp-crm-complaints.php', 'شکایت باز'],
+$hubProfile = [
+    ['پروفایل مشتری', 'erp-crm-customer-profile.php', (int)$kpi['customers']],
+    ['پروفایل خودرو', 'erp-crm-vehicle-profile.php', (int)$kpi['vehicles']],
+    ['تکمیل پرونده پذیرش', 'erp-crm-case.php', (int)$kpi['cases_draft']],
+    ['قرارداد و مدارک', 'erp-crm-documents.php', (int)$kpi['docs_missing']],
+];
+$hubFollow = [
+    ['کارتابل مشتری', 'erp-crm-cartable.php', (int)$kpi['cartable_open']],
+    ['رضایت‌سنجی', 'erp-crm-satisfaction.php', (int)$kpi['surveys_done']],
+    ['شکایت و اصلاحیه', 'erp-crm-complaints.php', (int)$kpi['complaints_open']],
+    ['یادآوری سرویس‌های دوره‌ای', 'erp-crm-reminders.php', (int)$kpi['reminders_due']],
 ];
 $hubLoyalty = [
-    ['باشگاه مشتریان', 'erp-crm-club.php', 'سطح باشگاه'],
-    ['یادآوری سرویس‌های دوره‌ای', 'erp-crm-reminders.php', 'سررسید سرویس'],
-    ['بازگشت مشتری', 'erp-crm-return.php', 'پیگیری بازگشت'],
-    ['پروموشن', 'erp-crm-promotions.php', 'پیشنهاد فعال'],
-    ['کمپین پیامکی', 'erp-crm-sms-campaigns.php', 'پیش‌نویس و خروجی'],
+    ['باشگاه مشتریان', 'erp-crm-club.php', (int)$kpi['vip_club']],
+    ['بازگشت مشتری', 'erp-crm-return.php', (int)$kpi['returns_open']],
+    ['پروموشن', 'erp-crm-promotions.php', (int)$kpi['promos_active']],
+    ['کمپین پیامکی', 'erp-crm-sms-campaigns.php', (int)$kpi['sms_ready']],
 ];
 ?>
 <!DOCTYPE html>
@@ -229,12 +195,10 @@ $hubLoyalty = [
   <header class="c360-head">
     <div>
       <h1>مرکز ارتباط با مشتریان</h1>
-      <p>پروفایل، پذیرش، مدارک، کارتابل، رضایت، شکایت، باشگاه، یادآوری، بازگشت، پروموشن و کمپین</p>
+      <p>پذیرش، پرونده، پیگیری، رضایت، وفاداری و کمپین</p>
       <div class="c360-head-meta">
         <a class="c360-btn" href="personnel.html">بازگشت به صفحه پرسنل</a>
-        <a class="c360-btn" href="erp-reception-workbench.php">میز کار پذیرش</a>
-        <span class="c360-badge">پایگاه داده moghare360_ERP</span>
-        <span class="c360-badge">بدون مسیر موازی</span>
+        <span class="c360-badge">moghare360_ERP</span>
       </div>
     </div>
     <div>
@@ -261,9 +225,8 @@ $hubLoyalty = [
     <div class="c360-section-head">
       <div>
         <h2>پرونده‌های پذیرش</h2>
-        <p class="c360-section-sub">ورود و پیگیری مسیرهای موجود پذیرش آنلاین و حضوری</p>
+        <p class="c360-section-sub">ورود سریع به مسیرهای اصلی پذیرش</p>
       </div>
-      <span class="c360-badge">مسیر موجود</span>
     </div>
     <section class="c360-status-grid c360-rx-grid">
       <div class="c360-status-card"><span class="c360-light <?= $rx['online_new'] ? 'warn' : 'idle' ?>"></span><span>درخواست آنلاین جدید</span><strong><?= (int)$rx['online_new'] ?></strong></div>
@@ -279,12 +242,9 @@ $hubLoyalty = [
     <div class="c360-hub-grid">
       <?php foreach ($receptionCards as $card): ?>
         <a class="c360-hub-card c360-hub-card--rx" href="<?= crm360_h($card['href']) ?>">
-          <div class="c360-hub-badges">
-            <span class="c360-mini-badge"><?= crm360_h($card['badge']) ?></span>
-            <?php if ($card['badge2'] !== ''): ?><span class="c360-mini-badge is-mute"><?= crm360_h($card['badge2']) ?></span><?php endif; ?>
-          </div>
           <strong><?= crm360_h($card['title']) ?></strong>
-          <span><?= crm360_h($card['hint']) ?></span>
+          <em class="c360-hub-meta"><?= (int)$card['count'] ?> <?= crm360_h($card['unit']) ?></em>
+          <span class="c360-hub-go">ورود</span>
         </a>
       <?php endforeach; ?>
     </div>
@@ -295,49 +255,41 @@ $hubLoyalty = [
       <span class="c360-light ok"></span>
       <span>تکمیل پرونده‌ها</span>
       <strong><?= (int)$kpi['cases_complete'] ?> / <?= (int)$caseDenom ?></strong>
-      <em><?= $casePct ?>%</em>
     </div>
     <div class="c360-status-card">
       <span class="c360-light <?= $docPct >= 80 ? 'ok' : ($kpi['docs_total'] ? 'warn' : 'idle') ?>"></span>
       <span>مدارک کامل</span>
       <strong><?= (int)$kpi['docs_ok'] ?> / <?= (int)$kpi['docs_total'] ?></strong>
-      <em><?= $docPct ?>%</em>
     </div>
     <div class="c360-status-card">
       <span class="c360-light <?= $kpi['survey_avg'] >= 4 ? 'ok' : ($kpi['survey_avg'] > 0 ? 'warn' : 'idle') ?>"></span>
       <span>رضایت مشتری</span>
-      <strong><?= number_format($kpi['survey_avg'], 1) ?> / ۵</strong>
-      <em><?= (int)$kpi['surveys_done'] ?> نظر</em>
+      <strong><?= number_format($kpi['survey_avg'], 1) ?></strong>
     </div>
     <div class="c360-status-card <?= $kpi['complaints_open'] > 0 ? 'is-alert' : '' ?>">
       <span class="c360-light <?= $kpi['complaints_critical'] > 0 ? 'danger' : ($kpi['complaints_open'] > 0 ? 'warn' : 'ok') ?>"></span>
       <span>شکایات باز</span>
       <strong><?= (int)$kpi['complaints_open'] ?></strong>
-      <em>بحرانی: <?= (int)$kpi['complaints_critical'] ?></em>
     </div>
     <div class="c360-status-card">
       <span class="c360-light <?= $kpi['reminders_due'] > 0 ? 'warn' : 'ok' ?>"></span>
       <span>یادآوری‌های سررسید</span>
       <strong><?= (int)$kpi['reminders_due'] ?></strong>
-      <em>سررسید / پیگیری</em>
     </div>
     <div class="c360-status-card">
       <span class="c360-light <?= $kpi['returns_open'] > 0 ? 'warn' : 'idle' ?>"></span>
       <span>بازگشت مشتری</span>
       <strong><?= (int)$kpi['returns_progress'] ?> / <?= (int)$kpi['returns_open'] ?></strong>
-      <em><?= $returnPct ?>%</em>
     </div>
     <div class="c360-status-card">
       <span class="c360-light <?= $kpi['sms_ready'] > 0 ? 'ok' : 'idle' ?>"></span>
-      <span>کمپین آماده خروجی</span>
+      <span>کمپین آماده</span>
       <strong><?= (int)$kpi['sms_ready'] ?></strong>
-      <em>پیش‌نویس: <?= (int)$kpi['sms_draft'] ?></em>
     </div>
     <div class="c360-status-card">
       <span class="c360-light <?= $kpi['vip_club'] > 0 ? 'ok' : 'idle' ?>"></span>
-      <span>مشتریان VIP / باشگاه</span>
+      <span>مشتریان VIP</span>
       <strong><?= (int)$kpi['vip_club'] ?></strong>
-      <em>طلایی / پلاتین / VIP</em>
     </div>
   </section>
 
@@ -349,34 +301,39 @@ $hubLoyalty = [
   </div>
 
   <section class="c360-panel c360-hub-section">
-    <div class="c360-section-head">
-      <div>
-        <h2>ارتباط و تجربه مشتری</h2>
-        <p class="c360-section-sub">پروفایل، غنی‌سازی پرونده، کارتابل، رضایت و شکایت</p>
-      </div>
-    </div>
+    <div class="c360-section-head"><div><h2>پروفایل و پرونده</h2></div></div>
     <div class="c360-hub-grid">
-      <?php foreach ($hubExperience as [$title, $href, $hint]): ?>
+      <?php foreach ($hubProfile as [$title, $href, $count]): ?>
         <a class="c360-hub-card" href="<?= crm360_h($href) ?>">
           <strong><?= crm360_h($title) ?></strong>
-          <span><?= crm360_h($hint) ?></span>
+          <em class="c360-hub-meta"><?= (int)$count ?></em>
+          <span class="c360-hub-go">ورود</span>
         </a>
       <?php endforeach; ?>
     </div>
   </section>
 
   <section class="c360-panel c360-hub-section">
-    <div class="c360-section-head">
-      <div>
-        <h2>وفاداری، بازگشت و کمپین</h2>
-        <p class="c360-section-sub">باشگاه، یادآوری، بازگشت، پروموشن و پیامک</p>
-      </div>
-    </div>
+    <div class="c360-section-head"><div><h2>تجربه و پیگیری</h2></div></div>
     <div class="c360-hub-grid">
-      <?php foreach ($hubLoyalty as [$title, $href, $hint]): ?>
+      <?php foreach ($hubFollow as [$title, $href, $count]): ?>
         <a class="c360-hub-card" href="<?= crm360_h($href) ?>">
           <strong><?= crm360_h($title) ?></strong>
-          <span><?= crm360_h($hint) ?></span>
+          <em class="c360-hub-meta"><?= (int)$count ?></em>
+          <span class="c360-hub-go">ورود</span>
+        </a>
+      <?php endforeach; ?>
+    </div>
+  </section>
+
+  <section class="c360-panel c360-hub-section">
+    <div class="c360-section-head"><div><h2>وفاداری و کمپین</h2></div></div>
+    <div class="c360-hub-grid">
+      <?php foreach ($hubLoyalty as [$title, $href, $count]): ?>
+        <a class="c360-hub-card" href="<?= crm360_h($href) ?>">
+          <strong><?= crm360_h($title) ?></strong>
+          <em class="c360-hub-meta"><?= (int)$count ?></em>
+          <span class="c360-hub-go">ورود</span>
         </a>
       <?php endforeach; ?>
     </div>
@@ -429,10 +386,7 @@ $hubLoyalty = [
 
   <section class="c360-panel">
     <div class="c360-section-head">
-      <div>
-        <h2>درخواست‌های آنلاین</h2>
-        <p class="c360-section-sub">نمای فشرده از مسیر موجود — تبدیل فقط از مسیر پذیرش</p>
-      </div>
+      <div><h2>درخواست‌های آنلاین</h2></div>
       <a class="c360-btn" href="erp-reception-online-requests.php">مشاهده همه</a>
     </div>
     <?php if (!$onlineRequests): ?>

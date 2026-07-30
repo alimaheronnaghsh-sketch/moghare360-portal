@@ -103,23 +103,22 @@ body.c360-body{
 .c360-light.idle{background:rgba(143,179,163,.45)}
 .c360-hub-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:.7rem}
 .c360-hub-card{
-  display:flex;flex-direction:column;gap:.35rem;padding:.95rem 1rem;border-radius:14px;text-decoration:none;
+  display:flex;flex-direction:column;gap:.45rem;padding:1rem 1.05rem;border-radius:14px;text-decoration:none;
   color:var(--c360-text);background:linear-gradient(160deg,rgba(62,207,142,.14),var(--c360-panel2));
-  border:1px solid var(--c360-border);min-height:88px;transition:border-color .15s ease,transform .15s ease
+  border:1px solid var(--c360-border);min-height:104px;transition:border-color .15s ease,transform .15s ease
 }
 .c360-hub-card:hover{border-color:var(--c360-primary);transform:translateY(-1px);color:#fff}
-.c360-hub-card strong{font-size:.92rem}
-.c360-hub-card span{font-size:.72rem;color:var(--c360-muted)}
+.c360-hub-card strong{font-size:.95rem;line-height:1.35}
+.c360-hub-meta{margin:0;font-style:normal;font-size:.78rem;color:var(--c360-muted);font-variant-numeric:tabular-nums}
+.c360-hub-go{
+  margin-top:auto;align-self:flex-start;padding:.28rem .7rem;border-radius:8px;font-size:.75rem;font-weight:600;
+  color:#0b1612;background:linear-gradient(145deg,var(--c360-primary),#2a9e6a)
+}
+.c360-hub-card:hover .c360-hub-go{filter:brightness(1.05)}
 .c360-hub-section{margin-bottom:1.15rem}
 .c360-section-head{display:flex;flex-wrap:wrap;align-items:flex-start;justify-content:space-between;gap:.75rem;margin-bottom:.85rem}
 .c360-section-head h2{margin:0;font-size:1.05rem;color:var(--c360-primary)}
 .c360-section-sub{margin:.3rem 0 0;font-size:.8rem;color:var(--c360-muted)}
 .c360-rx-grid{margin-bottom:.95rem}
-.c360-hub-card--rx{min-height:108px;background:linear-gradient(165deg,rgba(62,207,142,.2),var(--c360-panel))}
-.c360-hub-badges{display:flex;flex-wrap:wrap;gap:.3rem;margin-bottom:.25rem}
-.c360-mini-badge{
-  display:inline-flex;align-items:center;padding:.15rem .45rem;border-radius:999px;font-size:.65rem;
-  border:1px solid rgba(62,207,142,.35);color:var(--c360-primary);background:rgba(62,207,142,.08)
-}
-.c360-mini-badge.is-mute{color:var(--c360-muted);border-color:var(--c360-border);background:rgba(255,255,255,.03)}
+.c360-hub-card--rx{background:linear-gradient(165deg,rgba(62,207,142,.22),var(--c360-panel))}
 .c360-hub-section .c360-panel h2,.c360-panel > .c360-section-head h2{margin:0}
