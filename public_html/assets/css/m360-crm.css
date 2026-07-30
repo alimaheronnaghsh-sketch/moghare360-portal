@@ -225,3 +225,38 @@ body.c360-body{font-size:clamp(12px,.8vw,15px)}
 .crm-picker-empty{margin:.15rem 0 0;font-size:.8rem}
 .crm-picker-empty a{color:var(--c360-primary)}
 
+/* Canonical CRM ops surface (?tab=customers) */
+.crm-canonical-ops{padding-top:.85rem}
+.crm-action-bar{
+  display:flex;flex-wrap:wrap;gap:.65rem;align-items:flex-end;justify-content:space-between;
+  margin-bottom:.75rem;padding-bottom:.75rem;border-bottom:1px solid var(--c360-border)
+}
+.crm-unified-search{display:flex;flex-wrap:wrap;gap:.45rem;align-items:flex-end;flex:1 1 320px}
+.crm-unified-search-label{display:grid;gap:.25rem;font-size:.78rem;color:var(--c360-muted);flex:1 1 220px}
+.crm-unified-search-label input{
+  width:100%;padding:.5rem .65rem;border-radius:8px;border:1px solid var(--c360-border);
+  background:#0e1c17;color:var(--c360-text);font:inherit;font-size:.88rem
+}
+.crm-primary-actions{display:flex;flex-wrap:wrap;gap:.45rem;align-items:center}
+.crm-reception-wrap{position:relative}
+.crm-reception-menu{
+  position:absolute;top:calc(100% + .35rem);right:0;z-index:20;min-width:11rem;
+  display:grid;gap:.25rem;padding:.4rem;border-radius:10px;border:1px solid var(--c360-border);
+  background:var(--c360-panel2);box-shadow:0 10px 28px rgba(0,0,0,.35)
+}
+.crm-reception-menu[hidden]{display:none}
+.crm-reception-menu a{
+  display:block;padding:.45rem .65rem;border-radius:8px;text-decoration:none;color:var(--c360-text);font-size:.82rem
+}
+.crm-reception-menu a:hover{background:rgba(62,207,142,.14);color:#fff}
+.crm-result-meta{margin:.15rem 0 .45rem;font-size:.8rem;color:var(--c360-muted)}
+.crm-page-size{margin:0 0 .65rem}
+.crm-page-size label{display:inline-flex;gap:.4rem;align-items:center;font-size:.78rem;color:var(--c360-muted)}
+.crm-page-size select{
+  padding:.35rem .5rem;border-radius:8px;border:1px solid var(--c360-border);
+  background:#0e1c17;color:var(--c360-text);font:inherit
+}
+.crm-unified-table{font-size:.78rem}
+.crm-unified-table th,.crm-unified-table td{white-space:nowrap}
+.crm-canonical-ops .c360-table-wrap{max-height:min(58vh,520px)}
+

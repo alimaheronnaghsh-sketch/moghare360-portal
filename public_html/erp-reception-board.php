@@ -27,6 +27,12 @@ if ($panel !== '' && !in_array($panel, $validPanels, true)) {
     $panel = '';
 }
 
+// Canonical create panels redirect to ERP customer/vehicle engine (before any HTML).
+if ($tab === 'customers' && in_array($panel, ['create_customer', 'create_vehicle'], true)) {
+    header('Location: erp-customer-vehicle-create.php');
+    exit;
+}
+
 $flash = $_SESSION['crm360_flash'] ?? null;
 unset($_SESSION['crm360_flash']);
 
@@ -67,12 +73,12 @@ $customers = $vehicles = $cases = $documents = $cartable = $surveys = $complaint
 $vipCandidates = $vipRules = $vipPending = $vipCustomers = $importBatches = $importRows = [];
 
 if ($dbOk && $conn) {
-    $kpi['customers'] = (int)(crm360_scalar($conn, 'SELECT COUNT(*) FROM dbo.crm360_customer_profiles') ?? 0);
-    $kpi['vehicles'] = (int)(crm360_scalar($conn, 'SELECT COUNT(*) FROM dbo.crm360_vehicle_profiles') ?? 0);
-    $kpi['cases'] = (int)(crm360_scalar($conn, 'SELECT COUNT(*) FROM dbo.crm360_reception_cases') ?? 0);
-    $kpi['cases_draft'] = (int)(crm360_scalar($conn, "SELECT COUNT(*) FROM dbo.crm360_reception_cases WHERE case_status IN ('DRAFT','PROFILE_INCOMPLETE','IN_PROGRESS')") ?? 0);
-    $kpi['cases_open'] = (int)(crm360_scalar($conn, "SELECT COUNT(*) FROM dbo.crm360_reception_cases WHERE case_status NOT IN ('CLOSED','CANCELLED','DELIVERED')") ?? 0);
-    $kpi['cases_complete'] = (int)(crm360_scalar($conn, "SELECT COUNT(*) FROM dbo.crm360_reception_cases WHERE profile_completion_percent >= 100 OR case_status IN ('READY_FOR_CONTRACT','CONTRACT_PENDING','CONTRACT_SIGNED','IN_SERVICE','READY_FOR_DELIVERY','DELIVERED','CLOSED')") ?? 0);
+    $kpi['customers'] = (int)(crm360_scalar($conn, "SELECT COUNT(*) FROM dbo.erp_customers WHERE lifecycle_state=N'ACTIVE'") ?? 0);
+    $kpi['vehicles'] = (int)(crm360_scalar($conn, 'SELECT COUNT(*) FROM dbo.erp_vehicles') ?? 0);
+    $kpi['cases'] = (int)(crm360_scalar($conn, 'SELECT COUNT(*) FROM dbo.erp_jobcards') ?? 0);
+    $kpi['cases_draft'] = (int)(crm360_scalar($conn, "SELECT COUNT(*) FROM dbo.erp_jobcards WHERE jobcard_status IN (N'RECEIVED')") ?? 0);
+    $kpi['cases_open'] = (int)(crm360_scalar($conn, "SELECT COUNT(*) FROM dbo.erp_jobcards WHERE jobcard_status NOT IN (N'CLOSED',N'REJECTED',N'CANCELLED')") ?? 0);
+    $kpi['cases_complete'] = (int)(crm360_scalar($conn, "SELECT COUNT(*) FROM dbo.erp_jobcards WHERE jobcard_status IN (N'CLOSED',N'DELIVERY_READY')") ?? 0);
     $kpi['docs_total'] = (int)(crm360_scalar($conn, 'SELECT COUNT(*) FROM dbo.crm360_case_documents') ?? 0);
     $kpi['docs_ok'] = (int)(crm360_scalar($conn, "SELECT COUNT(*) FROM dbo.crm360_case_documents WHERE document_status IN ('UPLOADED','VERIFIED','SIGNED')") ?? 0);
     $kpi['docs_missing'] = (int)(crm360_scalar($conn, "SELECT COUNT(*) FROM dbo.crm360_case_documents WHERE document_status='MISSING'") ?? 0);
@@ -89,7 +95,7 @@ if ($dbOk && $conn) {
     $kpi['sms_draft'] = (int)(crm360_scalar($conn, "SELECT COUNT(*) FROM dbo.crm360_sms_campaigns WHERE campaign_status='DRAFT'") ?? 0);
     $kpi['sms_ready'] = (int)(crm360_scalar($conn, "SELECT COUNT(*) FROM dbo.crm360_sms_campaigns WHERE campaign_status IN ('READY_FOR_REVIEW','APPROVED_FOR_EXPORT','EXPORTED')") ?? 0);
     $kpi['vip_club'] = (int)(crm360_scalar($conn, "SELECT COUNT(*) FROM dbo.crm360_customer_club WHERE tier_code IN ('GOLD','PLATINUM','VIP')") ?? 0);
-    $kpi['avg_completion'] = (int)(crm360_scalar($conn, 'SELECT ISNULL(AVG(profile_completion_percent),0) FROM dbo.crm360_reception_cases') ?? 0);
+    $kpi['avg_completion'] = 0;
     $onlineRequests = crm360_online_requests($conn, 30);
     $kpi['online_requests'] = count($onlineRequests);
 
@@ -100,58 +106,49 @@ if ($dbOk && $conn) {
         $rx['ready_jobcard'] = (int)(crm360_scalar($conn, "SELECT COUNT(*) FROM dbo.erp_customer_online_requests WHERE request_status IN (N'ACCEPTED',N'UNDER_REVIEW') AND (converted_jobcard_id IS NULL OR converted_jobcard_id=0)") ?? 0);
         $rx['closed_done'] = (int)(crm360_scalar($conn, "SELECT COUNT(*) FROM dbo.erp_customer_online_requests WHERE request_status IN (N'CONVERTED_TO_JOBCARD',N'REJECTED')") ?? 0);
     }
-    $rx['case_incomplete'] = (int)(crm360_scalar($conn, "SELECT COUNT(*) FROM dbo.crm360_reception_cases WHERE case_status=N'PROFILE_INCOMPLETE' OR profile_completion_percent < 100") ?? 0);
-    $rx['ready_contract'] = (int)(crm360_scalar($conn, "SELECT COUNT(*) FROM dbo.crm360_reception_cases WHERE case_status IN (N'READY_FOR_CONTRACT',N'CONTRACT_PENDING')") ?? 0);
-    $rx['cases_today'] = (int)(crm360_scalar($conn, "SELECT COUNT(*) FROM dbo.crm360_reception_cases WHERE CONVERT(date, created_at)=CONVERT(date, SYSUTCDATETIME())") ?? 0);
-    $rx['crm_contract_signed'] = (int)(crm360_scalar($conn, "SELECT COUNT(*) FROM dbo.crm360_reception_cases WHERE case_status=N'CONTRACT_SIGNED' OR contract_status=N'SIGNED'") ?? 0);
+    $rx['case_incomplete'] = (int)(crm360_scalar($conn, "SELECT COUNT(*) FROM dbo.erp_jobcards WHERE jobcard_status=N'RECEIVED'") ?? 0);
+    $rx['ready_contract'] = (int)(crm360_scalar($conn, "SELECT COUNT(*) FROM dbo.erp_intake_contracts WHERE contract_status IN (N'DRAFT',N'SENT',N'VIEWED')") ?? 0);
+    $rx['cases_today'] = (int)(crm360_scalar($conn, "SELECT COUNT(*) FROM dbo.erp_jobcards WHERE CONVERT(date, created_at)=CONVERT(date, SYSUTCDATETIME())") ?? 0);
+    $rx['crm_contract_signed'] = 0;
     if (crm360_table_exists($conn, 'erp_intake_contracts')) {
         $rx['contract_unsigned'] = (int)(crm360_scalar($conn, "SELECT COUNT(*) FROM dbo.erp_intake_contracts WHERE contract_status IN (N'DRAFT',N'SENT',N'VIEWED')") ?? 0);
         $rx['contract_signed'] = (int)(crm360_scalar($conn, "SELECT COUNT(*) FROM dbo.erp_intake_contracts WHERE contract_status IN (N'SIGNED',N'OVERRIDDEN')") ?? 0);
     }
-    if ($rx['contract_signed'] === 0) {
-        $rx['contract_signed'] = (int)$rx['crm_contract_signed'];
-    }
     if ($rx['closed_done'] === 0) {
-        $rx['closed_done'] = (int)(crm360_scalar($conn, "SELECT COUNT(*) FROM dbo.crm360_reception_cases WHERE case_status IN (N'DELIVERED',N'CLOSED')") ?? 0);
+        $rx['closed_done'] = (int)(crm360_scalar($conn, "SELECT COUNT(*) FROM dbo.erp_jobcards WHERE jobcard_status IN (N'CLOSED',N'DELIVERY_READY')") ?? 0);
     }
     $walkinRequests = [];
     if (crm360_table_exists($conn, 'erp_customer_online_requests')) {
         $walkinRequests = crm360_rows($conn, "SELECT TOP 100 online_request_id, mobile, vehicle_plate, request_status, created_at FROM dbo.erp_customer_online_requests WHERE request_payload_json LIKE N'%STAFF_ASSISTED_WALKIN%' ORDER BY online_request_id DESC");
     }
 
-    $customers = crm360_rows($conn, 'SELECT TOP 100 * FROM dbo.crm360_customer_profiles ORDER BY customer_profile_id DESC');
-    $vehicles = crm360_rows($conn, 'SELECT TOP 100 v.*, c.full_name FROM dbo.crm360_vehicle_profiles v INNER JOIN dbo.crm360_customer_profiles c ON c.customer_profile_id=v.customer_profile_id ORDER BY v.vehicle_profile_id DESC');
-    $cases = crm360_rows($conn, 'SELECT TOP 100 c.*, cu.full_name, v.brand, v.model FROM dbo.crm360_reception_cases c LEFT JOIN dbo.crm360_customer_profiles cu ON cu.customer_profile_id=c.customer_profile_id LEFT JOIN dbo.crm360_vehicle_profiles v ON v.vehicle_profile_id=c.vehicle_profile_id ORDER BY c.case_id DESC');
-    $documents = crm360_rows($conn, 'SELECT TOP 100 d.*, c.case_code FROM dbo.crm360_case_documents d LEFT JOIN dbo.crm360_reception_cases c ON c.case_id=d.case_id ORDER BY d.document_id DESC');
-    $cartable = crm360_rows($conn, 'SELECT TOP 100 cb.*, cu.full_name FROM dbo.crm360_customer_cartable cb INNER JOIN dbo.crm360_customer_profiles cu ON cu.customer_profile_id=cb.customer_profile_id ORDER BY cb.cartable_id DESC');
-    $surveys = crm360_rows($conn, 'SELECT TOP 100 s.*, cu.full_name FROM dbo.crm360_satisfaction_surveys s INNER JOIN dbo.crm360_customer_profiles cu ON cu.customer_profile_id=s.customer_profile_id ORDER BY s.survey_id DESC');
-    $complaints = crm360_rows($conn, 'SELECT TOP 100 cp.*, cu.full_name FROM dbo.crm360_complaints cp INNER JOIN dbo.crm360_customer_profiles cu ON cu.customer_profile_id=cp.customer_profile_id ORDER BY cp.complaint_id DESC');
-    $clubs = crm360_rows($conn, 'SELECT cl.*, cu.full_name, cu.mobile FROM dbo.crm360_customer_club cl INNER JOIN dbo.crm360_customer_profiles cu ON cu.customer_profile_id=cl.customer_profile_id ORDER BY cl.club_id DESC');
-    $reminders = crm360_rows($conn, 'SELECT TOP 100 r.*, cu.full_name, v.brand, v.model FROM dbo.crm360_service_reminders r INNER JOIN dbo.crm360_customer_profiles cu ON cu.customer_profile_id=r.customer_profile_id INNER JOIN dbo.crm360_vehicle_profiles v ON v.vehicle_profile_id=r.vehicle_profile_id ORDER BY r.reminder_id DESC');
-    $returns = crm360_rows($conn, 'SELECT TOP 100 ret.*, cu.full_name FROM dbo.crm360_return_pipeline ret INNER JOIN dbo.crm360_customer_profiles cu ON cu.customer_profile_id=ret.customer_profile_id ORDER BY ret.return_id DESC');
+    // Canonical CRM masters are erp_*; do not load crm360 customer/vehicle/case masters.
+    $customers = [];
+    $vehicles = [];
+    $cases = crm360_rows($conn, 'SELECT TOP 100 j.jobcard_id AS case_id, j.jobcard_number AS case_code, j.jobcard_status AS case_status, j.updated_at, j.created_at, c.full_name, v.brand, v.model, N\'JOBCARD\' AS case_type, 0 AS profile_completion_percent FROM dbo.erp_jobcards j LEFT JOIN dbo.erp_customers c ON c.customer_id=j.customer_id LEFT JOIN dbo.erp_vehicles v ON v.vehicle_id=j.vehicle_id ORDER BY j.jobcard_id DESC');
+    $documents = crm360_rows($conn, 'SELECT TOP 100 d.*, CAST(NULL AS NVARCHAR(40)) AS case_code FROM dbo.crm360_case_documents d ORDER BY d.document_id DESC');
+    $cartable = crm360_rows($conn, "SELECT TOP 100 cb.*, N'' AS full_name FROM dbo.crm360_customer_cartable cb ORDER BY cb.cartable_id DESC");
+    $surveys = crm360_rows($conn, "SELECT TOP 100 s.*, N'' AS full_name FROM dbo.crm360_satisfaction_surveys s ORDER BY s.survey_id DESC");
+    $complaints = crm360_rows($conn, "SELECT TOP 100 cp.*, N'' AS full_name FROM dbo.crm360_complaints cp ORDER BY cp.complaint_id DESC");
+    $clubs = crm360_rows($conn, "SELECT cl.*, N'' AS full_name, N'' AS mobile FROM dbo.crm360_customer_club cl ORDER BY cl.club_id DESC");
+    $reminders = crm360_rows($conn, "SELECT TOP 100 r.*, N'' AS full_name, N'' AS brand, N'' AS model FROM dbo.crm360_service_reminders r ORDER BY r.reminder_id DESC");
+    $returns = crm360_rows($conn, "SELECT TOP 100 ret.*, N'' AS full_name FROM dbo.crm360_return_pipeline ret ORDER BY ret.return_id DESC");
     $promotions = crm360_rows($conn, 'SELECT TOP 100 * FROM dbo.crm360_promotions ORDER BY promotion_id DESC');
-    $assignments = crm360_rows($conn, 'SELECT TOP 100 pa.*, p.title, cu.full_name FROM dbo.crm360_promotion_assignments pa INNER JOIN dbo.crm360_promotions p ON p.promotion_id=pa.promotion_id INNER JOIN dbo.crm360_customer_profiles cu ON cu.customer_profile_id=pa.customer_profile_id ORDER BY pa.assignment_id DESC');
+    $assignments = crm360_rows($conn, "SELECT TOP 100 pa.*, p.title, N'' AS full_name FROM dbo.crm360_promotion_assignments pa INNER JOIN dbo.crm360_promotions p ON p.promotion_id=pa.promotion_id ORDER BY pa.assignment_id DESC");
     $campaigns = crm360_rows($conn, 'SELECT TOP 100 * FROM dbo.crm360_sms_campaigns ORDER BY campaign_id DESC');
     $recipients = crm360_rows($conn, 'SELECT TOP 100 r.*, c.title AS campaign_title FROM dbo.crm360_sms_campaign_recipients r INNER JOIN dbo.crm360_sms_campaigns c ON c.campaign_id=r.campaign_id ORDER BY r.recipient_id DESC');
     $audits = crm360_rows($conn, 'SELECT TOP 100 * FROM dbo.crm360_audit_log ORDER BY audit_id DESC');
 
     $vipRules = crm360_active_vip_rules($conn);
-    if (crm360_table_exists($conn, 'crm360_customer_profiles')) {
-        $vipCandidates = crm360_vip_candidates($conn, 50);
-    }
+    $vipCandidates = [];
     if (crm360_table_exists($conn, 'crm360_vip_requests')) {
         $vipPending = crm360_rows(
             $conn,
-            "SELECT TOP 100 r.*, c.full_name, c.mobile FROM dbo.crm360_vip_requests r
-             INNER JOIN dbo.crm360_customer_profiles c ON c.customer_profile_id=r.customer_profile_id
+            "SELECT TOP 100 r.*, N'' AS full_name, N'' AS mobile FROM dbo.crm360_vip_requests r
              WHERE request_status=N'SUBMITTED' ORDER BY r.vip_request_id DESC"
         );
     }
-    $vipCustomers = crm360_rows(
-        $conn,
-        "SELECT TOP 100 * FROM dbo.crm360_customer_profiles
-         WHERE vip_level IN (N'VIP',N'GOLD',N'PLATINUM') ORDER BY customer_profile_id DESC"
-    );
+    $vipCustomers = [];
     if (crm360_table_exists($conn, 'crm360_import_batches')) {
         $importBatches = crm360_rows($conn, 'SELECT TOP 100 * FROM dbo.crm360_import_batches ORDER BY import_batch_id DESC');
     }
@@ -192,10 +189,7 @@ $casesPageInfo = m360_rui_paginate($casesSorted, $casesPage, 10);
 $hubCases = $casesPageInfo['rows'];
 
 $receptionCards = [
-    ['title' => 'درخواست‌های آنلاین', 'href' => 'erp-reception-online-requests.php', 'count' => (int)$rx['online_new'], 'unit' => 'جدید'],
-    ['title' => 'پذیرش حضوری', 'href' => 'erp-reception-walkin-create.php', 'count' => (int)$rx['walkin_today'], 'unit' => 'امروز'],
-    ['title' => 'جستجوی مشتری پذیرش', 'href' => 'erp-reception-walkin-create.php#m360_section_customer_search', 'count' => null, 'unit' => ''],
-    ['title' => 'جستجوی مشتری / خودرو', 'href' => 'erp-customer-vehicle-workbench.php?role=reception', 'count' => null, 'unit' => ''],
+    ['title' => 'پذیرش', 'href' => '?tab=customers#crm-reception-menu', 'count' => null, 'unit' => 'حضوری / آنلاین'],
     ['title' => 'تکمیل پرونده پذیرش', 'href' => 'erp-reception-online-requests.php', 'count' => (int)$rx['online_pending'], 'unit' => 'در انتظار'],
     ['title' => 'پرونده‌های در جریان', 'href' => 'erp-reception-jobcards.php', 'count' => (int)$rx['ready_jobcard'], 'unit' => 'آماده سالن'],
     ['title' => 'قرارداد و مدارک', 'href' => 'erp-intake-contracts.php', 'count' => (int)$rx['contract_unsigned'], 'unit' => 'امضانشده'],
@@ -203,13 +197,11 @@ $receptionCards = [
 ];
 
 $dashboardQuickActions = [
-    ['title' => 'افزودن مشتری جدید', 'href' => '?tab=customers&panel=create_customer', 'meta' => 'ثبت پروفایل'],
-    ['title' => 'افزودن خودرو جدید', 'href' => '?tab=customers&panel=create_vehicle', 'meta' => 'ثبت خودرو'],
-    ['title' => 'ایجاد پرونده پذیرش', 'href' => '?tab=reception&panel=cases', 'meta' => 'پرونده جدید'],
+    ['title' => 'جست‌وجو و پذیرش مشتری', 'href' => '?tab=customers', 'meta' => (int)$kpi['customers'] . ' مشتری'],
+    ['title' => 'پذیرش', 'href' => '?tab=customers#crm-reception-menu', 'meta' => 'حضوری / آنلاین'],
+    ['title' => 'افزودن مشتری و خودرو', 'href' => 'erp-customer-vehicle-create.php', 'meta' => 'ثبت ERP'],
     ['title' => 'ورود اطلاعات قدیمی', 'href' => '?tab=legacy', 'meta' => 'Legacy'],
     ['title' => 'VIP و باشگاه', 'href' => '?tab=vip', 'meta' => (int)count($vipPending) . ' در انتظار'],
-    ['title' => 'درخواست‌های آنلاین', 'href' => 'erp-reception-online-requests.php', 'meta' => (int)$rx['online_new'] . ' جدید'],
-    ['title' => 'پذیرش حضوری', 'href' => 'erp-reception-walkin-create.php', 'meta' => (int)$rx['walkin_today'] . ' امروز'],
 ];
 
 $dashMetrics = $dbOk && $conn ? crm360_dashboard_metrics($conn) : crm360_dashboard_metrics(null);
@@ -237,14 +229,8 @@ foreach ($serviceMixTop as $sm) {
 $serviceMixTitle = rtrim($serviceMixTitle, ' · ');
 $serviceMixPrimaryPct = (int)($serviceMixTop[0]['pct'] ?? 0);
 
-$customerHubCards = [
-    ['title' => 'افزودن مشتری جدید', 'href' => '?tab=customers&panel=create_customer'],
-    ['title' => 'افزودن خودرو جدید', 'href' => '?tab=customers&panel=create_vehicle'],
-    ['title' => 'جستجوی مشتری پذیرش', 'href' => 'erp-reception-walkin-create.php#m360_section_customer_search'],
-    ['title' => 'جستجوی مشتری / خودرو', 'href' => 'erp-customer-vehicle-workbench.php?role=reception'],
-    ['title' => 'فهرست مشتریان', 'href' => '?tab=customers'],
-    ['title' => 'فهرست خودروها', 'href' => '?tab=customers&panel=vehicles'],
-];
+$customerHubCards = []; // canonical customers surface uses unified action bar only
+$revealSensitive = ($auth['role'] ?? '') === 'OWNER' || strcasecmp((string)$actor, 'local_owner') === 0;
 
 $experiencePanels = [
     'cartable' => ['label' => 'کارتابل', 'count' => (int)$kpi['cartable_open']],
@@ -457,40 +443,14 @@ $experiencePanels = [
     <a href="?tab=reception&panel=documents" class="<?= $panel === 'documents' ? 'is-active' : '' ?>">مدارک</a>
   </nav>
   <?php if ($panel === 'cases'): ?>
-    <?php $prefReq = (int)($_GET['req'] ?? 0); ?>
     <section class="c360-panel">
-      <h2>ایجاد پرونده پذیرش</h2>
-      <form class="c360-form" method="post" action="erp-crm-action.php">
-        <?= crm360_csrf_field() ?>
-        <input type="hidden" name="action" value="create_case">
-        <input type="hidden" name="return_tab" value="cases">
-        <?= crm360_render_search_picker(
-            'customer',
-            'customer_profile_id',
-            'جستجوی مشتری',
-            'نام، موبایل، کد ملی یا کد مشتری را وارد کنید',
-            '?tab=customers&panel=create_customer',
-            'افزودن مشتری جدید',
-            'مشتری پیدا نشد'
-        ) ?>
-        <?= crm360_render_search_picker(
-            'vehicle',
-            'vehicle_profile_id',
-            'جستجوی خودرو',
-            'پلاک، VIN، برند یا مدل را وارد کنید',
-            '?tab=customers&panel=create_vehicle',
-            'افزودن خودرو جدید',
-            'خودرو پیدا نشد'
-        ) ?>
-        <label>شناسه درخواست آنلاین<input name="existing_request_id" type="number" value="<?= $prefReq > 0 ? $prefReq : '' ?>"></label>
-        <label>نوع<select name="case_type"><option value="WALKIN">حضوری</option><option value="ONLINE">آنلاین</option><option value="RETURNING">مراجع مجدد</option></select></label>
-        <label>نوع خدمت<input name="service_type" required></label>
-        <label>مسئول<input name="responsible_staff" required></label>
-        <label>پذیرش‌کننده<input name="assigned_staff"></label>
-        <label>منبع<input name="reception_source"></label>
-        <label>یادداشت<textarea name="notes" rows="2"></textarea></label>
-        <button type="submit" class="c360-btn primary">ایجاد پرونده</button>
-      </form>
+      <h2>پذیرش جدید</h2>
+      <p class="c360-muted">برای ایجاد پذیرش از مسیر عملیاتی استفاده کنید.</p>
+      <div class="crm-primary-actions">
+        <a class="c360-btn primary" href="erp-reception-walkin-create.php">پذیرش حضوری</a>
+        <a class="c360-btn primary" href="erp-reception-online-requests.php">درخواست آنلاین</a>
+        <a class="c360-btn" href="?tab=customers">بازگشت به جست‌وجوی مشتری</a>
+      </div>
     </section>
   <?php elseif ($panel === 'documents'): ?>
     <?php $docList = m360_rui_paginate(m360_rui_sort_rows($documents, 'document_id', 'desc'), max(1, (int)($_GET['list_page'] ?? 1)), 10); ?>
@@ -537,180 +497,115 @@ $experiencePanels = [
   <?php endif; ?>
 
 <?php elseif ($tab === 'customers'): ?>
-  <h2 class="c360-layer-title">مشتریان و خودروها</h2>
-  <div class="c360-hub-grid" style="margin-bottom:1rem">
-    <?php foreach ($customerHubCards as $card): ?>
-      <a class="c360-hub-card" href="<?= crm360_h($card['href']) ?>">
-        <strong><?= crm360_h($card['title']) ?></strong>
-        <span class="c360-hub-go">ورود</span>
-      </a>
-    <?php endforeach; ?>
-  </div>
   <?php
-    $custQ = trim((string)($_GET['q'] ?? ''));
-    $vehQ = trim((string)($_GET['vq'] ?? ''));
-    $custSort = (string)($_GET['csort'] ?? 'customer_profile_id');
-    $custDir = strtolower((string)($_GET['cdir'] ?? 'desc')) === 'asc' ? 'asc' : 'desc';
-    $vehSort = (string)($_GET['vsort'] ?? 'vehicle_profile_id');
-    $vehDir = strtolower((string)($_GET['vdir'] ?? 'desc')) === 'asc' ? 'asc' : 'desc';
-    if (!in_array($custSort, ['customer_profile_id', 'full_name', 'mobile', 'created_at'], true)) {
-        $custSort = 'customer_profile_id';
-    }
-    if (!in_array($vehSort, ['vehicle_profile_id', 'plate_no', 'brand', 'full_name'], true)) {
-        $vehSort = 'vehicle_profile_id';
-    }
-    $customersFiltered = $customers;
-    if ($custQ !== '') {
-        $customersFiltered = array_values(array_filter($customers, static function ($c) use ($custQ) {
-            $hay = mb_strtolower(trim(
-                (string)($c['full_name'] ?? '') . ' ' .
-                (string)($c['mobile'] ?? '') . ' ' .
-                (string)($c['national_id'] ?? '') . ' ' .
-                (string)($c['customer_ref_text'] ?? '') . ' ' .
-                (string)($c['customer_profile_id'] ?? '')
-            ));
-            return mb_strpos($hay, mb_strtolower($custQ)) !== false;
-        }));
-    }
-    $vehiclesFiltered = $vehicles;
-    if ($vehQ !== '') {
-        $vehiclesFiltered = array_values(array_filter($vehicles, static function ($v) use ($vehQ) {
-            $hay = mb_strtolower(trim(
-                (string)($v['plate_no'] ?? '') . ' ' .
-                (string)($v['vin'] ?? '') . ' ' .
-                (string)($v['brand'] ?? '') . ' ' .
-                (string)($v['model'] ?? '') . ' ' .
-                (string)($v['full_name'] ?? '') . ' ' .
-                (string)($v['vehicle_profile_id'] ?? '')
-            ));
-            return mb_strpos($hay, mb_strtolower($vehQ)) !== false;
-        }));
-    }
-    $custList = m360_rui_paginate(m360_rui_sort_rows($customersFiltered, $custSort, $custDir), max(1, (int)($_GET['cust_page'] ?? 1)), 10);
-    $vehList = m360_rui_paginate(m360_rui_sort_rows($vehiclesFiltered, $vehSort, $vehDir), max(1, (int)($_GET['veh_page'] ?? 1)), 10);
+    $crmQ = trim((string)($_GET['q'] ?? ''));
+    $crmPage = max(1, (int)($_GET['crm_page'] ?? 1));
+    $crmSize = crm360_erp_page_size((int)($_GET['page_size'] ?? 15));
+    $erpList = ($dbOk && $conn)
+        ? crm360_erp_unified_list($conn, $crmQ, $crmPage, $crmSize, $revealSensitive)
+        : ['rows' => [], 'total' => 0, 'page' => 1, 'page_size' => $crmSize, 'pages' => 1];
+    $crmPageInfo = [
+        'rows' => $erpList['rows'],
+        'page' => (int)$erpList['page'],
+        'pages' => (int)$erpList['pages'],
+        'total' => (int)$erpList['total'],
+        'per_page' => (int)$erpList['page_size'],
+        'has_prev' => (int)$erpList['page'] > 1,
+        'has_next' => (int)$erpList['page'] < (int)$erpList['pages'],
+    ];
   ?>
-  <?php if ($panel === 'create_customer'): ?>
-    <section class="c360-panel">
-      <h2>افزودن مشتری جدید</h2>
-      <form class="c360-form" method="post" action="erp-crm-action.php">
-        <?= crm360_csrf_field() ?>
-        <input type="hidden" name="action" value="create_customer">
-        <input type="hidden" name="return_tab" value="customers">
-        <label>نام کامل<input name="full_name" required></label>
-        <label>موبایل<input name="mobile" inputmode="tel"></label>
-        <label>کد ملی<input name="national_id"></label>
-        <label>نوع<select name="customer_type"><option value="PERSON">حقیقی</option><option value="COMPANY">حقوقی</option></select></label>
-        <label>کانال ترجیحی<input name="preferred_contact_channel"></label>
-        <label><input type="checkbox" name="consent_sms" value="1"> رضایت SMS</label>
-        <label><input type="checkbox" name="consent_marketing" value="1"> رضایت بازاریابی</label>
-        <label><input type="checkbox" name="consent_service_reminder" value="1"> یادآوری سرویس</label>
-        <label>کانال منبع<input name="source_channel"></label>
-        <label>یادداشت<textarea name="notes" rows="2"></textarea></label>
-        <?php if (crm360_can('customer_create', $auth)): ?><button type="submit" class="c360-btn primary">ثبت مشتری</button><?php else: ?><p class="c360-muted">مجوز ثبت مشتری ندارید.</p><?php endif; ?>
-      </form>
-    </section>
-  <?php elseif ($panel === 'create_vehicle'): ?>
-    <section class="c360-panel">
-      <h2>افزودن خودرو جدید</h2>
-      <form class="c360-form" method="post" action="erp-crm-action.php">
-        <?= crm360_csrf_field() ?>
-        <input type="hidden" name="action" value="create_vehicle">
-        <input type="hidden" name="return_tab" value="customers">
-        <?= crm360_render_search_picker(
-            'customer',
-            'customer_profile_id',
-            'جستجوی مشتری',
-            'نام، موبایل، کد ملی یا کد مشتری را وارد کنید',
-            '?tab=customers&panel=create_customer',
-            'افزودن مشتری جدید',
-            'مشتری پیدا نشد'
-        ) ?>
-        <label>برند<select name="brand" required><?= crm360_brand_options() ?></select></label>
-        <label>مدل<input name="model" required></label>
-        <label>پلاک<input name="plate_no"></label>
-        <label>VIN<input name="vin"></label>
-        <label>کارکرد (km)<input name="mileage" type="number" min="0"></label>
-        <label>فاصله سرویس (km)<input name="service_interval_km" type="number" min="0"></label>
-        <label>فاصله سرویس (ماه)<input name="service_interval_months" type="number" min="0"></label>
-        <label>یادداشت<textarea name="notes" rows="2"></textarea></label>
-        <?php if (crm360_can('vehicle_create', $auth)): ?><button type="submit" class="c360-btn primary">ثبت خودرو</button><?php else: ?><p class="c360-muted">مجوز ثبت خودرو ندارید.</p><?php endif; ?>
-      </form>
-    </section>
-  <?php endif; ?>
-  <?php if ($panel === '' || $panel === 'create_customer'): ?>
-    <section class="c360-panel">
-      <h2>فهرست مشتریان</h2>
-      <form class="c360-filter-bar" method="get" action="erp-reception-board.php">
+  <h2 class="c360-layer-title">جست‌وجو و پذیرش مشتری</h2>
+  <section class="c360-panel crm-canonical-ops">
+    <div class="crm-action-bar">
+      <form class="crm-unified-search" method="get" action="erp-reception-board.php">
         <input type="hidden" name="tab" value="customers">
-        <?php if ($panel !== ''): ?><input type="hidden" name="panel" value="<?= crm360_h($panel) ?>"><?php endif; ?>
-        <label>جستجو<input type="search" name="q" value="<?= crm360_h($custQ) ?>" placeholder="نام، موبایل، کد ملی"></label>
-        <label>مرتب‌سازی
-          <select name="csort">
-            <option value="customer_profile_id" <?= $custSort === 'customer_profile_id' ? 'selected' : '' ?>>شناسه</option>
-            <option value="full_name" <?= $custSort === 'full_name' ? 'selected' : '' ?>>نام</option>
-            <option value="mobile" <?= $custSort === 'mobile' ? 'selected' : '' ?>>موبایل</option>
-            <option value="created_at" <?= $custSort === 'created_at' ? 'selected' : '' ?>>تاریخ</option>
-          </select>
+        <input type="hidden" name="page_size" value="<?= (int)$crmSize ?>">
+        <label class="crm-unified-search-label">جست‌وجو
+          <input type="search" name="q" value="<?= crm360_h($crmQ) ?>" placeholder="نام، موبایل، کد ملی، پلاک، VIN، JobCard" autocomplete="off">
         </label>
-        <label>جهت
-          <select name="cdir">
-            <option value="desc" <?= $custDir === 'desc' ? 'selected' : '' ?>>نزولی</option>
-            <option value="asc" <?= $custDir === 'asc' ? 'selected' : '' ?>>صعودی</option>
-          </select>
-        </label>
-        <label>&nbsp;<button type="submit" class="c360-btn">اعمال</button></label>
+        <button type="submit" class="c360-btn primary">جستجو</button>
       </form>
-      <div class="c360-table-wrap"><table class="c360-table">
-        <thead><tr><th>شناسه</th><th>نام</th><th>موبایل</th><th>وضعیت</th><th>VIP</th><th>ثبت</th></tr></thead>
-        <tbody><?php foreach ($custList['rows'] as $c): ?><tr>
-          <td><?= (int)$c['customer_profile_id'] ?></td>
-          <td><?= crm360_h((string)$c['full_name']) ?></td>
-          <td><?= crm360_h((string)($c['mobile'] ?? '')) ?></td>
-          <td><span class="c360-status"><?= crm360_h(m360_rui_label((string)$c['customer_status'])) ?></span></td>
-          <td><?= crm360_h(m360_rui_label((string)$c['vip_level'])) ?></td>
-          <td><?= crm360_h(m360_rui_jalali_date((string)($c['created_at'] ?? ''))) ?></td>
-        </tr><?php endforeach; ?></tbody>
-      </table></div>
-      <?php m360_rui_render_pagination($custList, m360_rui_query_keep(['tab' => 'customers', 'panel' => $panel, 'q' => $custQ, 'csort' => $custSort, 'cdir' => $custDir], ['cust_page']), 'cust_page'); ?>
-    </section>
-  <?php endif; ?>
-  <?php if ($panel === '' || $panel === 'vehicles' || $panel === 'create_vehicle'): ?>
-    <section class="c360-panel">
-      <h2>فهرست خودروها</h2>
-      <form class="c360-filter-bar" method="get" action="erp-reception-board.php">
-        <input type="hidden" name="tab" value="customers">
-        <input type="hidden" name="panel" value="<?= crm360_h($panel ?: 'vehicles') ?>">
-        <label>جستجو<input type="search" name="vq" value="<?= crm360_h($vehQ) ?>" placeholder="پلاک، VIN، برند، مدل"></label>
-        <label>مرتب‌سازی
-          <select name="vsort">
-            <option value="vehicle_profile_id" <?= $vehSort === 'vehicle_profile_id' ? 'selected' : '' ?>>شناسه</option>
-            <option value="plate_no" <?= $vehSort === 'plate_no' ? 'selected' : '' ?>>پلاک</option>
-            <option value="brand" <?= $vehSort === 'brand' ? 'selected' : '' ?>>برند</option>
-            <option value="full_name" <?= $vehSort === 'full_name' ? 'selected' : '' ?>>مشتری</option>
-          </select>
-        </label>
-        <label>جهت
-          <select name="vdir">
-            <option value="desc" <?= $vehDir === 'desc' ? 'selected' : '' ?>>نزولی</option>
-            <option value="asc" <?= $vehDir === 'asc' ? 'selected' : '' ?>>صعودی</option>
-          </select>
-        </label>
-        <label>&nbsp;<button type="submit" class="c360-btn">اعمال</button></label>
-      </form>
-      <div class="c360-table-wrap"><table class="c360-table">
-        <thead><tr><th>شناسه</th><th>مشتری</th><th>برند/مدل</th><th>پلاک</th><th>VIN</th><th>کارکرد</th></tr></thead>
-        <tbody><?php foreach ($vehList['rows'] as $v): ?><tr>
-          <td><?= (int)$v['vehicle_profile_id'] ?></td>
-          <td><?= crm360_h((string)$v['full_name']) ?></td>
-          <td><?= crm360_h((string)$v['brand']) ?> <?= crm360_h((string)$v['model']) ?></td>
-          <td><?= crm360_h((string)($v['plate_no'] ?? '')) ?></td>
-          <td><?= crm360_h((string)($v['vin'] ?? '')) ?></td>
-          <td><?= crm360_h((string)($v['mileage'] ?? '')) ?></td>
-        </tr><?php endforeach; ?></tbody>
-      </table></div>
-      <?php m360_rui_render_pagination($vehList, m360_rui_query_keep(['tab' => 'customers', 'panel' => $panel ?: 'vehicles', 'vq' => $vehQ, 'vsort' => $vehSort, 'vdir' => $vehDir], ['veh_page']), 'veh_page'); ?>
-    </section>
-  <?php endif; ?>
+      <div class="crm-primary-actions">
+        <div class="crm-reception-wrap" id="crm-reception-menu">
+          <button type="button" class="c360-btn primary" id="crmReceptionBtn" aria-expanded="false" aria-controls="crmReceptionMenu">پذیرش</button>
+          <div class="crm-reception-menu" id="crmReceptionMenu" hidden>
+            <a href="erp-reception-walkin-create.php">پذیرش حضوری</a>
+            <a href="erp-reception-online-requests.php">درخواست آنلاین</a>
+          </div>
+        </div>
+        <a class="c360-btn primary" href="erp-customer-vehicle-create.php">افزودن مشتری و خودرو</a>
+      </div>
+    </div>
+    <p class="crm-result-meta">نتایج: <?= (int)$erpList['total'] ?> · صفحه <?= (int)$erpList['page'] ?> از <?= (int)$erpList['pages'] ?> · هر صفحه <?= (int)$crmSize ?></p>
+    <form class="crm-page-size" method="get" action="erp-reception-board.php">
+      <input type="hidden" name="tab" value="customers">
+      <input type="hidden" name="q" value="<?= crm360_h($crmQ) ?>">
+      <label>تعداد در صفحه
+        <select name="page_size" onchange="this.form.submit()">
+          <?php foreach ([10, 15, 25] as $sz): ?>
+            <option value="<?= $sz ?>" <?= $crmSize === $sz ? 'selected' : '' ?>><?= $sz ?></option>
+          <?php endforeach; ?>
+        </select>
+      </label>
+    </form>
+    <div class="c360-table-wrap">
+      <table class="c360-table crm-unified-table">
+        <thead>
+          <tr>
+            <th>مشتری</th><th>نوع</th><th>موبایل</th><th>کد ملی</th>
+            <th>خودرو</th><th>سال</th><th>پلاک</th><th>VIN</th>
+            <th>رابطه</th><th>آخرین پذیرش</th><th>وضعیت</th><th>JobCard</th><th>مراجعات</th><th>اقدام</th>
+          </tr>
+        </thead>
+        <tbody>
+        <?php if (!$erpList['rows']): ?>
+          <tr><td colspan="14" class="c360-muted">موردی یافت نشد.</td></tr>
+        <?php else: foreach ($erpList['rows'] as $row): ?>
+          <tr>
+            <td title="#<?= (int)$row['customer_id'] ?>"><?= crm360_h((string)$row['full_name']) ?></td>
+            <td><?= crm360_h(m360_rui_label((string)$row['customer_type'])) ?></td>
+            <td><?= crm360_h((string)$row['primary_mobile']) ?></td>
+            <td><?= crm360_h((string)$row['national_id_masked']) ?></td>
+            <td><?= crm360_h((string)$row['vehicle_label']) ?></td>
+            <td><?= $row['production_year'] ? (int)$row['production_year'] : '—' ?></td>
+            <td><?= crm360_h((string)($row['plate_number'] !== '' ? $row['plate_number'] : '—')) ?></td>
+            <td><?= crm360_h((string)$row['vin_display']) ?></td>
+            <td><?= crm360_h((string)($row['relation_status'] !== '' ? $row['relation_status'] : '—')) ?></td>
+            <td><?= crm360_h(m360_rui_jalali_date((string)$row['last_reception_at'])) ?></td>
+            <td><span class="c360-status"><?= crm360_h(m360_rui_label((string)($row['jobcard_status'] !== '' ? $row['jobcard_status'] : $row['customer_status']))) ?></span></td>
+            <td><?= crm360_h((string)($row['jobcard_number'] !== '' ? $row['jobcard_number'] : '—')) ?></td>
+            <td><?= (int)$row['visit_count'] ?></td>
+            <td class="c360-action-cell">
+              <?php if (!empty($row['vehicle_id'])): ?>
+                <a class="c360-btn" href="erp-reception-walkin-create.php?customer_id=<?= (int)$row['customer_id'] ?>&amp;vehicle_id=<?= (int)$row['vehicle_id'] ?>">انتخاب</a>
+              <?php else: ?>
+                <a class="c360-btn" href="erp-customer-vehicle-create.php?customer_id=<?= (int)$row['customer_id'] ?>">ثبت خودرو</a>
+              <?php endif; ?>
+            </td>
+          </tr>
+        <?php endforeach; endif; ?>
+        </tbody>
+      </table>
+    </div>
+    <?php m360_rui_render_pagination($crmPageInfo, m360_rui_query_keep(['tab' => 'customers', 'q' => $crmQ, 'page_size' => $crmSize], ['crm_page']), 'crm_page'); ?>
+  </section>
+  <script>
+  (function(){
+    var btn=document.getElementById('crmReceptionBtn');
+    var menu=document.getElementById('crmReceptionMenu');
+    if(!btn||!menu) return;
+    btn.addEventListener('click', function(){
+      var open=menu.hasAttribute('hidden');
+      if(open){ menu.removeAttribute('hidden'); btn.setAttribute('aria-expanded','true'); }
+      else { menu.setAttribute('hidden',''); btn.setAttribute('aria-expanded','false'); }
+    });
+    document.addEventListener('click', function(ev){
+      if(!btn.contains(ev.target) && !menu.contains(ev.target)){
+        menu.setAttribute('hidden',''); btn.setAttribute('aria-expanded','false');
+      }
+    });
+  })();
+  </script>
 
 <?php elseif ($tab === 'legacy'): ?>
   <h2 class="c360-layer-title">ورود اطلاعات قدیمی</h2>

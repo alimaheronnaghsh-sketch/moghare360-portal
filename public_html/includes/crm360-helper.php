@@ -389,81 +389,291 @@ function crm360_gauge_card(array $g): string
 }
 
 /**
- * @return list<array{id:int,title:string,subtitle:string,badge:string}>
+ * Canonical CRM search normalization (erp_* masters).
+ *
+ * @return array{raw:string,like:string,mobile09:string,mobile98:string,vin:string,plate:string,digits:string}
  */
-function crm360_search_customers($conn, string $q, int $limit = 10): array
+function crm360_erp_search_norm(string $q): array
 {
-    $limit = max(1, min(10, $limit));
-    $q = trim($q);
-    if (mb_strlen($q) < 2) {
-        return [];
-    }
-    $like = '%' . $q . '%';
-    $rows = crm360_rows(
-        $conn,
-        'SELECT TOP ' . $limit . ' customer_profile_id, full_name, mobile, national_id, customer_ref_text, customer_status, vip_level
-         FROM dbo.crm360_customer_profiles
-         WHERE full_name LIKE ? OR mobile LIKE ? OR national_id LIKE ? OR customer_ref_text LIKE ?
-            OR CAST(customer_profile_id AS NVARCHAR(20)) LIKE ?
-         ORDER BY customer_profile_id DESC',
-        [$like, $like, $like, $like, $like]
-    );
-    $out = [];
-    foreach ($rows as $r) {
-        $vip = strtoupper((string)($r['vip_level'] ?? 'NONE'));
-        $status = function_exists('m360_rui_label')
-            ? m360_rui_label((string)($r['customer_status'] ?? ''))
-            : (string)($r['customer_status'] ?? '');
-        $badge = $status;
-        if ($vip !== '' && $vip !== 'NONE') {
-            $badge .= ' · ' . (function_exists('m360_rui_label') ? m360_rui_label($vip) : $vip);
+    $raw = trim($q);
+    $raw = str_replace(["\u{200C}", "\u{200B}", "\u{FEFF}"], '', $raw);
+    $map = ['ي' => 'ی', 'ك' => 'ک', '۰' => '0', '۱' => '1', '۲' => '2', '۳' => '3', '۴' => '4', '۵' => '5', '۶' => '6', '۷' => '7', '۸' => '8', '۹' => '9',
+        '٠' => '0', '١' => '1', '٢' => '2', '٣' => '3', '٤' => '4', '٥' => '5', '٦' => '6', '٧' => '7', '٨' => '8', '٩' => '9'];
+    $raw = strtr($raw, $map);
+    $compact = preg_replace('/\s+/u', ' ', $raw) ?? $raw;
+    $digits = preg_replace('/\D+/', '', $compact) ?? '';
+    $mobile09 = '';
+    $mobile98 = '';
+    if ($digits !== '') {
+        if (str_starts_with($digits, '98') && strlen($digits) >= 12) {
+            $mobile09 = '0' . substr($digits, 2);
+            $mobile98 = $digits;
+        } elseif (str_starts_with($digits, '9') && strlen($digits) === 10) {
+            $mobile09 = '0' . $digits;
+            $mobile98 = '98' . $digits;
+        } elseif (str_starts_with($digits, '09') && strlen($digits) === 11) {
+            $mobile09 = $digits;
+            $mobile98 = '98' . substr($digits, 1);
         }
-        $out[] = [
-            'id' => (int)$r['customer_profile_id'],
-            'title' => (string)($r['full_name'] ?? ''),
-            'subtitle' => trim((string)($r['mobile'] ?? '')),
-            'badge' => $badge,
-        ];
     }
-    return $out;
+    $vin = strtoupper(preg_replace('/\s+/', '', $compact) ?? $compact);
+    $plate = strtoupper(preg_replace('/\s+/u', ' ', $compact) ?? $compact);
+    return [
+        'raw' => $compact,
+        'like' => '%' . $compact . '%',
+        'mobile09' => $mobile09,
+        'mobile98' => $mobile98,
+        'vin' => $vin,
+        'plate' => $plate,
+        'digits' => $digits,
+    ];
+}
+
+function crm360_erp_mask_national_id(?string $nid, bool $full = false): string
+{
+    $nid = trim((string)$nid);
+    if ($nid === '') {
+        return '—';
+    }
+    if ($full || strlen($nid) < 5) {
+        return $nid;
+    }
+    return str_repeat('*', max(0, strlen($nid) - 4)) . substr($nid, -4);
+}
+
+function crm360_erp_mask_vin(?string $vin, bool $full = false): string
+{
+    $vin = strtoupper(trim((string)$vin));
+    if ($vin === '') {
+        return '—';
+    }
+    if ($full || strlen($vin) < 8) {
+        return $vin;
+    }
+    return substr($vin, 0, 3) . str_repeat('*', max(0, strlen($vin) - 7)) . substr($vin, -4);
+}
+
+function crm360_erp_page_size(int $size): int
+{
+    return in_array($size, [10, 15, 25], true) ? $size : 15;
 }
 
 /**
- * @return list<array{id:int,title:string,subtitle:string,badge:string,customer_id?:int}>
+ * Unified customer-anchored CRM list from erp_* masters.
+ *
+ * @return array{rows:list<array<string,mixed>>,total:int,page:int,page_size:int,pages:int}
  */
-function crm360_search_vehicles($conn, string $q, int $limit = 10, ?int $customerId = null): array
+function crm360_erp_unified_list($conn, string $q = '', int $page = 1, int $pageSize = 15, bool $revealSensitive = false): array
 {
-    $limit = max(1, min(10, $limit));
-    $q = trim($q);
-    if (mb_strlen($q) < 2) {
-        return [];
+    $pageSize = crm360_erp_page_size($pageSize);
+    $page = max(1, $page);
+    $norm = crm360_erp_search_norm($q);
+    $norm = crm360_erp_search_norm($q);
+    $hasQ = $norm['raw'] !== '';
+    $like = $norm['like'];
+    $params = [];
+    $where = " WHERE c.lifecycle_state = N'ACTIVE' ";
+    if ($hasQ) {
+        // Build OR clauses only for present normalized forms.
+        // Avoid ODBC "String data, right truncation" from empty/sentinel binds.
+        $parts = [];
+        $parts[] = 'c.full_name LIKE CAST(? AS NVARCHAR(200))';
+        $params[] = $like;
+        $parts[] = 'ISNULL(c.customer_code, N\'\') LIKE CAST(? AS NVARCHAR(200))';
+        $params[] = $like;
+        $parts[] = 'ISNULL(c.primary_mobile, N\'\') LIKE CAST(? AS NVARCHAR(200))';
+        $params[] = $like;
+        $parts[] = 'ISNULL(c.secondary_mobile, N\'\') LIKE CAST(? AS NVARCHAR(200))';
+        $params[] = $like;
+        $parts[] = 'ISNULL(c.national_id, N\'\') LIKE CAST(? AS NVARCHAR(200))';
+        $params[] = $like;
+        $parts[] = 'ISNULL(v.plate_number, N\'\') LIKE CAST(? AS NVARCHAR(200))';
+        $params[] = $like;
+        $parts[] = 'ISNULL(v.vin, N\'\') LIKE CAST(? AS NVARCHAR(200))';
+        $params[] = $like;
+        $parts[] = 'ISNULL(v.brand, N\'\') LIKE CAST(? AS NVARCHAR(200))';
+        $params[] = $like;
+        $parts[] = 'ISNULL(v.model, N\'\') LIKE CAST(? AS NVARCHAR(200))';
+        $params[] = $like;
+        $parts[] = 'CAST(c.customer_id AS NVARCHAR(40)) = CAST(? AS NVARCHAR(40))';
+        $params[] = $norm['raw'];
+        $parts[] = 'CAST(ISNULL(v.vehicle_id, 0) AS NVARCHAR(40)) = CAST(? AS NVARCHAR(40))';
+        $params[] = $norm['raw'];
+        $parts[] = 'EXISTS (
+                SELECT 1 FROM dbo.erp_jobcards jx
+                WHERE jx.customer_id = c.customer_id
+                  AND (
+                    jx.jobcard_number LIKE CAST(? AS NVARCHAR(200))
+                    OR CAST(jx.jobcard_id AS NVARCHAR(40)) = CAST(? AS NVARCHAR(40))
+                  )
+            )';
+        $params[] = $like;
+        $params[] = $norm['raw'];
+
+        if ($norm['mobile09'] !== '') {
+            $parts[] = '(c.primary_mobile = CAST(? AS NVARCHAR(40)) OR c.secondary_mobile = CAST(? AS NVARCHAR(40)))';
+            $params[] = $norm['mobile09'];
+            $params[] = $norm['mobile09'];
+        }
+        if ($norm['mobile98'] !== '') {
+            $parts[] = '(c.primary_mobile = CAST(? AS NVARCHAR(40)) OR c.secondary_mobile = CAST(? AS NVARCHAR(40))
+                OR c.primary_mobile = CAST(? AS NVARCHAR(40)) OR c.secondary_mobile = CAST(? AS NVARCHAR(40)))';
+            $params[] = $norm['mobile98'];
+            $params[] = $norm['mobile98'];
+            $params[] = '+' . $norm['mobile98'];
+            $params[] = '+' . $norm['mobile98'];
+        }
+        if ($norm['digits'] !== '') {
+            $parts[] = 'ISNULL(c.national_id, N\'\') = CAST(? AS NVARCHAR(40))';
+            $params[] = $norm['digits'];
+            // Online request id → customers matched by request mobile (correlated).
+            $parts[] = 'EXISTS (
+                SELECT 1 FROM dbo.erp_customer_online_requests ox
+                WHERE CAST(ox.online_request_id AS NVARCHAR(40)) = CAST(? AS NVARCHAR(40))
+                  AND (
+                    ox.mobile = c.primary_mobile
+                    OR ox.mobile = c.secondary_mobile
+                  )
+            )';
+            $params[] = $norm['digits'];
+        }
+        $vinCand = $norm['vin'];
+        if (strlen($vinCand) >= 8 && strlen($vinCand) <= 17 && !preg_match('/[IOQ]/i', $vinCand) && preg_match('/^[A-HJ-NPR-Z0-9]+$/', $vinCand)) {
+            $parts[] = 'UPPER(REPLACE(ISNULL(v.vin, N\'\'), N\' \', N\'\')) = CAST(? AS NVARCHAR(40))';
+            $params[] = $vinCand;
+        }
+
+        $where .= ' AND (' . implode(' OR ', $parts) . ') ';
     }
-    $like = '%' . $q . '%';
-    $sql = 'SELECT TOP ' . $limit . ' v.vehicle_profile_id, v.plate_no, v.vin, v.brand, v.model, v.vehicle_ref_text, v.customer_profile_id, c.full_name
-            FROM dbo.crm360_vehicle_profiles v
-            LEFT JOIN dbo.crm360_customer_profiles c ON c.customer_profile_id=v.customer_profile_id
-            WHERE (v.plate_no LIKE ? OR v.vin LIKE ? OR v.brand LIKE ? OR v.model LIKE ? OR v.vehicle_ref_text LIKE ?
-               OR CAST(v.vehicle_profile_id AS NVARCHAR(20)) LIKE ?)';
-    $params = [$like, $like, $like, $like, $like, $like];
-    // Prefer selected customer's vehicles first; still allow broader matches.
-    $prio = ($customerId !== null && $customerId > 0) ? (int)$customerId : 0;
-    $sql .= ' ORDER BY CASE WHEN v.customer_profile_id=' . $prio . ' THEN 0 ELSE 1 END, v.vehicle_profile_id DESC';
+
+    $from = ' FROM dbo.erp_customers c
+        LEFT JOIN dbo.erp_customer_vehicle_relations r
+            ON r.customer_id = c.customer_id AND r.lifecycle_state = N\'ACTIVE\'
+        LEFT JOIN dbo.erp_vehicles v
+            ON v.vehicle_id = r.vehicle_id ';
+
+    $total = (int)(crm360_scalar($conn, 'SELECT COUNT(*) ' . $from . $where, $params) ?? 0);
+    $pages = max(1, (int)ceil($total / $pageSize));
+    if ($page > $pages) {
+        $page = $pages;
+    }
+    $offset = ($page - 1) * $pageSize;
+
+    $sql = 'SELECT c.customer_id, c.customer_code, c.customer_type, c.full_name, c.primary_mobile, c.national_id,
+                   c.lifecycle_state AS customer_status, c.created_at AS customer_created_at, c.updated_at AS customer_updated_at,
+                   r.relation_id, r.relation_type, r.lifecycle_state AS relation_status,
+                   v.vehicle_id, v.vehicle_code, v.brand, v.model, v.production_year, v.plate_number, v.vin,
+                   lj.jobcard_id, lj.jobcard_number, lj.jobcard_status, lj.reception_at, lj.job_created_at,
+                   vc.visit_count
+            ' . $from . '
+            OUTER APPLY (
+                SELECT TOP 1 j.jobcard_id, j.jobcard_number, j.jobcard_status, j.reception_at, j.created_at AS job_created_at
+                FROM dbo.erp_jobcards j
+                WHERE j.customer_id = c.customer_id
+                  AND (v.vehicle_id IS NULL OR j.vehicle_id = v.vehicle_id OR j.vehicle_id IS NULL)
+                ORDER BY COALESCE(j.reception_at, j.created_at) DESC, j.jobcard_id DESC
+            ) lj
+            OUTER APPLY (
+                SELECT COUNT(*) AS visit_count
+                FROM dbo.erp_jobcards j2
+                WHERE j2.customer_id = c.customer_id
+                  AND (v.vehicle_id IS NULL OR j2.vehicle_id = v.vehicle_id)
+            ) vc
+            ' . $where . '
+            ORDER BY
+              CASE WHEN lj.jobcard_id IS NOT NULL AND lj.jobcard_status NOT IN (N\'CLOSED\', N\'REJECTED\', N\'CANCELLED\') THEN 0 ELSE 1 END,
+              COALESCE(lj.reception_at, lj.job_created_at, c.updated_at, c.created_at) DESC,
+              c.customer_id ASC,
+              v.vehicle_id ASC
+            OFFSET ' . (int)$offset . ' ROWS FETCH NEXT ' . (int)$pageSize . ' ROWS ONLY';
+
     $rows = crm360_rows($conn, $sql, $params);
     $out = [];
     foreach ($rows as $r) {
-        $plate = trim((string)($r['plate_no'] ?? ''));
-        $bm = trim((string)($r['brand'] ?? '') . ' ' . (string)($r['model'] ?? ''));
-        $owner = trim((string)($r['full_name'] ?? ''));
-        $title = ($plate !== '' ? $plate : 'بدون پلاک') . ' | ' . ($bm !== '' ? $bm : '—');
+        $vehicleId = isset($r['vehicle_id']) && $r['vehicle_id'] !== null && (string)$r['vehicle_id'] !== ''
+            ? (int)$r['vehicle_id'] : null;
         $out[] = [
-            'id' => (int)$r['vehicle_profile_id'],
-            'title' => $title,
-            'subtitle' => $owner !== '' ? ('مشتری مالک: ' . $owner) : 'بدون مالک',
-            'badge' => $owner !== '' ? $owner : '',
-            'customer_id' => (int)($r['customer_profile_id'] ?? 0),
+            'customer_id' => (int)$r['customer_id'],
+            'customer_code' => (string)($r['customer_code'] ?? ''),
+            'customer_type' => (string)($r['customer_type'] ?? ''),
+            'full_name' => (string)($r['full_name'] ?? ''),
+            'primary_mobile' => (string)($r['primary_mobile'] ?? ''),
+            'national_id_masked' => crm360_erp_mask_national_id((string)($r['national_id'] ?? ''), $revealSensitive),
+            'customer_status' => (string)($r['customer_status'] ?? ''),
+            'relation_id' => isset($r['relation_id']) && $r['relation_id'] !== null && (string)$r['relation_id'] !== '' ? (int)$r['relation_id'] : null,
+            'relation_status' => (string)($r['relation_status'] ?? ''),
+            'vehicle_id' => $vehicleId,
+            'vehicle_code' => (string)($r['vehicle_code'] ?? ''),
+            'brand' => (string)($r['brand'] ?? ''),
+            'model' => (string)($r['model'] ?? ''),
+            'production_year' => $r['production_year'] !== null && $r['production_year'] !== '' ? (int)$r['production_year'] : null,
+            'plate_number' => (string)($r['plate_number'] ?? ''),
+            'vin_display' => $vehicleId ? crm360_erp_mask_vin((string)($r['vin'] ?? ''), $revealSensitive) : '—',
+            'vehicle_label' => $vehicleId
+                ? trim((string)($r['brand'] ?? '') . ' ' . (string)($r['model'] ?? ''))
+                : 'خودرو ثبت نشده',
+            'jobcard_id' => isset($r['jobcard_id']) && $r['jobcard_id'] !== null && (string)$r['jobcard_id'] !== '' ? (int)$r['jobcard_id'] : null,
+            'jobcard_number' => (string)($r['jobcard_number'] ?? ''),
+            'jobcard_status' => (string)($r['jobcard_status'] ?? ''),
+            'last_reception_at' => (string)($r['reception_at'] ?? $r['job_created_at'] ?? ''),
+            'visit_count' => (int)($r['visit_count'] ?? 0),
         ];
     }
-    return $out;
+
+    return [
+        'rows' => $out,
+        'total' => $total,
+        'page' => $page,
+        'page_size' => $pageSize,
+        'pages' => $pages,
+    ];
+}
+
+/**
+ * Compact unified search items for API / pickers (erp_* only).
+ *
+ * @return list<array<string,mixed>>
+ */
+function crm360_erp_unified_search($conn, string $q, int $limit = 10, bool $revealSensitive = false): array
+{
+    $limit = max(1, min(10, $limit));
+    $list = crm360_erp_unified_list($conn, $q, 1, in_array($limit, [10, 15, 25], true) ? $limit : 10, $revealSensitive);
+    $items = [];
+    foreach (array_slice($list['rows'], 0, $limit) as $r) {
+        $plate = (string)($r['plate_number'] ?? '');
+        $veh = (string)($r['vehicle_label'] ?? 'خودرو ثبت نشده');
+        $items[] = [
+            'id' => (int)$r['customer_id'],
+            'customer_id' => (int)$r['customer_id'],
+            'vehicle_id' => $r['vehicle_id'],
+            'relation_id' => $r['relation_id'],
+            'title' => (string)$r['full_name'],
+            'subtitle' => trim((string)$r['primary_mobile'] . ' · ' . ($plate !== '' ? $plate : $veh)),
+            'badge' => (string)($r['jobcard_status'] !== '' ? $r['jobcard_status'] : ($r['relation_status'] !== '' ? $r['relation_status'] : $r['customer_status'])),
+            'plate' => $plate,
+            'vin_display' => (string)$r['vin_display'],
+            'vehicle_display' => $veh,
+            'jobcard_number' => (string)$r['jobcard_number'],
+            'jobcard_status' => (string)$r['jobcard_status'],
+        ];
+    }
+    return $items;
+}
+
+/** @deprecated canonical path uses erp_* — kept name for call sites, now erp-backed */
+function crm360_search_customers($conn, string $q, int $limit = 10): array
+{
+    return crm360_erp_unified_search($conn, $q, $limit, false);
+}
+
+/** @deprecated canonical path uses erp_* — vehicle picks still return unified customer-anchored rows */
+function crm360_search_vehicles($conn, string $q, int $limit = 10, ?int $customerId = null): array
+{
+    $items = crm360_erp_unified_search($conn, $q, $limit, false);
+    if ($customerId !== null && $customerId > 0) {
+        $items = array_values(array_filter($items, static fn ($it) => (int)($it['customer_id'] ?? 0) === $customerId));
+    }
+    return $items;
 }
 
 /**
@@ -495,14 +705,14 @@ function crm360_dashboard_metrics($conn): array
         return $m;
     }
 
-    $completed = "case_status IN (N'CLOSED',N'DELIVERED',N'CONTRACT_SIGNED',N'READY_FOR_DELIVERY') OR profile_completion_percent >= 100";
-    $m['cases_week'] = (int)(crm360_scalar($conn, "SELECT COUNT(*) FROM dbo.crm360_reception_cases WHERE created_at >= DATEADD(day, -7, SYSUTCDATETIME())") ?? 0);
+    $completed = "jobcard_status IN (N'CLOSED',N'DELIVERY_READY')";
+    $m['cases_week'] = (int)(crm360_scalar($conn, "SELECT COUNT(*) FROM dbo.erp_jobcards WHERE created_at >= DATEADD(day, -7, SYSUTCDATETIME())") ?? 0);
     $m['cases_week_total'] = $m['cases_week'];
-    $m['completed_today'] = (int)(crm360_scalar($conn, "SELECT COUNT(*) FROM dbo.crm360_reception_cases WHERE CONVERT(date, updated_at)=CONVERT(date, SYSUTCDATETIME()) AND ($completed)") ?? 0);
-    $m['completed_week'] = (int)(crm360_scalar($conn, "SELECT COUNT(*) FROM dbo.crm360_reception_cases WHERE updated_at >= DATEADD(day, -7, SYSUTCDATETIME()) AND ($completed)") ?? 0);
+    $m['completed_today'] = (int)(crm360_scalar($conn, "SELECT COUNT(*) FROM dbo.erp_jobcards WHERE CONVERT(date, updated_at)=CONVERT(date, SYSUTCDATETIME()) AND ($completed)") ?? 0);
+    $m['completed_week'] = (int)(crm360_scalar($conn, "SELECT COUNT(*) FROM dbo.erp_jobcards WHERE updated_at >= DATEADD(day, -7, SYSUTCDATETIME()) AND ($completed)") ?? 0);
     $m['cars_inside'] = (int)(crm360_scalar(
         $conn,
-        "SELECT COUNT(*) FROM dbo.crm360_reception_cases WHERE case_status IN (N'IN_SERVICE',N'WAITING_CUSTOMER',N'READY_FOR_DELIVERY',N'READY_FOR_CONTRACT',N'CONTRACT_PENDING',N'CONTRACT_SIGNED')"
+        "SELECT COUNT(*) FROM dbo.erp_jobcards WHERE jobcard_status IN (N'HALL_REVIEW',N'RECEIVED',N'DELIVERY_READY')"
     ) ?? 0);
 
     $openComplaints = (int)(crm360_scalar($conn, "SELECT COUNT(*) FROM dbo.crm360_complaints WHERE complaint_status IN (N'OPEN',N'UNDER_REVIEW',N'CORRECTION_REQUIRED',N'IN_PROGRESS')") ?? 0);
@@ -523,26 +733,19 @@ function crm360_dashboard_metrics($conn): array
            )"
     ) ?? 0);
 
-    $m['customers_total'] = (int)(crm360_scalar($conn, 'SELECT COUNT(*) FROM dbo.crm360_customer_profiles') ?? 0);
-    $m['customers_vip'] = (int)(crm360_scalar(
-        $conn,
-        "SELECT COUNT(*) FROM dbo.crm360_customer_profiles
-         WHERE UPPER(ISNULL(vip_level,N'NONE')) NOT IN (N'NONE',N'',N'NEW')
-            OR customer_profile_id IN (SELECT customer_profile_id FROM dbo.crm360_customer_club WHERE tier_code IN (N'GOLD',N'PLATINUM',N'VIP'))"
-    ) ?? 0);
-    $m['customers_normal'] = max(0, $m['customers_total'] - $m['customers_vip']);
+    $m['customers_total'] = (int)(crm360_scalar($conn, "SELECT COUNT(*) FROM dbo.erp_customers WHERE lifecycle_state=N'ACTIVE'") ?? 0);
+    $m['customers_vip'] = 0;
+    $m['customers_normal'] = $m['customers_total'];
     if ($m['customers_total'] > 0) {
-        $m['vip_pct'] = (int)round(100 * $m['customers_vip'] / $m['customers_total']);
-        $m['normal_pct'] = 100 - $m['vip_pct'];
+        $m['vip_pct'] = 0;
+        $m['normal_pct'] = 100;
     }
 
     $mixRows = crm360_rows(
         $conn,
-        "SELECT TOP 20 ISNULL(NULLIF(LTRIM(RTRIM(service_type)),N''), N'OTHER') AS service_type, COUNT(*) AS cnt
-         FROM dbo.crm360_reception_cases
-         WHERE created_at >= DATEADD(day, -30, SYSUTCDATETIME())
-         GROUP BY ISNULL(NULLIF(LTRIM(RTRIM(service_type)),N''), N'OTHER')
-         ORDER BY COUNT(*) DESC"
+        "SELECT TOP 20 N'OTHER' AS service_type, COUNT(*) AS cnt
+         FROM dbo.erp_jobcards
+         WHERE created_at >= DATEADD(day, -30, SYSUTCDATETIME())"
     );
     $mixTotal = 0;
     foreach ($mixRows as $r) {
@@ -718,8 +921,8 @@ JS;
 function crm360_customer_options($conn): string
 {
     $html = '<option value="">— انتخاب مشتری —</option>';
-    foreach (crm360_rows($conn, 'SELECT customer_profile_id, full_name, mobile FROM dbo.crm360_customer_profiles ORDER BY customer_profile_id DESC') as $c) {
-        $html .= '<option value="' . (int)$c['customer_profile_id'] . '">' . crm360_h((string)$c['full_name']) . ' — ' . crm360_h((string)($c['mobile'] ?? '')) . '</option>';
+    foreach (crm360_rows($conn, "SELECT TOP 50 customer_id, full_name, primary_mobile FROM dbo.erp_customers WHERE lifecycle_state=N'ACTIVE' ORDER BY customer_id DESC") as $c) {
+        $html .= '<option value="' . (int)$c['customer_id'] . '">' . crm360_h((string)$c['full_name']) . ' — ' . crm360_h((string)($c['primary_mobile'] ?? '')) . '</option>';
     }
     return $html;
 }
@@ -727,17 +930,17 @@ function crm360_customer_options($conn): string
 function crm360_vehicle_options($conn): string
 {
     $html = '<option value="">— انتخاب خودرو —</option>';
-    foreach (crm360_rows($conn, 'SELECT vehicle_profile_id, brand, model, plate_no FROM dbo.crm360_vehicle_profiles ORDER BY vehicle_profile_id DESC') as $v) {
-        $html .= '<option value="' . (int)$v['vehicle_profile_id'] . '">' . crm360_h((string)$v['brand']) . ' ' . crm360_h((string)$v['model']) . ' — ' . crm360_h((string)($v['plate_no'] ?? '')) . '</option>';
+    foreach (crm360_rows($conn, 'SELECT TOP 50 vehicle_id, brand, model, plate_number FROM dbo.erp_vehicles ORDER BY vehicle_id DESC') as $v) {
+        $html .= '<option value="' . (int)$v['vehicle_id'] . '">' . crm360_h((string)$v['brand']) . ' ' . crm360_h((string)$v['model']) . ' — ' . crm360_h((string)($v['plate_number'] ?? '')) . '</option>';
     }
     return $html;
 }
 
 function crm360_case_options($conn): string
 {
-    $html = '<option value="">— انتخاب پرونده —</option>';
-    foreach (crm360_rows($conn, 'SELECT case_id, case_code FROM dbo.crm360_reception_cases ORDER BY case_id DESC') as $c) {
-        $html .= '<option value="' . (int)$c['case_id'] . '">' . crm360_h((string)$c['case_code']) . '</option>';
+    $html = '<option value="">— انتخاب JobCard —</option>';
+    foreach (crm360_rows($conn, 'SELECT TOP 50 jobcard_id, jobcard_number FROM dbo.erp_jobcards ORDER BY jobcard_id DESC') as $c) {
+        $html .= '<option value="' . (int)$c['jobcard_id'] . '">' . crm360_h((string)$c['jobcard_number']) . '</option>';
     }
     return $html;
 }
