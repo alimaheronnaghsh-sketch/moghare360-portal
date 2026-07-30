@@ -1,4 +1,4 @@
 <?php
 declare(strict_types=1);
-header('Location: erp-reception-board.php?tab=cases');
+header('Location: erp-reception-board.php?tab=reception&panel=cases');
 exit;

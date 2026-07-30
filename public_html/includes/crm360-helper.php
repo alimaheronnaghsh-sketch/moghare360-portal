@@ -396,3 +396,178 @@ function crm360_promotion_options($conn): string
     }
     return $html;
 }
+
+/** @return array{actor:string,dev_mode:bool,role:string,role_label:string} */
+function crm360_auth_context(): array
+{
+    $base = crm360_actor();
+    $role = 'RECEPTION';
+    if (!empty($_SESSION['staff_role'])) {
+        $role = strtoupper((string)$_SESSION['staff_role']);
+    } elseif (!empty($_SESSION['staff_user']['role'])) {
+        $role = strtoupper((string)$_SESSION['staff_user']['role']);
+    } elseif ($base['dev_mode'] || strcasecmp((string)$base['actor'], 'local_owner') === 0) {
+        $role = 'OWNER';
+    }
+    $map = [
+        'OWNER' => 'مالک',
+        'MANAGER' => 'مدیر',
+        'CRM_MANAGER' => 'مدیر ارتباط با مشتریان',
+        'RECEPTION' => 'پذیرش',
+    ];
+    if (!isset($map[$role])) {
+        $role = 'RECEPTION';
+    }
+    return [
+        'actor' => (string)$base['actor'],
+        'dev_mode' => (bool)$base['dev_mode'],
+        'role' => $role,
+        'role_label' => $map[$role],
+    ];
+}
+
+function crm360_can(string $capability, ?array $auth = null): bool
+{
+    $auth = $auth ?? crm360_auth_context();
+    $role = $auth['role'];
+    $matrix = [
+        'customer_create' => ['OWNER', 'MANAGER', 'CRM_MANAGER', 'RECEPTION'],
+        'vehicle_create' => ['OWNER', 'MANAGER', 'CRM_MANAGER', 'RECEPTION'],
+        'legacy_draft' => ['OWNER', 'MANAGER', 'CRM_MANAGER'],
+        'legacy_approve' => ['OWNER', 'MANAGER'],
+        'vip_nominate' => ['OWNER', 'MANAGER', 'CRM_MANAGER', 'RECEPTION'],
+        'vip_approve' => ['OWNER', 'MANAGER', 'CRM_MANAGER'],
+        'vip_rules' => ['OWNER', 'MANAGER'],
+    ];
+    $allowed = $matrix[$capability] ?? [];
+    return in_array($role, $allowed, true);
+}
+
+function crm360_hub_layers(): array
+{
+    return [
+        'dashboard' => 'داشبورد',
+        'reception' => 'پرونده‌های پذیرش',
+        'customers' => 'مشتریان و خودروها',
+        'legacy' => 'ورود اطلاعات قدیمی',
+        'vip' => 'VIP و باشگاه مشتریان',
+        'experience' => 'تجربه و پیگیری',
+        'audit' => 'گزارش و Audit',
+    ];
+}
+
+/** Map legacy fine-grained tabs into layered hub + panel. */
+function crm360_resolve_hub_tab(string $rawTab): array
+{
+    $alias = [
+        'vehicles' => ['customers', 'vehicles'],
+        'cases' => ['reception', 'cases'],
+        'documents' => ['reception', 'documents'],
+        'cartable' => ['experience', 'cartable'],
+        'satisfaction' => ['experience', 'satisfaction'],
+        'complaints' => ['experience', 'complaints'],
+        'club' => ['vip', 'club'],
+        'reminders' => ['experience', 'reminders'],
+        'returns' => ['experience', 'returns'],
+        'promotions' => ['experience', 'promotions'],
+        'sms' => ['experience', 'sms'],
+    ];
+    $tab = preg_replace('/[^a-z_]/', '', $rawTab) ?: 'dashboard';
+    $panel = preg_replace('/[^a-z_]/', '', (string)($_GET['panel'] ?? '')) ?: '';
+    if (isset($alias[$tab])) {
+        [$tab, $defaultPanel] = $alias[$tab];
+        if ($panel === '') {
+            $panel = $defaultPanel;
+        }
+    }
+    $layers = crm360_hub_layers();
+    if (!isset($layers[$tab])) {
+        $tab = 'dashboard';
+        $panel = '';
+    }
+    return ['tab' => $tab, 'panel' => $panel];
+}
+
+function crm360_active_vip_rules($conn): array
+{
+    if (!crm360_table_exists($conn, 'crm360_vip_rules')) {
+        return [];
+    }
+    return crm360_rows(
+        $conn,
+        "SELECT * FROM dbo.crm360_vip_rules WHERE is_active=1 AND approval_status=N'APPROVED' AND (effective_to IS NULL OR effective_to >= CONVERT(date, SYSUTCDATETIME())) ORDER BY vip_rule_id"
+    );
+}
+
+function crm360_vip_candidates($conn, int $limit = 50): array
+{
+    if (!crm360_table_exists($conn, 'crm360_customer_profiles')) {
+        return [];
+    }
+    $rules = crm360_active_vip_rules($conn);
+    $visitTh = 4.0;
+    $revTh = 1000000000.0;
+    foreach ($rules as $r) {
+        $type = strtoupper((string)($r['rule_type'] ?? ''));
+        $th = (float)($r['threshold_value'] ?? 0);
+        if ($type === 'VISIT_COUNT' && $th > 0) {
+            $visitTh = $th;
+        }
+        if ($type === 'REVENUE' && $th > 0) {
+            $revTh = $th;
+        }
+    }
+    $sql = 'SELECT TOP ' . (int)$limit . ' c.customer_profile_id, c.full_name, c.mobile, c.vip_level,
+            ISNULL(cl.visit_count,0) AS visit_count, ISNULL(cl.total_revenue_amount,0) AS total_revenue_amount,
+            ISNULL(cl.tier_code,N\'NEW\') AS tier_code
+            FROM dbo.crm360_customer_profiles c
+            LEFT JOIN dbo.crm360_customer_club cl ON cl.customer_profile_id=c.customer_profile_id
+            WHERE UPPER(ISNULL(c.vip_level,N\'NONE\')) NOT IN (N\'VIP\',N\'GOLD\',N\'PLATINUM\')
+              AND (
+                ISNULL(cl.visit_count,0) >= ' . (float)$visitTh . '
+                OR ISNULL(cl.total_revenue_amount,0) >= ' . (float)$revTh . '
+              )
+            ORDER BY ISNULL(cl.visit_count,0) DESC, ISNULL(cl.total_revenue_amount,0) DESC';
+    $rows = crm360_rows($conn, $sql);
+    foreach ($rows as &$row) {
+        $reasons = [];
+        if ((int)($row['visit_count'] ?? 0) >= (int)$visitTh) {
+            $reasons[] = 'مراجعه ≥ ' . (int)$visitTh;
+        }
+        if ((float)($row['total_revenue_amount'] ?? 0) >= $revTh) {
+            $reasons[] = 'درآمد ≥ آستانه';
+        }
+        $row['suggested_reason'] = implode(' / ', $reasons);
+    }
+    unset($row);
+    return $rows;
+}
+
+function crm360_parse_legacy_customer_csv(string $raw): array
+{
+    $lines = preg_split('/\r\n|\r|\n/', trim($raw)) ?: [];
+    $out = [];
+    $rowNo = 0;
+    foreach ($lines as $line) {
+        $line = trim($line);
+        if ($line === '' || str_starts_with($line, '#')) {
+            continue;
+        }
+        $rowNo++;
+        if ($rowNo === 1 && preg_match('/full_name|نام/i', $line)) {
+            continue;
+        }
+        $parts = str_getcsv($line);
+        $name = trim((string)($parts[0] ?? ''));
+        $mobile = trim((string)($parts[1] ?? ''));
+        $type = strtoupper(trim((string)($parts[2] ?? 'PERSON'))) ?: 'PERSON';
+        $out[] = [
+            'row_no' => $rowNo,
+            'full_name' => $name,
+            'mobile' => $mobile,
+            'customer_type' => in_array($type, ['PERSON', 'COMPANY'], true) ? $type : 'PERSON',
+            'raw' => $line,
+        ];
+    }
+    return $out;
+}

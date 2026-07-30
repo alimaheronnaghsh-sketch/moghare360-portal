@@ -125,7 +125,9 @@ body.c360-body{
 body.c360-body{font-size:clamp(12px,.8vw,15px)}
 .c360-head h1{font-size:clamp(22px,2vw,34px)!important}
 .c360-head p,.c360-section-sub,.c360-muted,.c360-hub-meta{font-size:clamp(11px,.7vw,13px)}
-.c360-hub-grid{align-items:stretch}
+.c360-tabs.sticky{position:sticky;top:0;z-index:20;background:var(--c360-bg);padding-top:.5rem;margin-top:-.25rem}
+.c360-layer-title{margin:0 0 1rem;font-size:1.1rem;color:var(--c360-primary);font-weight:600}
+.c360-hub-grid{align-items:stretch;justify-items:stretch}
 .c360-hub-card{height:100%;min-height:112px}
 .c360-hub-go{margin-top:auto}
 .c360-table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}

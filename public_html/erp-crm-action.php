@@ -43,6 +43,9 @@ try {
 try {
     switch ($action) {
         case 'create_customer': {
+            if (!crm360_can('customer_create')) {
+                crm360_redirect($tab, 'err', 'مجوز ثبت مشتری ندارید.');
+            }
             $name = crm360_f('full_name');
             $mobile = crm360_f('mobile');
             if ($name === '') {
@@ -54,14 +57,16 @@ try {
             }
             $ok = crm360_exec(
                 $conn,
-                'INSERT INTO dbo.crm360_customer_profiles (full_name, mobile, national_id, customer_type, consent_sms, consent_marketing, source_channel, notes, created_by) VALUES (?,?,?,?,?,?,?,?,?)',
+                'INSERT INTO dbo.crm360_customer_profiles (full_name, mobile, national_id, customer_type, preferred_contact_channel, consent_sms, consent_marketing, consent_service_reminder, source_channel, notes, created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
                 [
                     $name,
                     $mobile !== '' ? $mobile : null,
                     crm360_f('national_id') ?: null,
                     crm360_f('customer_type', 'PERSON') ?: 'PERSON',
+                    crm360_f('preferred_contact_channel') ?: null,
                     crm360_f('consent_sms') === '1' ? 1 : 0,
                     crm360_f('consent_marketing') === '1' ? 1 : 0,
+                    crm360_f('consent_service_reminder') === '1' ? 1 : 0,
                     crm360_f('source_channel') ?: null,
                     crm360_f('notes') ?: null,
                     $actor,
@@ -72,7 +77,7 @@ try {
             }
             $id = (string)crm360_scalar($conn, 'SELECT MAX(customer_profile_id) FROM dbo.crm360_customer_profiles WHERE full_name=?', [$name]);
             crm360_ensure_club_row($conn, (int)$id);
-            crm360_audit($conn, 'CREATE', 'crm360_customer_profiles', $id, null, ['full_name' => $name, 'mobile' => $mobile]);
+            crm360_audit($conn, 'CREATE', 'crm360_customer_profiles', $id, null, ['full_name' => $name, 'mobile' => $mobile, 'source_channel' => crm360_f('source_channel')]);
             $msg = 'مشتری ثبت شد.';
             if ($dup) {
                 $msg = 'هشدار: موبایل تکراری (' . ($dup['full_name'] ?? '') . ') — مشتری جدید با همان موبایل ثبت شد.';
@@ -82,27 +87,37 @@ try {
         }
 
         case 'create_vehicle': {
+            if (!crm360_can('vehicle_create')) {
+                crm360_redirect($tab, 'err', 'مجوز ثبت خودرو ندارید.');
+            }
             $custId = crm360_fi('customer_profile_id');
             $brand = crm360_f('brand');
             $model = crm360_f('model');
+            $plate = crm360_f('plate_no');
+            $vin = crm360_f('vin');
             if ($custId <= 0 || $brand === '' || $model === '') {
                 crm360_redirect($tab, 'err', 'مشتری، برند و مدل الزامی است.');
+            }
+            if ($plate === '' && $vin === '') {
+                crm360_redirect($tab, 'err', 'پلاک یا VIN الزامی است.');
             }
             if (!in_array($brand, crm360_brands(), true)) {
                 crm360_redirect($tab, 'err', 'برند مجاز نیست.');
             }
             $ok = crm360_exec(
                 $conn,
-                'INSERT INTO dbo.crm360_vehicle_profiles (customer_profile_id, plate_no, vin, brand, model, model_year, color, mileage, notes, created_by) VALUES (?,?,?,?,?,?,?,?,?,?)',
+                'INSERT INTO dbo.crm360_vehicle_profiles (customer_profile_id, plate_no, vin, brand, model, model_year, color, mileage, service_interval_km, service_interval_months, notes, created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
                 [
                     $custId,
-                    crm360_f('plate_no') ?: null,
-                    crm360_f('vin') ?: null,
+                    $plate !== '' ? $plate : null,
+                    $vin !== '' ? $vin : null,
                     $brand,
                     $model,
                     crm360_fi('model_year') ?: null,
                     crm360_f('color') ?: null,
                     crm360_fi('mileage') ?: null,
+                    crm360_fi('service_interval_km') ?: null,
+                    crm360_fi('service_interval_months') ?: null,
                     crm360_f('notes') ?: null,
                     $actor,
                 ]
@@ -674,6 +689,312 @@ try {
             crm360_exec($conn, "UPDATE dbo.crm360_sms_campaigns SET campaign_status=N'SENT_MANUAL', send_mode=N'MANUAL_MARK', updated_at=SYSUTCDATETIME() WHERE campaign_id=?", [$campaignId]);
             crm360_audit($conn, 'UPDATE', 'crm360_sms_campaigns', (string)$campaignId, null, ['sent' => 'manual', 'note' => 'NO_LIVE_SMS']);
             crm360_redirect($tab, 'ok', 'ارسال دستی ثبت شد (بدون SMS زنده).');
+        }
+
+        case 'legacy_create_customer': {
+            if (!crm360_can('legacy_draft')) {
+                crm360_redirect($tab, 'err', 'مجوز ثبت مشتری قدیمی ندارید.');
+            }
+            $_POST['source_channel'] = 'LEGACY_MANUAL';
+            $_POST['action'] = 'create_customer';
+            // fall through handled by re-entry via recursive dispatch avoided — inline:
+            $name = crm360_f('full_name');
+            $mobile = crm360_f('mobile');
+            if ($name === '') {
+                crm360_redirect($tab, 'err', 'نام مشتری الزامی است.');
+            }
+            $dup = $mobile !== '' ? crm360_one($conn, 'SELECT customer_profile_id, full_name FROM dbo.crm360_customer_profiles WHERE mobile=?', [$mobile]) : null;
+            $ok = crm360_exec(
+                $conn,
+                'INSERT INTO dbo.crm360_customer_profiles (full_name, mobile, national_id, customer_type, preferred_contact_channel, consent_sms, consent_marketing, consent_service_reminder, source_channel, notes, created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
+                [
+                    $name,
+                    $mobile !== '' ? $mobile : null,
+                    crm360_f('national_id') ?: null,
+                    crm360_f('customer_type', 'PERSON') ?: 'PERSON',
+                    crm360_f('preferred_contact_channel') ?: null,
+                    crm360_f('consent_sms') === '1' ? 1 : 0,
+                    crm360_f('consent_marketing') === '1' ? 1 : 0,
+                    crm360_f('consent_service_reminder') === '1' ? 1 : 0,
+                    'LEGACY_MANUAL',
+                    crm360_f('notes') ?: null,
+                    $actor,
+                ]
+            );
+            if (!$ok) {
+                crm360_redirect($tab, 'err', 'ثبت مشتری قدیمی ناموفق بود.');
+            }
+            $id = (string)crm360_scalar($conn, 'SELECT MAX(customer_profile_id) FROM dbo.crm360_customer_profiles WHERE full_name=?', [$name]);
+            crm360_ensure_club_row($conn, (int)$id);
+            crm360_audit($conn, 'CREATE', 'crm360_customer_profiles', $id, null, ['legacy' => true, 'mobile' => $mobile]);
+            if ($dup) {
+                crm360_redirect($tab, 'warn', 'هشدار موبایل تکراری — مشتری قدیمی ثبت شد.');
+            }
+            crm360_redirect($tab, 'ok', 'مشتری قدیمی ثبت شد.');
+        }
+
+        case 'legacy_create_case': {
+            if (!crm360_can('legacy_draft')) {
+                crm360_redirect($tab, 'err', 'مجوز ثبت پرونده قدیمی ندارید.');
+            }
+            $custId = crm360_fi('customer_profile_id');
+            $vehId = crm360_fi('vehicle_profile_id');
+            if ($custId <= 0 || $vehId <= 0) {
+                crm360_redirect($tab, 'err', 'مشتری و خودرو الزامی است.');
+            }
+            $caseCode = crm360_next_code($conn, 'LG', 'crm360_reception_cases', 'case_id');
+            $sourceRef = crm360_f('source_ref_text');
+            $ok = crm360_exec(
+                $conn,
+                'INSERT INTO dbo.crm360_reception_cases (case_code, customer_profile_id, vehicle_profile_id, case_type, service_type, reception_source, responsible_staff, case_status, notes, source_ref_text, created_by) VALUES (?,?,?,?,?,?,?,N\'CLOSED\',?,?,?)',
+                [
+                    $caseCode,
+                    $custId,
+                    $vehId,
+                    'LEGACY',
+                    crm360_f('service_type') ?: 'سرویس قدیمی',
+                    'LEGACY_MANUAL',
+                    $actor,
+                    crm360_f('notes') ?: null,
+                    $sourceRef !== '' ? $sourceRef : null,
+                    $actor,
+                ]
+            );
+            if (!$ok) {
+                crm360_redirect($tab, 'err', 'ثبت پرونده قدیمی ناموفق بود.');
+            }
+            $caseId = (int)crm360_scalar($conn, 'SELECT case_id FROM dbo.crm360_reception_cases WHERE case_code=?', [$caseCode]);
+            crm360_audit($conn, 'CREATE', 'crm360_reception_cases', (string)$caseId, null, ['legacy' => true, 'case_code' => $caseCode, 'source_ref_text' => $sourceRef]);
+            crm360_redirect($tab, 'ok', 'پرونده قدیمی ' . $caseCode . ' ثبت شد.');
+        }
+
+        case 'legacy_batch_draft': {
+            if (!crm360_can('legacy_draft')) {
+                crm360_redirect($tab, 'err', 'مجوز ورود گروهی ندارید.');
+            }
+            if (!crm360_table_exists($conn, 'crm360_import_batches')) {
+                crm360_redirect($tab, 'err', 'جداول ورود اطلاعات آماده نیست.');
+            }
+            $paste = crm360_f('paste_csv');
+            $rows = crm360_parse_legacy_customer_csv($paste);
+            if ($rows === []) {
+                crm360_redirect($tab, 'err', 'هیچ ردیفی برای ورود یافت نشد.');
+            }
+            $batchCode = crm360_next_code($conn, 'IMP', 'crm360_import_batches', 'import_batch_id');
+            $ok = crm360_exec(
+                $conn,
+                'INSERT INTO dbo.crm360_import_batches (batch_code, import_type, source_name, import_status, total_rows, created_by) VALUES (?,?,?,N\'DRAFT\',?,?)',
+                [$batchCode, 'CUSTOMER_LEGACY', crm360_f('source_name', 'CSV_PASTE') ?: 'CSV_PASTE', count($rows), $actor]
+            );
+            if (!$ok) {
+                crm360_redirect($tab, 'err', 'ایجاد دسته ورود ناموفق بود.');
+            }
+            $batchId = (int)crm360_scalar($conn, 'SELECT import_batch_id FROM dbo.crm360_import_batches WHERE batch_code=?', [$batchCode]);
+            foreach ($rows as $r) {
+                crm360_exec(
+                    $conn,
+                    'INSERT INTO dbo.crm360_import_rows (import_batch_id, row_no, raw_json, validation_status) VALUES (?,?,?,N\'PENDING\')',
+                    [$batchId, (int)$r['row_no'], json_encode($r, JSON_UNESCAPED_UNICODE)]
+                );
+            }
+            crm360_audit($conn, 'CREATE', 'crm360_import_batches', (string)$batchId, null, ['batch_code' => $batchCode, 'rows' => count($rows)]);
+            crm360_redirect($tab, 'ok', 'پیش‌نویس ورود ' . $batchCode . ' ایجاد شد. اعتبارسنجی را اجرا کنید.');
+        }
+
+        case 'legacy_batch_validate': {
+            if (!crm360_can('legacy_draft')) {
+                crm360_redirect($tab, 'err', 'مجوز اعتبارسنجی ندارید.');
+            }
+            $batchId = crm360_fi('import_batch_id');
+            $batch = crm360_one($conn, 'SELECT * FROM dbo.crm360_import_batches WHERE import_batch_id=?', [$batchId]);
+            if (!$batch) {
+                crm360_redirect($tab, 'err', 'دسته ورود یافت نشد.');
+            }
+            $rows = crm360_rows($conn, 'SELECT * FROM dbo.crm360_import_rows WHERE import_batch_id=? ORDER BY row_no', [$batchId]);
+            $valid = $invalid = $dup = 0;
+            foreach ($rows as $row) {
+                $raw = json_decode((string)($row['raw_json'] ?? ''), true) ?: [];
+                $name = trim((string)($raw['full_name'] ?? ''));
+                $mobile = trim((string)($raw['mobile'] ?? ''));
+                $status = 'VALID';
+                $msg = null;
+                $norm = $raw;
+                if ($name === '') {
+                    $status = 'INVALID';
+                    $msg = 'نام خالی است';
+                    $invalid++;
+                } elseif ($mobile !== '') {
+                    $exists = crm360_one($conn, 'SELECT customer_profile_id FROM dbo.crm360_customer_profiles WHERE mobile=?', [$mobile]);
+                    if ($exists) {
+                        $status = 'DUPLICATE';
+                        $msg = 'موبایل تکراری — وارد نمی‌شود مگر رد دستی';
+                        $dup++;
+                    } else {
+                        $valid++;
+                    }
+                } else {
+                    $valid++;
+                }
+                crm360_exec(
+                    $conn,
+                    'UPDATE dbo.crm360_import_rows SET normalized_json=?, validation_status=?, validation_message=? WHERE import_row_id=?',
+                    [json_encode($norm, JSON_UNESCAPED_UNICODE), $status, $msg, (int)$row['import_row_id']]
+                );
+            }
+            crm360_exec(
+                $conn,
+                'UPDATE dbo.crm360_import_batches SET import_status=N\'VALIDATED\', valid_rows=?, invalid_rows=?, duplicate_rows=?, updated_at=SYSUTCDATETIME() WHERE import_batch_id=?',
+                [$valid, $invalid, $dup, $batchId]
+            );
+            crm360_audit($conn, 'VALIDATE', 'crm360_import_batches', (string)$batchId, null, compact('valid', 'invalid', 'dup'));
+            crm360_redirect($tab, 'ok', "اعتبارسنجی انجام شد — معتبر: $valid | نامعتبر: $invalid | تکراری: $dup");
+        }
+
+        case 'legacy_batch_import': {
+            if (!crm360_can('legacy_approve')) {
+                crm360_redirect($tab, 'err', 'فقط مالک/مدیر می‌تواند ورود نهایی را تأیید کند.');
+            }
+            $batchId = crm360_fi('import_batch_id');
+            $batch = crm360_one($conn, 'SELECT * FROM dbo.crm360_import_batches WHERE import_batch_id=?', [$batchId]);
+            if (!$batch || !in_array((string)($batch['import_status'] ?? ''), ['VALIDATED', 'APPROVED'], true)) {
+                crm360_redirect($tab, 'err', 'ابتدا اعتبارسنجی انجام شود.');
+            }
+            $rows = crm360_rows($conn, "SELECT * FROM dbo.crm360_import_rows WHERE import_batch_id=? AND validation_status=N'VALID' ORDER BY row_no", [$batchId]);
+            $imported = 0;
+            foreach ($rows as $row) {
+                $norm = json_decode((string)($row['normalized_json'] ?? $row['raw_json'] ?? ''), true) ?: [];
+                $name = trim((string)($norm['full_name'] ?? ''));
+                $mobile = trim((string)($norm['mobile'] ?? ''));
+                if ($name === '') {
+                    continue;
+                }
+                if ($mobile !== '') {
+                    $exists = crm360_one($conn, 'SELECT customer_profile_id FROM dbo.crm360_customer_profiles WHERE mobile=?', [$mobile]);
+                    if ($exists) {
+                        crm360_exec($conn, "UPDATE dbo.crm360_import_rows SET validation_status=N'SKIPPED', validation_message=N'رد خودکار تکراری' WHERE import_row_id=?", [(int)$row['import_row_id']]);
+                        continue;
+                    }
+                }
+                $ok = crm360_exec(
+                    $conn,
+                    'INSERT INTO dbo.crm360_customer_profiles (full_name, mobile, customer_type, source_channel, notes, created_by) VALUES (?,?,?,?,?,?)',
+                    [
+                        $name,
+                        $mobile !== '' ? $mobile : null,
+                        (string)($norm['customer_type'] ?? 'PERSON'),
+                        'LEGACY_BATCH',
+                        'imported batch ' . (string)$batch['batch_code'],
+                        $actor,
+                    ]
+                );
+                if (!$ok) {
+                    continue;
+                }
+                $cid = (int)crm360_scalar($conn, 'SELECT MAX(customer_profile_id) FROM dbo.crm360_customer_profiles WHERE full_name=?', [$name]);
+                crm360_ensure_club_row($conn, $cid);
+                crm360_exec(
+                    $conn,
+                    "UPDATE dbo.crm360_import_rows SET validation_status=N'IMPORTED', created_customer_profile_id=? WHERE import_row_id=?",
+                    [$cid, (int)$row['import_row_id']]
+                );
+                crm360_audit($conn, 'IMPORT', 'crm360_customer_profiles', (string)$cid, null, ['batch_id' => $batchId]);
+                $imported++;
+            }
+            crm360_exec(
+                $conn,
+                'UPDATE dbo.crm360_import_batches SET import_status=N\'IMPORTED\', approved_by=?, approved_at=SYSUTCDATETIME(), updated_at=SYSUTCDATETIME() WHERE import_batch_id=?',
+                [$actor, $batchId]
+            );
+            crm360_audit($conn, 'IMPORT', 'crm360_import_batches', (string)$batchId, null, ['imported' => $imported], null, $actor);
+            crm360_redirect($tab, 'ok', "ورود نهایی انجام شد — $imported مشتری.");
+        }
+
+        case 'vip_nominate': {
+            if (!crm360_can('vip_nominate')) {
+                crm360_redirect($tab, 'err', 'مجوز معرفی VIP ندارید.');
+            }
+            $custId = crm360_fi('customer_profile_id');
+            $reason = crm360_f('reason');
+            $tier = strtoupper(crm360_f('requested_tier', 'VIP') ?: 'VIP');
+            if ($custId <= 0 || $reason === '') {
+                crm360_redirect($tab, 'err', 'مشتری و دلیل الزامی است.');
+            }
+            if (!crm360_table_exists($conn, 'crm360_vip_requests')) {
+                crm360_redirect($tab, 'err', 'جداول VIP آماده نیست.');
+            }
+            $ok = crm360_exec(
+                $conn,
+                'INSERT INTO dbo.crm360_vip_requests (customer_profile_id, request_type, requested_tier, reason, request_status, requested_by) VALUES (?,?,?,?,N\'SUBMITTED\',?)',
+                [$custId, 'MANUAL_NOMINATION', $tier, $reason, $actor]
+            );
+            if (!$ok) {
+                crm360_redirect($tab, 'err', 'ثبت معرفی VIP ناموفق بود.');
+            }
+            $rid = (string)crm360_scalar($conn, 'SELECT MAX(vip_request_id) FROM dbo.crm360_vip_requests WHERE customer_profile_id=?', [$custId]);
+            crm360_audit($conn, 'NOMINATE', 'crm360_vip_requests', $rid, null, ['customer_profile_id' => $custId, 'tier' => $tier]);
+            crm360_redirect($tab, 'ok', 'معرفی VIP ثبت شد و منتظر تأیید است.');
+        }
+
+        case 'vip_review': {
+            if (!crm360_can('vip_approve')) {
+                crm360_redirect($tab, 'err', 'فقط مالک/مدیر/مدیر CRM می‌تواند VIP را تأیید کند.');
+            }
+            $reqId = crm360_fi('vip_request_id');
+            $decision = strtoupper(crm360_f('decision'));
+            $note = crm360_f('review_note');
+            $req = crm360_one($conn, 'SELECT * FROM dbo.crm360_vip_requests WHERE vip_request_id=?', [$reqId]);
+            if (!$req || (string)($req['request_status'] ?? '') !== 'SUBMITTED') {
+                crm360_redirect($tab, 'err', 'درخواست VIP معتبر نیست.');
+            }
+            if (!in_array($decision, ['APPROVED', 'REJECTED'], true)) {
+                crm360_redirect($tab, 'err', 'تصمیم نامعتبر است.');
+            }
+            crm360_exec(
+                $conn,
+                'UPDATE dbo.crm360_vip_requests SET request_status=?, reviewed_by=?, reviewed_at=SYSUTCDATETIME(), review_note=?, updated_at=SYSUTCDATETIME() WHERE vip_request_id=?',
+                [$decision, $actor, $note !== '' ? $note : null, $reqId]
+            );
+            if ($decision === 'APPROVED') {
+                $custId = (int)$req['customer_profile_id'];
+                $tier = (string)($req['requested_tier'] ?? 'VIP');
+                $before = crm360_one($conn, 'SELECT vip_level FROM dbo.crm360_customer_profiles WHERE customer_profile_id=?', [$custId]);
+                crm360_exec($conn, 'UPDATE dbo.crm360_customer_profiles SET vip_level=?, updated_at=SYSUTCDATETIME() WHERE customer_profile_id=?', [$tier, $custId]);
+                crm360_ensure_club_row($conn, $custId);
+                $clubTier = in_array($tier, ['GOLD', 'PLATINUM', 'VIP'], true) ? ($tier === 'VIP' ? 'GOLD' : $tier) : 'GOLD';
+                crm360_exec($conn, 'UPDATE dbo.crm360_customer_club SET tier_code=?, updated_at=SYSUTCDATETIME() WHERE customer_profile_id=?', [$clubTier, $custId]);
+                crm360_audit($conn, 'APPROVE', 'crm360_vip_requests', (string)$reqId, $before, ['vip_level' => $tier, 'club_tier' => $clubTier], $note, $actor);
+            } else {
+                crm360_audit($conn, 'REJECT', 'crm360_vip_requests', (string)$reqId, $req, ['decision' => 'REJECTED'], $note, $actor);
+            }
+            crm360_redirect($tab, 'ok', $decision === 'APPROVED' ? 'VIP تأیید و اعمال شد.' : 'درخواست VIP رد شد.');
+        }
+
+        case 'vip_rule_update': {
+            if (!crm360_can('vip_rules')) {
+                crm360_redirect($tab, 'err', 'مجوز تنظیم قوانین VIP ندارید.');
+            }
+            $ruleId = crm360_fi('vip_rule_id');
+            $before = crm360_one($conn, 'SELECT * FROM dbo.crm360_vip_rules WHERE vip_rule_id=?', [$ruleId]);
+            if (!$before) {
+                crm360_redirect($tab, 'err', 'قانون یافت نشد.');
+            }
+            $active = crm360_f('is_active') === '1' ? 1 : 0;
+            $th = crm360_f('threshold_value');
+            $ok = crm360_exec(
+                $conn,
+                'UPDATE dbo.crm360_vip_rules SET rule_title=?, threshold_value=?, is_active=?, updated_at=SYSUTCDATETIME() WHERE vip_rule_id=?',
+                [
+                    crm360_f('rule_title') ?: (string)$before['rule_title'],
+                    $th !== '' ? (float)$th : null,
+                    $active,
+                    $ruleId,
+                ]
+            );
+            if (!$ok) {
+                crm360_redirect($tab, 'err', 'به‌روزرسانی قانون ناموفق بود.');
+            }
+            crm360_audit($conn, 'UPDATE', 'crm360_vip_rules', (string)$ruleId, $before, ['is_active' => $active, 'threshold_value' => $th], null, $actor);
+            crm360_redirect($tab, 'ok', 'قانون VIP به‌روز شد.');
         }
 
         default:
