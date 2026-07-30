@@ -24,12 +24,15 @@ function fin360_post_document($conn, int $documentId, string $actor): array
     $docType = (string)$doc['document_type'];
     $eventMap = [
         'CUSTOMER_RECEIPT' => 'CUSTOMER_RECEIPT',
+        'GENERAL_RECEIPT' => 'CUSTOMER_RECEIPT',
         'CUSTOMER_PREPAYMENT' => 'CUSTOMER_PREPAYMENT',
         'SERVICE_INVOICE' => 'SERVICE_INVOICE',
         'PARTS_INVOICE' => 'PARTS_INVOICE',
         'PURCHASE_INVOICE' => 'PURCHASE_INVOICE',
         'EXTERNAL_SERVICE_INVOICE' => 'PURCHASE_INVOICE',
         'PAYMENT' => 'SUPPLIER_PAYMENT',
+        'SUPPLIER_PAYMENT' => 'SUPPLIER_PAYMENT',
+        'GENERAL_PAYMENT' => 'SUPPLIER_PAYMENT',
         'JOBCARD_SETTLEMENT' => 'JOBCARD_SETTLEMENT',
     ];
     $event = $eventMap[$docType] ?? $docType;
@@ -100,11 +103,14 @@ function fin360_create_demo_posting_rules($conn, string $actor): int
     // Seed chart: 1000 cash, 1100 AR, 2000 AP, 2100 customer prepay, 4000 svc rev, 4100 parts rev, 5000 parts COGS
     $map = [
         ['CUSTOMER_RECEIPT', 'CUSTOMER_RECEIPT', '1000', '1100'],
+        ['GENERAL_RECEIPT', 'CUSTOMER_RECEIPT', '1000', '1100'],
         ['CUSTOMER_PREPAYMENT', 'CUSTOMER_PREPAYMENT', '1000', '2100'],
         ['SERVICE_INVOICE', 'SERVICE_INVOICE', '1100', '4000'],
         ['PARTS_INVOICE', 'PARTS_INVOICE', '1100', '4100'],
         ['PURCHASE_INVOICE', 'PURCHASE_INVOICE', '5000', '2000'],
         ['PAYMENT', 'SUPPLIER_PAYMENT', '2000', '1000'],
+        ['SUPPLIER_PAYMENT', 'SUPPLIER_PAYMENT', '2000', '1000'],
+        ['GENERAL_PAYMENT', 'SUPPLIER_PAYMENT', '2000', '1000'],
         ['JOBCARD_SETTLEMENT', 'JOBCARD_SETTLEMENT', '1100', '4000'],
     ];
     $created = 0;

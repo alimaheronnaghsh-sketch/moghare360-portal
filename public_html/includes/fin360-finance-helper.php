@@ -71,9 +71,178 @@ function fin360_h(?string $v): string
     return htmlspecialchars((string)$v, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 }
 
+function fin360_to_english_digits(string $input): string
+{
+    $persian = ['۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹'];
+    $arabic = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
+    $en = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
+    $s = str_replace($persian, $en, $input);
+    return str_replace($arabic, $en, $s);
+}
+
+function fin360_parse_money($input): float
+{
+    $s = fin360_to_english_digits(trim((string)$input));
+    $s = str_replace([' ', ',', '،', '٬'], '', $s);
+    if ($s === '' || $s === '-') {
+        return 0.0;
+    }
+    return (float)$s;
+}
+
+function fin360_format_money($amount, int $decimals = 0): string
+{
+    return number_format((float)$amount, $decimals, '.', ',');
+}
+
 function fin360_money($n): string
 {
-    return number_format((float)$n, 0, '.', ',');
+    return fin360_format_money($n, 0);
+}
+
+function fin360_money_input(string $name, $value = '', bool $required = false, string $extraAttrs = ''): string
+{
+    $num = (float)$value;
+    $val = $num != 0.0 ? fin360_format_money($num) : '';
+    $req = $required ? ' required' : '';
+    return '<input class="f360-money-input" name="' . fin360_h($name) . '" type="text" inputmode="decimal" autocomplete="off" value="' . fin360_h($val) . '"' . $req . ($extraAttrs !== '' ? ' ' . $extraAttrs : '') . ' placeholder="0">';
+}
+
+function fin360_party_types(): array
+{
+    return [
+        'CUSTOMER', 'SUPPLIER', 'CONTRACTOR', 'EMPLOYEE', 'OWNER', 'PARTNER', 'SHAREHOLDER',
+        'INSURANCE', 'BANK', 'GOVERNMENT', 'TAX_ORG', 'SOCIAL_SECURITY', 'BROKER', 'COURIER',
+        'SERVICE_PROVIDER', 'EXPENSE_PERSON', 'THIRD_PARTY', 'WALK_IN', 'OTHER',
+    ];
+}
+
+function fin360_party_type_label(string $type): string
+{
+    $map = [
+        'CUSTOMER' => 'مشتری',
+        'SUPPLIER' => 'تأمین‌کننده',
+        'CONTRACTOR' => 'پیمانکار',
+        'EMPLOYEE' => 'کارمند',
+        'OWNER' => 'مالک',
+        'PARTNER' => 'شریک',
+        'SHAREHOLDER' => 'سهامدار',
+        'INSURANCE' => 'بیمه',
+        'BANK' => 'بانک',
+        'GOVERNMENT' => 'دولت',
+        'TAX_ORG' => 'اداره مالیات',
+        'SOCIAL_SECURITY' => 'تأمین اجتماعی',
+        'BROKER' => 'کارگزار',
+        'COURIER' => 'پیک',
+        'SERVICE_PROVIDER' => 'خدمات‌دهنده',
+        'EXPENSE_PERSON' => 'شخص هزینه',
+        'THIRD_PARTY' => 'شخص ثالث',
+        'WALK_IN' => 'مراجع حضوری',
+        'OTHER' => 'سایر',
+    ];
+    return $map[strtoupper($type)] ?? $type;
+}
+
+function fin360_party_type_options(string $selected = ''): string
+{
+    $html = '';
+    foreach (fin360_party_types() as $t) {
+        $sel = strtoupper($selected) === $t ? ' selected' : '';
+        $html .= '<option value="' . fin360_h($t) . '"' . $sel . '>' . fin360_h(fin360_party_type_label($t)) . ' (' . fin360_h($t) . ')</option>';
+    }
+    return $html;
+}
+
+function fin360_receipt_document_type(string $partyType): string
+{
+    return strtoupper($partyType) === 'CUSTOMER' ? 'CUSTOMER_RECEIPT' : 'GENERAL_RECEIPT';
+}
+
+function fin360_payment_document_type(string $partyType): string
+{
+    return strtoupper($partyType) === 'SUPPLIER' ? 'SUPPLIER_PAYMENT' : 'GENERAL_PAYMENT';
+}
+
+function fin360_ap_party_types(): array
+{
+    return ['SUPPLIER', 'CONTRACTOR', 'EMPLOYEE', 'OWNER', 'PARTNER', 'TAX_ORG', 'SOCIAL_SECURITY', 'BANK', 'BROKER', 'COURIER', 'SERVICE_PROVIDER', 'EXPENSE_PERSON', 'GOVERNMENT', 'OTHER'];
+}
+
+/**
+ * Resolve party from existing id or quick-create fields.
+ * @return array{party_id:?int,party_type:?string,display_name:?string,error:?string}
+ */
+function fin360_resolve_party($conn, array $post, string $direction = 'IN'): array
+{
+    $idKeys = $direction === 'IN'
+        ? ['payer_party_id', 'party_id']
+        : ['payee_party_id', 'party_id'];
+    $typeKeys = $direction === 'IN'
+        ? ['payer_type', 'party_type']
+        : ['payee_type', 'party_type'];
+    $nameKeys = $direction === 'IN'
+        ? ['payer_display_name', 'display_name']
+        : ['payee_display_name', 'display_name'];
+
+    $partyId = 0;
+    foreach ($idKeys as $k) {
+        if (!empty($post[$k])) {
+            $partyId = (int)$post[$k];
+            break;
+        }
+    }
+    if ($partyId > 0) {
+        $p = fin360_one($conn, 'SELECT party_id, party_type, display_name FROM dbo.fin360_parties WHERE party_id=? AND is_active=1', [$partyId]);
+        if ($p) {
+            return [
+                'party_id' => (int)$p['party_id'],
+                'party_type' => (string)$p['party_type'],
+                'display_name' => (string)$p['display_name'],
+                'error' => null,
+            ];
+        }
+        return ['party_id' => null, 'party_type' => null, 'display_name' => null, 'error' => 'طرف حساب انتخاب‌شده یافت نشد.'];
+    }
+
+    $type = 'OTHER';
+    foreach ($typeKeys as $k) {
+        if (!empty($post[$k])) {
+            $type = strtoupper(trim((string)$post[$k]));
+            break;
+        }
+    }
+    $name = '';
+    foreach ($nameKeys as $k) {
+        if (!empty($post[$k])) {
+            $name = trim((string)$post[$k]);
+            break;
+        }
+    }
+    if ($name === '') {
+        return ['party_id' => null, 'party_type' => null, 'display_name' => null, 'error' => 'پرداخت‌کننده/دریافت‌کننده یا طرف حساب مالی الزامی است.'];
+    }
+    if (!in_array($type, fin360_party_types(), true)) {
+        $type = 'OTHER';
+    }
+    $mobile = trim((string)($post['mobile'] ?? $post['payer_mobile'] ?? $post['payee_mobile'] ?? ''));
+    $sourceRef = trim((string)($post['source_ref_text'] ?? ''));
+    $sourceType = trim((string)($post['source_type'] ?? 'MANUAL'));
+    $ok = fin360_exec(
+        $conn,
+        'INSERT INTO dbo.fin360_parties (party_type, display_name, mobile, source_type, source_ref_text, is_active) VALUES (?,?,?,?,?,1)',
+        [$type, $name, $mobile !== '' ? $mobile : null, $sourceType !== '' ? $sourceType : null, $sourceRef !== '' ? $sourceRef : null]
+    );
+    if (!$ok) {
+        return ['party_id' => null, 'party_type' => null, 'display_name' => null, 'error' => 'ایجاد طرف حساب مالی ناموفق بود.'];
+    }
+    $newId = (int)fin360_scalar($conn, 'SELECT MAX(party_id) FROM dbo.fin360_parties WHERE display_name=? AND party_type=?', [$name, $type]);
+    fin360_audit($conn, 'CREATE', 'fin360_parties', (string)$newId, null, ['name' => $name, 'type' => $type, 'quick' => true]);
+    return ['party_id' => $newId, 'party_type' => $type, 'display_name' => $name, 'error' => null];
+}
+
+function fin360_counterparty_role_label(string $direction): string
+{
+    return $direction === 'IN' ? 'پرداخت‌کننده' : 'دریافت‌کننده';
 }
 
 function fin360_actor(): array

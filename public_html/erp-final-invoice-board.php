@@ -15,7 +15,7 @@ $devMode = $actorInfo['dev_mode'];
 $tabs = [
     'dashboard' => 'داشبورد مالی',
     'settlement' => 'تسویه JobCard',
-    'receipts' => 'دریافت مشتری',
+    'receipts' => 'دریافت‌ها',
     'prepayments' => 'پیش‌دریافت و پیش‌پرداخت',
     'invoices' => 'فاکتور خدمات',
     'parts' => 'فاکتور قطعات',
@@ -68,7 +68,7 @@ if ($dbOk && $conn) {
     $kpi['out_today'] = (float)(fin360_scalar($conn, "SELECT ISNULL(SUM(amount),0) FROM dbo.fin360_payments WHERE payment_direction='OUT' AND payment_date=CAST(GETDATE() AS DATE) AND status_code NOT IN ('CANCELLED','REVERSED')") ?? 0);
     $kpi['net_today'] = $kpi['in_today'] - $kpi['out_today'];
     $kpi['ar_open'] = (float)(fin360_scalar($conn, "SELECT ISNULL(SUM(remaining_amount),0) FROM dbo.fin360_documents WHERE document_type IN ('SERVICE_INVOICE','PARTS_INVOICE','JOBCARD_SETTLEMENT') AND document_status NOT IN ('CANCELLED','REVERSED','SETTLED','CLOSED') AND remaining_amount>0") ?? 0);
-    $kpi['ap_open'] = (float)(fin360_scalar($conn, "SELECT ISNULL(SUM(remaining_amount),0) FROM dbo.fin360_documents WHERE document_type IN ('PURCHASE_INVOICE','EXTERNAL_SERVICE_INVOICE') AND document_status NOT IN ('CANCELLED','REVERSED','SETTLED','CLOSED') AND remaining_amount>0") ?? 0);
+    $kpi['ap_open'] = (float)(fin360_scalar($conn, "SELECT ISNULL(SUM(d.remaining_amount),0) FROM dbo.fin360_documents d LEFT JOIN dbo.fin360_parties p ON p.party_id=d.party_id WHERE d.document_type IN ('PURCHASE_INVOICE','EXTERNAL_SERVICE_INVOICE','EXPENSE') AND d.document_status NOT IN ('CANCELLED','REVERSED','SETTLED','CLOSED') AND d.remaining_amount>0 AND (p.party_type IS NULL OR p.party_type <> 'CUSTOMER')") ?? 0);
     $kpi['jc_ready'] = (int)(fin360_scalar($conn, "SELECT COUNT(*) FROM dbo.fin360_jobcard_settlements WHERE settlement_status='READY_FOR_SETTLEMENT'") ?? 0);
     $kpi['jc_open'] = (int)(fin360_scalar($conn, "SELECT COUNT(*) FROM dbo.fin360_jobcard_settlements WHERE settlement_status IN ('PARTIALLY_SETTLED','READY_FOR_SETTLEMENT','NOT_READY')") ?? 0);
     $kpi['svc_sales'] = (float)(fin360_scalar($conn, "SELECT ISNULL(SUM(total_amount),0) FROM dbo.fin360_documents WHERE document_type='SERVICE_INVOICE' AND document_status NOT IN ('CANCELLED','REVERSED')") ?? 0);
@@ -83,9 +83,9 @@ if ($dbOk && $conn) {
 
     $parties = fin360_rows($conn, 'SELECT TOP 200 * FROM dbo.fin360_parties WHERE is_active=1 ORDER BY party_id DESC');
     $cashAccounts = fin360_rows($conn, 'SELECT * FROM dbo.fin360_cash_accounts WHERE is_active=1 ORDER BY cash_account_id');
-    $docs = fin360_rows($conn, 'SELECT TOP 100 d.*, p.display_name FROM dbo.fin360_documents d LEFT JOIN dbo.fin360_parties p ON p.party_id=d.party_id ORDER BY d.document_id DESC');
-    $settlements = fin360_rows($conn, 'SELECT TOP 50 s.*, p.display_name FROM dbo.fin360_jobcard_settlements s LEFT JOIN dbo.fin360_parties p ON p.party_id=s.customer_party_id ORDER BY s.settlement_id DESC');
-    $payments = fin360_rows($conn, 'SELECT TOP 50 pay.*, p.display_name, c.account_title FROM dbo.fin360_payments pay LEFT JOIN dbo.fin360_parties p ON p.party_id=pay.party_id LEFT JOIN dbo.fin360_cash_accounts c ON c.cash_account_id=pay.cash_account_id ORDER BY pay.payment_id DESC');
+    $docs = fin360_rows($conn, 'SELECT TOP 100 d.*, p.display_name, p.party_type FROM dbo.fin360_documents d LEFT JOIN dbo.fin360_parties p ON p.party_id=d.party_id ORDER BY d.document_id DESC');
+    $settlements = fin360_rows($conn, 'SELECT TOP 50 s.*, p.display_name, p.party_type FROM dbo.fin360_jobcard_settlements s LEFT JOIN dbo.fin360_parties p ON p.party_id=s.customer_party_id ORDER BY s.settlement_id DESC');
+    $payments = fin360_rows($conn, 'SELECT TOP 100 pay.*, p.display_name, p.party_type, c.account_title FROM dbo.fin360_payments pay LEFT JOIN dbo.fin360_parties p ON p.party_id=pay.party_id LEFT JOIN dbo.fin360_cash_accounts c ON c.cash_account_id=pay.cash_account_id ORDER BY pay.payment_id DESC');
     $audits = fin360_rows($conn, 'SELECT TOP 100 * FROM dbo.fin360_audit_log ORDER BY audit_id DESC');
     $taxRules = fin360_rows($conn, 'SELECT TOP 50 * FROM dbo.fin360_tax_rules ORDER BY tax_rule_id DESC');
     $taxDocs = fin360_rows($conn, 'SELECT TOP 50 td.*, d.document_code FROM dbo.fin360_tax_documents td LEFT JOIN dbo.fin360_documents d ON d.document_id=td.document_id ORDER BY td.tax_document_id DESC');
@@ -108,7 +108,7 @@ if ($dbOk && $conn) {
             $agingAr['d90p'] += $v;
         }
     }
-    foreach (fin360_rows($conn, "SELECT remaining_amount, DATEDIFF(day, document_date, GETDATE()) AS age_days FROM dbo.fin360_documents WHERE document_type IN ('PURCHASE_INVOICE','EXTERNAL_SERVICE_INVOICE') AND remaining_amount>0 AND document_status NOT IN ('CANCELLED','REVERSED')") as $r) {
+    foreach (fin360_rows($conn, "SELECT d.remaining_amount, DATEDIFF(day, d.document_date, GETDATE()) AS age_days FROM dbo.fin360_documents d LEFT JOIN dbo.fin360_parties p ON p.party_id=d.party_id WHERE d.document_type IN ('PURCHASE_INVOICE','EXTERNAL_SERVICE_INVOICE','EXPENSE') AND d.remaining_amount>0 AND d.document_status NOT IN ('CANCELLED','REVERSED') AND (p.party_type IS NULL OR p.party_type IN ('SUPPLIER','CONTRACTOR','EMPLOYEE','OWNER','PARTNER','TAX_ORG','SOCIAL_SECURITY','BANK','BROKER','COURIER','SERVICE_PROVIDER','EXPENSE_PERSON','GOVERNMENT','OTHER'))") as $r) {
         $a = (int)$r['age_days'];
         $v = (float)$r['remaining_amount'];
         if ($a <= 0) {
@@ -142,14 +142,23 @@ function f360_gauge(int $pct, string $label, string $color = '#3ecf8e'): string
 
 function f360_party_options(array $parties, string $type = ''): string
 {
-    $html = '<option value="">— انتخاب —</option>';
+    $html = '<option value="">— انتخاب طرف حساب موجود —</option>';
     foreach ($parties as $p) {
         if ($type !== '' && strtoupper((string)$p['party_type']) !== $type) {
             continue;
         }
-        $html .= '<option value="' . (int)$p['party_id'] . '">' . fin360_h((string)$p['display_name']) . ' (' . fin360_h((string)$p['party_type']) . ')</option>';
+        $label = fin360_party_type_label((string)$p['party_type']);
+        $html .= '<option value="' . (int)$p['party_id'] . '">' . fin360_h((string)$p['display_name']) . ' — ' . fin360_h($label) . '</option>';
     }
     return $html;
+}
+
+function f360_kpi_value($val, bool $isMoney): string
+{
+    if ($isMoney) {
+        return fin360_money($val);
+    }
+    return (string)(int)$val;
 }
 
 function f360_cash_options(array $cashAccounts): string
@@ -226,25 +235,25 @@ $cfClose = $cf['open'] + $cfNet;
   <section class="f360-kpi-grid">
     <?php
     $cards = [
-        ['نقد قابل استفاده', $kpi['cash']],
-        ['دریافت‌های امروز', $kpi['in_today']],
-        ['پرداخت‌های امروز', $kpi['out_today']],
-        ['خالص جریان نقد امروز', $kpi['net_today']],
-        ['مطالبات باز', $kpi['ar_open']],
-        ['بدهی‌های باز', $kpi['ap_open']],
-        ['JobCard آماده تسویه', $kpi['jc_ready']],
-        ['JobCard تسویه‌نشده', $kpi['jc_open']],
-        ['فروش خدمات', $kpi['svc_sales']],
-        ['فروش قطعات', $kpi['parts_sales']],
-        ['سود ناخالص', $kpi['gross']],
-        ['مالیات نیازمند بررسی', $kpi['tax_review']],
-        ['اسناد پیش‌نویس', $kpi['draft']],
-        ['اسناد Posted', $kpi['posted']],
-        ['مغایرت‌ها', $kpi['mismatch']],
-        ['Override مالی', $kpi['override']],
+        ['نقد قابل استفاده', $kpi['cash'], true],
+        ['دریافت‌های امروز', $kpi['in_today'], true],
+        ['پرداخت‌های امروز', $kpi['out_today'], true],
+        ['خالص جریان نقد امروز', $kpi['net_today'], true],
+        ['مطالبات باز', $kpi['ar_open'], true],
+        ['بدهی‌های باز', $kpi['ap_open'], true],
+        ['JobCard آماده تسویه', $kpi['jc_ready'], false],
+        ['JobCard تسویه‌نشده', $kpi['jc_open'], false],
+        ['فروش خدمات', $kpi['svc_sales'], true],
+        ['فروش قطعات', $kpi['parts_sales'], true],
+        ['سود ناخالص', $kpi['gross'], true],
+        ['مالیات نیازمند بررسی', $kpi['tax_review'], false],
+        ['اسناد پیش‌نویس', $kpi['draft'], false],
+        ['اسناد Posted', $kpi['posted'], false],
+        ['مغایرت‌ها', $kpi['mismatch'], false],
+        ['Override مالی', $kpi['override'], false],
     ];
-    foreach ($cards as [$lab, $val]): ?>
-      <div class="f360-kpi"><span><?= fin360_h($lab) ?></span><strong><?= (is_float($val) || $val > 20) ? fin360_money($val) : (int)$val ?></strong></div>
+    foreach ($cards as [$lab, $val, $isMoney]): ?>
+      <div class="f360-kpi"><span><?= fin360_h($lab) ?></span><strong><?= f360_kpi_value($val, $isMoney) ?></strong></div>
     <?php endforeach; ?>
   </section>
   <div class="f360-gauge-row">
@@ -281,15 +290,15 @@ $cfClose = $cf['open'] + $cfNet;
         <input type="hidden" name="action" value="jobcard_settlement">
         <input type="hidden" name="return_tab" value="settlement">
         <label>مرجع JobCard (متنی)<input name="jobcard_ref_text" required placeholder="JC-...."></label>
-        <label>مشتری<select name="party_id"><?= f360_party_options($parties, 'CUSTOMER') ?></select></label>
-        <label>فروش خدمات<input name="service_sales_amount" type="number" step="0.01" value="0"></label>
-        <label>فروش قطعات<input name="parts_sales_amount" type="number" step="0.01" value="0"></label>
-        <label>خدمات بیرونی<input name="external_service_sales_amount" type="number" step="0.01" value="0"></label>
-        <label>هزینه اضافی<input name="additional_charges_amount" type="number" step="0.01" value="0"></label>
-        <label>تخفیف<input name="discount_amount" type="number" step="0.01" value="0"></label>
-        <label>مالیات<input name="tax_amount" type="number" step="0.01" value="0"></label>
-        <label>پیش‌دریافت<input name="prepayment_amount" type="number" step="0.01" value="0"></label>
-        <label>پرداخت‌شده<input name="paid_amount" type="number" step="0.01" value="0"></label>
+        <label>طرف حساب مالی (مشتری JobCard)<select name="party_id"><?= f360_party_options($parties, 'CUSTOMER') ?></select></label>
+        <label>فروش خدمات<?= fin360_money_input('service_sales_amount', 0) ?></label>
+        <label>فروش قطعات<?= fin360_money_input('parts_sales_amount', 0) ?></label>
+        <label>خدمات بیرونی<?= fin360_money_input('external_service_sales_amount', 0) ?></label>
+        <label>هزینه اضافی<?= fin360_money_input('additional_charges_amount', 0) ?></label>
+        <label>تخفیف<?= fin360_money_input('discount_amount', 0) ?></label>
+        <label>مالیات<?= fin360_money_input('tax_amount', 0) ?></label>
+        <label>پیش‌دریافت<?= fin360_money_input('prepayment_amount', 0) ?></label>
+        <label>پرداخت‌شده<?= fin360_money_input('paid_amount', 0) ?></label>
         <label>دلیل Override (اختیاری)<input name="override_reason"></label>
         <p class="f360-muted">فرمول: خدمات+قطعات+بیرونی+اضافی+مالیات−تخفیف−پیش‌دریافت−پرداخت = مانده</p>
         <button class="f360-btn primary" type="submit">ثبت تسویه</button>
@@ -313,53 +322,71 @@ $cfClose = $cf['open'] + $cfNet;
 
 <?php elseif ($tab === 'receipts'): ?>
   <div class="f360-grid2">
-    <div class="f360-panel"><h2>ثبت دریافت مشتری</h2>
-      <form class="f360-form" method="post" action="erp-finance-action.php">
+    <div class="f360-panel"><h2>ثبت دریافت</h2>
+      <p class="f360-muted">پرداخت‌کننده می‌تواند مشتری، بیمه، شخص ثالث، مالک، شریک، بانک یا سایر باشد.</p>
+      <form class="f360-form f360-money-form" method="post" action="erp-finance-action.php">
         <?= fin360_csrf_field() ?>
-        <input type="hidden" name="action" value="customer_receipt">
+        <input type="hidden" name="action" value="register_receipt">
         <input type="hidden" name="return_tab" value="receipts">
-        <label>مشتری<select name="party_id"><?= f360_party_options($parties) ?></select></label>
-        <label>مبلغ<input name="amount" type="number" step="0.01" required min="0.01"></label>
-        <label>نوع پرداخت<select name="payment_type" required><option>CASH</option><option>POS</option><option>GATEWAY</option><option>BANK_TRANSFER</option><option>CHEQUE</option></select></label>
-        <label>حساب نقد<select name="cash_account_id" required><?= f360_cash_options($cashAccounts) ?></select></label>
+        <label>پرداخت‌کننده — انتخاب موجود<select name="payer_party_id"><?= f360_party_options($parties) ?></select></label>
+        <fieldset class="f360-fieldset">
+          <legend>یا ایجاد سریع طرف حساب مالی</legend>
+          <label>نوع طرف<select name="payer_type"><?= fin360_party_type_options('CUSTOMER') ?></select></label>
+          <label>نام پرداخت‌کننده<input name="payer_display_name" placeholder="نام طرف حساب"></label>
+          <label>موبایل<input name="payer_mobile"></label>
+        </fieldset>
+        <label>مبلغ<?= fin360_money_input('amount', '', true) ?></label>
+        <label>روش دریافت<select name="payment_type" required><option>CASH</option><option>POS</option><option>GATEWAY</option><option>BANK_TRANSFER</option><option>CHEQUE</option><option>INSURANCE</option><option>THIRD_PARTY</option></select></label>
+        <label>حساب مقصد<select name="cash_account_id" required><?= f360_cash_options($cashAccounts) ?></select></label>
         <label>تاریخ<input name="payment_date" type="date" value="<?= date('Y-m-d') ?>"></label>
         <label>شماره مرجع<input name="reference_no"></label>
-        <label>JobCard (متنی)<input name="jobcard_ref_text"></label>
+        <label>JobCard (اختیاری)<input name="jobcard_ref_text"></label>
+        <label>منبع<input name="source_type" placeholder="MANUAL / INSURANCE / BANK ..."></label>
         <label>شرح<textarea name="description" rows="2"></textarea></label>
         <button class="f360-btn primary" type="submit">ثبت دریافت</button>
       </form>
     </div>
-    <div class="f360-panel"><h2>ثبت طرف حساب</h2>
+    <div class="f360-panel"><h2>ثبت طرف حساب مالی</h2>
       <form class="f360-form" method="post" action="erp-finance-action.php">
         <?= fin360_csrf_field() ?>
         <input type="hidden" name="action" value="create_party">
         <input type="hidden" name="return_tab" value="receipts">
-        <label>نوع<select name="party_type"><option>CUSTOMER</option><option>SUPPLIER</option><option>CONTRACTOR</option><option>OTHER</option></select></label>
+        <label>نوع طرف<select name="party_type"><?= fin360_party_type_options() ?></select></label>
         <label>نام<input name="display_name" required></label>
         <label>موبایل<input name="mobile"></label>
+        <label>کد ملی<input name="national_id"></label>
         <label>منبع متنی<input name="source_ref_text" placeholder="مرجع دستی"></label>
         <button class="f360-btn" type="submit">ایجاد طرف حساب</button>
       </form>
-      <h3 style="margin-top:1rem">آخرین دریافت‌ها</h3>
-      <table class="f360-table"><thead><tr><th>کد</th><th>طرف</th><th>مبلغ</th><th>جهت</th></tr></thead><tbody>
+      <h3 style="margin-top:1rem">دریافت‌ها</h3>
+      <table class="f360-table"><thead><tr><th>تاریخ</th><th>پرداخت‌کننده</th><th>نوع طرف</th><th>روش</th><th>حساب مقصد</th><th>مبلغ</th><th>وضعیت</th></tr></thead><tbody>
       <?php foreach ($payments as $p): if (($p['payment_direction'] ?? '') !== 'IN') {
           continue;
       } ?>
-        <tr><td><?= fin360_h($p['payment_code']) ?></td><td><?= fin360_h((string)($p['display_name'] ?? '')) ?></td><td><?= fin360_money($p['amount']) ?></td><td>IN</td></tr>
-      <?php endforeach; ?>
+        <tr>
+          <td><?= fin360_h((string)$p['payment_date']) ?></td>
+          <td><?= fin360_h((string)($p['display_name'] ?? '—')) ?></td>
+          <td><?= fin360_h(fin360_party_type_label((string)($p['party_type'] ?? 'OTHER'))) ?></td>
+          <td><?= fin360_h((string)$p['payment_type']) ?></td>
+          <td><?= fin360_h((string)($p['account_title'] ?? '')) ?></td>
+          <td><?= fin360_money($p['amount']) ?></td>
+          <td><?= fin360_h((string)$p['status_code']) ?></td>
+        </tr>
+      <?php endforeach; if (!$payments): ?><tr><td colspan="7" class="f360-muted">موردی نیست</td></tr><?php endif; ?>
       </tbody></table>
     </div>
   </div>
 
 <?php elseif ($tab === 'prepayments'): ?>
-  <div class="f360-panel" style="max-width:520px"><h2>ثبت پیش‌دریافت مشتری</h2>
-    <form class="f360-form" method="post" action="erp-finance-action.php">
+  <div class="f360-panel" style="max-width:560px"><h2>ثبت پیش‌دریافت</h2>
+    <form class="f360-form f360-money-form" method="post" action="erp-finance-action.php">
       <?= fin360_csrf_field() ?>
       <input type="hidden" name="action" value="customer_prepayment">
       <input type="hidden" name="return_tab" value="prepayments">
-      <label>مشتری<select name="party_id"><?= f360_party_options($parties, 'CUSTOMER') ?></select></label>
-      <label>مبلغ<input name="amount" type="number" step="0.01" required min="0.01"></label>
-      <label>حساب نقد<select name="cash_account_id" required><?= f360_cash_options($cashAccounts) ?></select></label>
+      <label>پرداخت‌کننده<select name="payer_party_id"><?= f360_party_options($parties) ?></select></label>
+      <label>یا نوع + نام<input name="payer_type" placeholder="CUSTOMER"><input name="payer_display_name" placeholder="نام پرداخت‌کننده"></label>
+      <label>مبلغ<?= fin360_money_input('amount', '', true) ?></label>
+      <label>حساب مقصد<select name="cash_account_id" required><?= f360_cash_options($cashAccounts) ?></select></label>
       <label>JobCard<input name="jobcard_ref_text"></label>
       <label>شرح<textarea name="description" rows="2"></textarea></label>
       <button class="f360-btn primary" type="submit">ثبت پیش‌دریافت</button>
@@ -368,36 +395,36 @@ $cfClose = $cf['open'] + $cfNet;
 
 <?php elseif ($tab === 'invoices'): ?>
   <div class="f360-panel" style="max-width:560px"><h2>فاکتور خدمات</h2>
-    <form class="f360-form" method="post" action="erp-finance-action.php">
+    <form class="f360-form f360-money-form" method="post" action="erp-finance-action.php">
       <?= fin360_csrf_field() ?>
       <input type="hidden" name="action" value="service_invoice">
       <input type="hidden" name="return_tab" value="invoices">
-      <label>مشتری<select name="party_id"><?= f360_party_options($parties, 'CUSTOMER') ?></select></label>
+      <label>طرف حساب مالی<select name="party_id"><?= f360_party_options($parties, 'CUSTOMER') ?></select></label>
       <label>JobCard<input name="jobcard_ref_text"></label>
       <label>عنوان خدمت<input name="item_title" required></label>
       <label>تعداد<input name="quantity" type="number" step="0.01" value="1"></label>
-      <label>قیمت واحد<input name="unit_price" type="number" step="0.01" required></label>
-      <label>تخفیف<input name="discount_amount" type="number" step="0.01" value="0"></label>
-      <label>مالیات<input name="tax_amount" type="number" step="0.01" value="0"></label>
-      <label>بهای تمام‌شده<input name="cost_amount" type="number" step="0.01" value="0"></label>
+      <label>قیمت واحد<?= fin360_money_input('unit_price', '', true) ?></label>
+      <label>تخفیف<?= fin360_money_input('discount_amount', 0) ?></label>
+      <label>مالیات<?= fin360_money_input('tax_amount', 0) ?></label>
+      <label>بهای تمام‌شده<?= fin360_money_input('cost_amount', 0) ?></label>
       <button class="f360-btn primary" type="submit">ثبت فاکتور خدمات</button>
     </form>
   </div>
 
 <?php elseif ($tab === 'parts'): ?>
   <div class="f360-panel" style="max-width:560px"><h2>فاکتور قطعات</h2>
-    <form class="f360-form" method="post" action="erp-finance-action.php">
+    <form class="f360-form f360-money-form" method="post" action="erp-finance-action.php">
       <?= fin360_csrf_field() ?>
       <input type="hidden" name="action" value="parts_invoice">
       <input type="hidden" name="return_tab" value="parts">
-      <label>مشتری<select name="party_id"><?= f360_party_options($parties, 'CUSTOMER') ?></select></label>
+      <label>طرف حساب مالی<select name="party_id"><?= f360_party_options($parties, 'CUSTOMER') ?></select></label>
       <label>JobCard<input name="jobcard_ref_text"></label>
       <label>عنوان قطعه<input name="item_title" required></label>
       <label>تعداد<input name="quantity" type="number" step="0.01" value="1"></label>
-      <label>قیمت واحد<input name="unit_price" type="number" step="0.01" required></label>
-      <label>تخفیف<input name="discount_amount" type="number" step="0.01" value="0"></label>
-      <label>مالیات<input name="tax_amount" type="number" step="0.01" value="0"></label>
-      <label>بهای تمام‌شده<input name="cost_amount" type="number" step="0.01" value="0"></label>
+      <label>قیمت واحد<?= fin360_money_input('unit_price', '', true) ?></label>
+      <label>تخفیف<?= fin360_money_input('discount_amount', 0) ?></label>
+      <label>مالیات<?= fin360_money_input('tax_amount', 0) ?></label>
+      <label>بهای تمام‌شده<?= fin360_money_input('cost_amount', 0) ?></label>
       <button class="f360-btn primary" type="submit">ثبت فاکتور قطعات</button>
     </form>
   </div>
@@ -405,7 +432,7 @@ $cfClose = $cf['open'] + $cfNet;
 <?php elseif ($tab === 'sales'): ?>
   <div class="f360-panel"><h2>فروش و درآمد</h2>
     <table class="f360-table"><thead><tr><th>کد</th><th>نوع</th><th>طرف</th><th>مبلغ</th><th>مانده</th><th>وضعیت</th></tr></thead><tbody>
-    <?php foreach ($docs as $d): if (!in_array($d['document_type'], ['SERVICE_INVOICE', 'PARTS_INVOICE', 'JOBCARD_SETTLEMENT', 'CUSTOMER_RECEIPT'], true)) {
+    <?php foreach ($docs as $d): if (!in_array($d['document_type'], ['SERVICE_INVOICE', 'PARTS_INVOICE', 'JOBCARD_SETTLEMENT', 'CUSTOMER_RECEIPT', 'GENERAL_RECEIPT'], true)) {
         continue;
     } ?>
       <tr><td><?= fin360_h($d['document_code']) ?></td><td><?= fin360_h($d['document_type']) ?></td><td><?= fin360_h((string)($d['display_name'] ?? '')) ?></td><td><?= fin360_money($d['total_amount']) ?></td><td><?= fin360_money($d['remaining_amount']) ?></td><td><span class="f360-status"><?= fin360_h($d['document_status']) ?></span></td></tr>
@@ -416,38 +443,64 @@ $cfClose = $cf['open'] + $cfNet;
 <?php elseif ($tab === 'purchases'): ?>
   <div class="f360-grid2">
     <div class="f360-panel"><h2>ثبت خرید / بدهی</h2>
-      <form class="f360-form" method="post" action="erp-finance-action.php">
+      <form class="f360-form f360-money-form" method="post" action="erp-finance-action.php">
         <?= fin360_csrf_field() ?>
         <input type="hidden" name="action" value="purchase_invoice">
         <input type="hidden" name="return_tab" value="purchases">
-        <label>تأمین‌کننده<select name="party_id"><?= f360_party_options($parties, 'SUPPLIER') ?></select></label>
+        <label>طرف حساب مالی<select name="party_id"><?= f360_party_options($parties) ?></select></label>
         <label>نوع سند<select name="document_type"><option value="PURCHASE_INVOICE">PURCHASE_INVOICE</option><option value="EXTERNAL_SERVICE_INVOICE">EXTERNAL_SERVICE_INVOICE</option></select></label>
-        <label>مبلغ<input name="amount" type="number" step="0.01" required></label>
-        <label>مالیات<input name="tax_amount" type="number" step="0.01" value="0"></label>
+        <label>مبلغ<?= fin360_money_input('amount', '', true) ?></label>
+        <label>مالیات<?= fin360_money_input('tax_amount', 0) ?></label>
         <label>سررسید<input name="due_date" type="date"></label>
         <label>مرجع<input name="reference_text"></label>
         <button class="f360-btn primary" type="submit">ثبت خرید</button>
       </form>
     </div>
     <div class="f360-panel" id="pay"><h2>ثبت پرداخت</h2>
-      <form class="f360-form" method="post" action="erp-finance-action.php">
+      <p class="f360-muted">دریافت‌کننده می‌تواند تأمین‌کننده، کارمند، مالیات، پیمانکار، مالک یا سایر باشد.</p>
+      <form class="f360-form f360-money-form" method="post" action="erp-finance-action.php">
         <?= fin360_csrf_field() ?>
-        <input type="hidden" name="action" value="supplier_payment">
+        <input type="hidden" name="action" value="register_payment">
         <input type="hidden" name="return_tab" value="purchases">
-        <label>طرف حساب<select name="party_id"><?= f360_party_options($parties) ?></select></label>
-        <label>حساب نقد<select name="cash_account_id" required><?= f360_cash_options($cashAccounts) ?></select></label>
-        <label>مبلغ<input name="amount" type="number" step="0.01" required></label>
-        <label>نوع<select name="payment_type"><option>BANK_TRANSFER</option><option>CASH</option><option>CHEQUE</option><option>POS</option></select></label>
+        <label>دریافت‌کننده — انتخاب موجود<select name="payee_party_id"><?= f360_party_options($parties) ?></select></label>
+        <fieldset class="f360-fieldset">
+          <legend>یا ایجاد سریع طرف حساب</legend>
+          <label>نوع طرف<select name="payee_type"><?= fin360_party_type_options('SUPPLIER') ?></select></label>
+          <label>نام دریافت‌کننده<input name="payee_display_name" placeholder="نام طرف حساب"></label>
+        </fieldset>
+        <label>حساب مبدا<select name="cash_account_id" required><?= f360_cash_options($cashAccounts) ?></select></label>
+        <label>مبلغ<?= fin360_money_input('amount', '', true) ?></label>
+        <label>روش پرداخت<select name="payment_type"><option>BANK_TRANSFER</option><option>CASH</option><option>CHEQUE</option><option>POS</option><option>WALLET</option></select></label>
+        <label>تاریخ<input name="payment_date" type="date" value="<?= date('Y-m-d') ?>"></label>
         <label>مرجع<input name="reference_no"></label>
+        <label>شماره چک<input name="cheque_no"></label>
+        <label>سررسید چک<input name="cheque_due_date" type="date"></label>
+        <label>شرح<textarea name="description" rows="2"></textarea></label>
         <button class="f360-btn primary" type="submit">ثبت پرداخت</button>
       </form>
+      <h3 style="margin-top:1rem">پرداخت‌ها</h3>
+      <table class="f360-table"><thead><tr><th>تاریخ</th><th>دریافت‌کننده</th><th>نوع طرف</th><th>روش</th><th>حساب مبدا</th><th>مبلغ</th><th>وضعیت</th></tr></thead><tbody>
+      <?php foreach ($payments as $p): if (($p['payment_direction'] ?? '') !== 'OUT') {
+          continue;
+      } ?>
+        <tr>
+          <td><?= fin360_h((string)$p['payment_date']) ?></td>
+          <td><?= fin360_h((string)($p['display_name'] ?? '—')) ?></td>
+          <td><?= fin360_h(fin360_party_type_label((string)($p['party_type'] ?? 'OTHER'))) ?></td>
+          <td><?= fin360_h((string)$p['payment_type']) ?></td>
+          <td><?= fin360_h((string)($p['account_title'] ?? '')) ?></td>
+          <td><?= fin360_money($p['amount']) ?></td>
+          <td><?= fin360_h((string)$p['status_code']) ?></td>
+        </tr>
+      <?php endforeach; ?>
+      </tbody></table>
     </div>
   </div>
 
 <?php elseif ($tab === 'cashbank'): ?>
   <div class="f360-grid2">
     <div class="f360-panel"><h2>حساب صندوق / بانک</h2>
-      <form class="f360-form" method="post" action="erp-finance-action.php">
+      <form class="f360-form f360-money-form" method="post" action="erp-finance-action.php">
         <?= fin360_csrf_field() ?>
         <input type="hidden" name="action" value="create_cash_account">
         <input type="hidden" name="return_tab" value="cashbank">
@@ -456,7 +509,7 @@ $cfClose = $cf['open'] + $cfNet;
         <label>بانک<input name="bank_name"></label>
         <label>شبا<input name="iban"></label>
         <label>ارز<input name="currency_code" value="IRR"></label>
-        <label>موجودی اول دوره<input name="opening_balance" type="number" step="0.01" value="0"></label>
+        <label>موجودی اول دوره<?= fin360_money_input('opening_balance', 0) ?></label>
         <button class="f360-btn primary" type="submit">ایجاد حساب</button>
       </form>
     </div>
@@ -468,6 +521,7 @@ $cfClose = $cf['open'] + $cfNet;
       </tbody></table>
     </div>
   </div>
+  <div class="f360-panel f360-lock"><h3>انتقال داخلی صندوق/بانک</h3><p class="f360-muted">فاز بعد — انتقال بین حساب‌های نقد بدون برچسب مشتری/تأمین‌کننده</p></div>
 
 <?php elseif ($tab === 'ar'): ?>
   <div class="f360-panel"><h2>مطالبات — Aging</h2>
@@ -489,6 +543,7 @@ $cfClose = $cf['open'] + $cfNet;
 
 <?php elseif ($tab === 'ap'): ?>
   <div class="f360-panel"><h2>بدهی‌ها — Aging</h2>
+    <p class="f360-muted">شامل تأمین‌کننده، پیمانکار، کارمند، مالیات، تأمین اجتماعی و سایر بدهی‌ها</p>
     <div class="f360-kpi-grid">
       <div class="f360-kpi"><span>جاری</span><strong><?= fin360_money($agingAp['current']) ?></strong></div>
       <div class="f360-kpi"><span>1-30</span><strong><?= fin360_money($agingAp['d30']) ?></strong></div>
@@ -496,6 +551,19 @@ $cfClose = $cf['open'] + $cfNet;
       <div class="f360-kpi"><span>61-90</span><strong><?= fin360_money($agingAp['d90']) ?></strong></div>
       <div class="f360-kpi"><span>90+</span><strong><?= fin360_money($agingAp['d90p']) ?></strong></div>
     </div>
+    <table class="f360-table"><thead><tr><th>کد</th><th>طرف حساب</th><th>نوع</th><th>مانده</th><th>وضعیت</th></tr></thead><tbody>
+    <?php foreach ($docs as $d): if (!in_array($d['document_type'], ['PURCHASE_INVOICE', 'EXTERNAL_SERVICE_INVOICE', 'EXPENSE'], true) || (float)$d['remaining_amount'] <= 0) {
+        continue;
+    } ?>
+      <tr>
+        <td><?= fin360_h($d['document_code']) ?></td>
+        <td><?= fin360_h((string)($d['display_name'] ?? '—')) ?></td>
+        <td><?= fin360_h(fin360_party_type_label((string)($d['party_type'] ?? 'OTHER'))) ?></td>
+        <td><?= fin360_money($d['remaining_amount']) ?></td>
+        <td><?= fin360_h($d['document_status']) ?></td>
+      </tr>
+    <?php endforeach; ?>
+    </tbody></table>
   </div>
 
 <?php elseif ($tab === 'costing'): ?>
@@ -623,17 +691,37 @@ $cfClose = $cf['open'] + $cfNet;
 
 <?php elseif ($tab === 'audit'): ?>
   <div class="f360-panel"><h2>Audit مالی — ۱۰۰ رویداد اخیر</h2>
-    <table class="f360-table"><thead><tr><th>زمان</th><th>بازیگر</th><th>اقدام</th><th>موجودیت</th><th>شناسه</th><th>دلیل</th></tr></thead><tbody>
-    <?php foreach ($audits as $a): ?>
+    <table class="f360-table"><thead><tr><th>زمان</th><th>بازیگر</th><th>اقدام</th><th>موجودیت</th><th>طرف/نقش</th><th>مبلغ</th><th>دلیل</th></tr></thead><tbody>
+    <?php foreach ($audits as $a):
+        $after = json_decode((string)($a['after_json'] ?? ''), true);
+        $partyInfo = '';
+        $amt = '';
+        if (is_array($after)) {
+            if (!empty($after['party'])) {
+                $partyInfo = (string)$after['party'];
+            } elseif (!empty($after['payer'])) {
+                $partyInfo = 'پرداخت‌کننده: ' . $after['payer'];
+            } elseif (!empty($after['payee'])) {
+                $partyInfo = 'دریافت‌کننده: ' . $after['payee'];
+            }
+            if (!empty($after['party_type'])) {
+                $partyInfo .= ($partyInfo !== '' ? ' · ' : '') . fin360_party_type_label((string)$after['party_type']);
+            }
+            if (isset($after['amount'])) {
+                $amt = fin360_money($after['amount']);
+            }
+        }
+    ?>
       <tr>
         <td><?= fin360_h((string)$a['event_time']) ?></td>
         <td><?= fin360_h($a['actor_user']) ?></td>
         <td><?= fin360_h($a['action_code']) ?></td>
         <td><?= fin360_h($a['entity_name']) ?></td>
-        <td><?= fin360_h((string)($a['entity_id'] ?? '')) ?></td>
+        <td><?= fin360_h($partyInfo !== '' ? $partyInfo : (string)($a['entity_id'] ?? '')) ?></td>
+        <td><?= fin360_h($amt) ?></td>
         <td><?= fin360_h((string)($a['reason'] ?? '')) ?></td>
       </tr>
-    <?php endforeach; if (!$audits): ?><tr><td colspan="6" class="f360-muted">رویدادی نیست</td></tr><?php endif; ?>
+    <?php endforeach; if (!$audits): ?><tr><td colspan="7" class="f360-muted">رویدادی نیست</td></tr><?php endif; ?>
     </tbody></table>
   </div>
 
@@ -646,5 +734,40 @@ $cfClose = $cf['open'] + $cfNet;
 <?php endif; ?>
 
 </div>
+<script>
+(function(){
+  function toEn(s){
+    var p=['۰','۱','۲','۳','۴','۵','۶','۷','۸','۹'],a=['٠','١','٢','٣','٤','٥','٦','٧','٨','٩'],e=['0','1','2','3','4','5','6','7','8','9'];
+    for(var i=0;i<10;i++){s=s.split(p[i]).join(e[i]);s=s.split(a[i]).join(e[i]);}
+    return s;
+  }
+  function parseMoney(v){
+    v=toEn(String(v||'')).replace(/[\s,،٬]/g,'');
+    if(!v||v==='-')return '';
+    var n=parseFloat(v);
+    return isNaN(n)?'':String(n);
+  }
+  function formatMoney(v){
+    var n=parseFloat(parseMoney(v));
+    if(isNaN(n))return '';
+    var p=(n<0?'-':'');
+    n=Math.abs(n);
+    var whole=Math.floor(n),dec=Math.round((n-whole)*100);
+    var s=String(whole).replace(/\B(?=(\d{3})+(?!\d))/g,',');
+    return p+s+(dec?'.'+String(dec).padStart(2,'0').replace(/0$/,''):'');
+  }
+  document.querySelectorAll('.f360-money-input').forEach(function(inp){
+    inp.addEventListener('blur',function(){var f=formatMoney(inp.value);if(f!=='')inp.value=f;});
+    inp.addEventListener('focus',function(){inp.value=parseMoney(inp.value);});
+  });
+  document.querySelectorAll('form.f360-money-form, form.f360-form').forEach(function(form){
+    form.addEventListener('submit',function(){
+      form.querySelectorAll('.f360-money-input').forEach(function(inp){
+        inp.value=parseMoney(inp.value);
+      });
+    });
+  });
+})();
+</script>
 </body>
 </html>

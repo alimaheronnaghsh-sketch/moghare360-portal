@@ -35,7 +35,93 @@ function fin360_f(string $k, $default = ''): string
 
 function fin360_fn(string $k): float
 {
-    return (float)str_replace(',', '', (string)($_POST[$k] ?? '0'));
+    return fin360_parse_money($_POST[$k] ?? '0');
+}
+
+function fin360_register_receipt($conn, string $tab, string $actor): void
+{
+    $party = fin360_resolve_party($conn, $_POST, 'IN');
+    if ($party['error']) {
+        fin360_redirect($tab, 'err', $party['error']);
+    }
+    $cashId = (int)fin360_f('cash_account_id');
+    $amount = fin360_fn('amount');
+    $ptype = fin360_f('payment_type', 'CASH');
+    $pdate = fin360_f('payment_date') ?: date('Y-m-d');
+    if ($amount <= 0 || $cashId <= 0 || $ptype === '') {
+        fin360_redirect($tab, 'err', 'مبلغ، نوع دریافت و حساب مقصد الزامی است.');
+    }
+    $docType = fin360_receipt_document_type((string)$party['party_type']);
+    $payCode = fin360_next_code($conn, 'PAY', 'fin360_payments', 'payment_id');
+    $docCode = fin360_next_code($conn, 'RCP', 'fin360_documents', 'document_id');
+    $sourceType = fin360_f('source_type') ?: null;
+    fin360_exec(
+        $conn,
+        "INSERT INTO dbo.fin360_payments (payment_code, payment_type, payment_direction, party_id, cash_account_id, payment_date, amount, reference_no, description, status_code, allocation_status, created_by)
+         VALUES (?,?,'IN',?,?,?,?,?,?,'APPROVED','UNALLOCATED',?)",
+        [$payCode, $ptype, $party['party_id'], $cashId, $pdate, $amount, fin360_f('reference_no') ?: null, fin360_f('description') ?: null, $actor]
+    );
+    fin360_exec(
+        $conn,
+        "INSERT INTO dbo.fin360_documents (document_code, document_type, document_status, document_date, party_id, jobcard_ref_text, source_type, source_ref_text, subtotal_amount, total_amount, paid_amount, remaining_amount, created_by, approved_by)
+         VALUES (?,?, 'APPROVED', ?,?,?,?,?,?,?,?,0,?,?)",
+        [$docCode, $docType, $pdate, $party['party_id'], fin360_f('jobcard_ref_text') ?: null, $sourceType, fin360_f('source_ref_text') ?: null, $amount, $amount, $amount, $actor, $actor]
+    );
+    fin360_exec($conn, 'UPDATE dbo.fin360_cash_accounts SET current_book_balance = current_book_balance + ? WHERE cash_account_id=?', [$amount, $cashId]);
+    $docId = (string)fin360_scalar($conn, 'SELECT MAX(document_id) FROM dbo.fin360_documents WHERE document_code=?', [$docCode]);
+    fin360_audit($conn, 'CREATE', 'fin360_payments', $payCode, null, [
+        'direction' => 'IN', 'role' => 'payer', 'party_type' => $party['party_type'], 'party' => $party['display_name'], 'amount' => $amount, 'type' => $ptype,
+    ]);
+    fin360_audit($conn, 'CREATE', 'fin360_documents', $docId, null, ['type' => $docType, 'amount' => $amount, 'payer' => $party['display_name']]);
+    fin360_redirect($tab, 'ok', 'دریافت ثبت شد (' . $docCode . ') — ' . fin360_counterparty_role_label('IN') . ': ' . $party['display_name']);
+}
+
+function fin360_register_payment($conn, string $tab, string $actor): void
+{
+    $party = fin360_resolve_party($conn, $_POST, 'OUT');
+    if ($party['error']) {
+        fin360_redirect($tab, 'err', $party['error']);
+    }
+    $cashId = (int)fin360_f('cash_account_id');
+    $amount = fin360_fn('amount');
+    $ptype = fin360_f('payment_type', 'BANK_TRANSFER');
+    $pdate = fin360_f('payment_date') ?: date('Y-m-d');
+    if ($amount <= 0 || $cashId <= 0) {
+        fin360_redirect($tab, 'err', 'مبلغ و حساب مبدا الزامی است.');
+    }
+    $bal = (float)fin360_scalar($conn, 'SELECT current_book_balance FROM dbo.fin360_cash_accounts WHERE cash_account_id=?', [$cashId]);
+    if ($amount > $bal) {
+        fin360_redirect($tab, 'err', 'موجودی حساب کافی نیست.');
+    }
+    $docType = fin360_payment_document_type((string)$party['party_type']);
+    $payCode = fin360_next_code($conn, 'PAY', 'fin360_payments', 'payment_id');
+    $docCode = fin360_next_code($conn, 'SPY', 'fin360_documents', 'document_id');
+    fin360_exec(
+        $conn,
+        "INSERT INTO dbo.fin360_payments (payment_code, payment_type, payment_direction, party_id, cash_account_id, payment_date, amount, reference_no, cheque_no, cheque_due_date, description, status_code, allocation_status, created_by)
+         VALUES (?,?,'OUT',?,?,?,?,?,?,?,?,'APPROVED','UNALLOCATED',?)",
+        [
+            $payCode, $ptype, $party['party_id'], $cashId, $pdate, $amount,
+            fin360_f('reference_no') ?: null,
+            fin360_f('cheque_no') ?: null,
+            fin360_f('cheque_due_date') ?: null,
+            fin360_f('description') ?: null,
+            $actor,
+        ]
+    );
+    fin360_exec(
+        $conn,
+        "INSERT INTO dbo.fin360_documents (document_code, document_type, document_status, document_date, party_id, subtotal_amount, total_amount, paid_amount, remaining_amount, created_by, approved_by)
+         VALUES (?,?, 'APPROVED', ?,?,?,?,?,0,?,?)",
+        [$docCode, $docType, $pdate, $party['party_id'], $amount, $amount, $amount, $actor, $actor]
+    );
+    fin360_exec($conn, 'UPDATE dbo.fin360_cash_accounts SET current_book_balance = current_book_balance - ? WHERE cash_account_id=?', [$amount, $cashId]);
+    $docId = (string)fin360_scalar($conn, 'SELECT MAX(document_id) FROM dbo.fin360_documents WHERE document_code=?', [$docCode]);
+    fin360_audit($conn, 'CREATE', 'fin360_payments', $payCode, null, [
+        'direction' => 'OUT', 'role' => 'payee', 'party_type' => $party['party_type'], 'party' => $party['display_name'], 'amount' => $amount, 'type' => $ptype,
+    ]);
+    fin360_audit($conn, 'CREATE', 'fin360_documents', $docId, null, ['type' => $docType, 'amount' => $amount, 'payee' => $party['display_name']]);
+    fin360_redirect($tab, 'ok', 'پرداخت ثبت شد (' . $docCode . ') — ' . fin360_counterparty_role_label('OUT') . ': ' . $party['display_name']);
 }
 
 function fin360_redirect(string $tab, string $type, string $msg): void
@@ -48,19 +134,22 @@ function fin360_redirect(string $tab, string $type, string $msg): void
 try {
     switch ($action) {
         case 'create_party': {
-            $type = fin360_f('party_type', 'CUSTOMER');
+            $type = strtoupper(fin360_f('party_type', 'OTHER'));
+            if (!in_array($type, fin360_party_types(), true)) {
+                $type = 'OTHER';
+            }
             $name = fin360_f('display_name');
             if ($name === '') {
                 fin360_redirect($tab, 'err', 'نام طرف حساب الزامی است.');
             }
             fin360_exec(
                 $conn,
-                'INSERT INTO dbo.fin360_parties (party_type, display_name, mobile, source_ref_text, is_active) VALUES (?,?,?,?,1)',
-                [$type, $name, fin360_f('mobile') ?: null, fin360_f('source_ref_text') ?: null]
+                'INSERT INTO dbo.fin360_parties (party_type, display_name, mobile, national_id, source_type, source_ref_text, is_active) VALUES (?,?,?,?,?,?,1)',
+                [$type, $name, fin360_f('mobile') ?: null, fin360_f('national_id') ?: null, fin360_f('source_type') ?: null, fin360_f('source_ref_text') ?: null]
             );
             $id = (string)fin360_scalar($conn, 'SELECT MAX(party_id) FROM dbo.fin360_parties');
             fin360_audit($conn, 'CREATE', 'fin360_parties', $id, null, ['name' => $name, 'type' => $type]);
-            fin360_redirect($tab, 'ok', 'طرف حساب ثبت شد.');
+            fin360_redirect($tab, 'ok', 'طرف حساب مالی ثبت شد.');
         }
 
         case 'create_cash_account': {
@@ -81,43 +170,22 @@ try {
             fin360_redirect($tab, 'ok', 'حساب صندوق/بانک ایجاد شد.');
         }
 
+        case 'register_receipt':
         case 'customer_receipt': {
-            $partyId = (int)fin360_f('party_id');
-            $cashId = (int)fin360_f('cash_account_id');
-            $amount = fin360_fn('amount');
-            $ptype = fin360_f('payment_type', 'CASH');
-            $pdate = fin360_f('payment_date') ?: date('Y-m-d');
-            if ($amount <= 0 || $cashId <= 0 || $ptype === '') {
-                fin360_redirect($tab, 'err', 'مبلغ، نوع پرداخت و حساب نقد الزامی است.');
-            }
-            $payCode = fin360_next_code($conn, 'PAY', 'fin360_payments', 'payment_id');
-            $docCode = fin360_next_code($conn, 'RCP', 'fin360_documents', 'document_id');
-            fin360_exec(
-                $conn,
-                "INSERT INTO dbo.fin360_payments (payment_code, payment_type, payment_direction, party_id, cash_account_id, payment_date, amount, reference_no, description, status_code, allocation_status, created_by)
-                 VALUES (?,?,'IN',?,?,?,?,?,?,'APPROVED','UNALLOCATED',?)",
-                [$payCode, $ptype, $partyId ?: null, $cashId, $pdate, $amount, fin360_f('reference_no') ?: null, fin360_f('description') ?: null, $actor]
-            );
-            fin360_exec(
-                $conn,
-                "INSERT INTO dbo.fin360_documents (document_code, document_type, document_status, document_date, party_id, jobcard_ref_text, subtotal_amount, total_amount, paid_amount, remaining_amount, created_by, approved_by)
-                 VALUES (?,'CUSTOMER_RECEIPT','APPROVED',?,?,?,?,?,?,0,?,?)",
-                [$docCode, $pdate, $partyId ?: null, fin360_f('jobcard_ref_text') ?: null, $amount, $amount, $amount, $actor, $actor]
-            );
-            fin360_exec($conn, 'UPDATE dbo.fin360_cash_accounts SET current_book_balance = current_book_balance + ? WHERE cash_account_id=?', [$amount, $cashId]);
-            $docId = (string)fin360_scalar($conn, 'SELECT MAX(document_id) FROM dbo.fin360_documents WHERE document_code=?', [$docCode]);
-            fin360_audit($conn, 'CREATE', 'fin360_payments', $payCode, null, ['amount' => $amount, 'type' => $ptype]);
-            fin360_audit($conn, 'CREATE', 'fin360_documents', $docId, null, ['type' => 'CUSTOMER_RECEIPT', 'amount' => $amount]);
-            fin360_redirect($tab, 'ok', 'دریافت مشتری ثبت شد (' . $docCode . ').');
+            fin360_register_receipt($conn, $tab, $actor);
         }
 
         case 'customer_prepayment': {
-            $partyId = (int)fin360_f('party_id');
+            $party = fin360_resolve_party($conn, $_POST, 'IN');
+            if ($party['error']) {
+                fin360_redirect($tab, 'err', $party['error']);
+            }
             $cashId = (int)fin360_f('cash_account_id');
             $amount = fin360_fn('amount');
             if ($amount <= 0 || $cashId <= 0) {
                 fin360_redirect($tab, 'err', 'مبلغ و حساب نقد الزامی است.');
             }
+            $docType = strtoupper((string)$party['party_type']) === 'CUSTOMER' ? 'CUSTOMER_PREPAYMENT' : 'GENERAL_RECEIPT';
             $payCode = fin360_next_code($conn, 'PAY', 'fin360_payments', 'payment_id');
             $docCode = fin360_next_code($conn, 'PRP', 'fin360_documents', 'document_id');
             $pdate = date('Y-m-d');
@@ -125,17 +193,17 @@ try {
                 $conn,
                 "INSERT INTO dbo.fin360_payments (payment_code, payment_type, payment_direction, party_id, cash_account_id, payment_date, amount, description, status_code, allocation_status, created_by)
                  VALUES (?,'CASH','IN',?,?,?,?,?,'APPROVED','UNALLOCATED',?)",
-                [$payCode, $partyId ?: null, $cashId, $pdate, $amount, fin360_f('description') ?: null, $actor]
+                [$payCode, $party['party_id'], $cashId, $pdate, $amount, fin360_f('description') ?: null, $actor]
             );
             fin360_exec(
                 $conn,
                 "INSERT INTO dbo.fin360_documents (document_code, document_type, document_status, document_date, party_id, jobcard_ref_text, subtotal_amount, total_amount, paid_amount, remaining_amount, created_by, approved_by)
-                 VALUES (?,'CUSTOMER_PREPAYMENT','APPROVED',?,?,?,?,?,?,0,?,?)",
-                [$docCode, $pdate, $partyId ?: null, fin360_f('jobcard_ref_text') ?: null, $amount, $amount, $amount, $actor, $actor]
+                 VALUES (?,?, 'APPROVED', ?,?,?,?,?,?,?,0,?,?)",
+                [$docCode, $docType, $pdate, $party['party_id'], fin360_f('jobcard_ref_text') ?: null, $amount, $amount, $amount, $actor, $actor]
             );
             fin360_exec($conn, 'UPDATE dbo.fin360_cash_accounts SET current_book_balance = current_book_balance + ? WHERE cash_account_id=?', [$amount, $cashId]);
             $docId = (string)fin360_scalar($conn, 'SELECT MAX(document_id) FROM dbo.fin360_documents WHERE document_code=?', [$docCode]);
-            fin360_audit($conn, 'CREATE', 'fin360_documents', $docId, null, ['type' => 'CUSTOMER_PREPAYMENT', 'amount' => $amount]);
+            fin360_audit($conn, 'CREATE', 'fin360_documents', $docId, null, ['type' => $docType, 'amount' => $amount, 'payer' => $party['display_name'], 'party_type' => $party['party_type']]);
             fin360_redirect($tab, 'ok', 'پیش‌دریافت ثبت شد.');
         }
 
@@ -200,38 +268,9 @@ try {
             fin360_redirect($tab, 'ok', 'خرید/بدهی ثبت شد.');
         }
 
+        case 'register_payment':
         case 'supplier_payment': {
-            $partyId = (int)fin360_f('party_id');
-            $cashId = (int)fin360_f('cash_account_id');
-            $amount = fin360_fn('amount');
-            $ptype = fin360_f('payment_type', 'BANK_TRANSFER');
-            if ($amount <= 0 || $cashId <= 0) {
-                fin360_redirect($tab, 'err', 'مبلغ و حساب نقد الزامی است.');
-            }
-            $bal = (float)fin360_scalar($conn, 'SELECT current_book_balance FROM dbo.fin360_cash_accounts WHERE cash_account_id=?', [$cashId]);
-            if ($amount > $bal) {
-                fin360_redirect($tab, 'err', 'موجودی حساب کافی نیست.');
-            }
-            $payCode = fin360_next_code($conn, 'PAY', 'fin360_payments', 'payment_id');
-            $docCode = fin360_next_code($conn, 'SPY', 'fin360_documents', 'document_id');
-            $pdate = date('Y-m-d');
-            fin360_exec(
-                $conn,
-                "INSERT INTO dbo.fin360_payments (payment_code, payment_type, payment_direction, party_id, cash_account_id, payment_date, amount, reference_no, status_code, allocation_status, created_by)
-                 VALUES (?,?,'OUT',?,?,?,?,?,'APPROVED','UNALLOCATED',?)",
-                [$payCode, $ptype, $partyId ?: null, $cashId, $pdate, $amount, fin360_f('reference_no') ?: null, $actor]
-            );
-            fin360_exec(
-                $conn,
-                "INSERT INTO dbo.fin360_documents (document_code, document_type, document_status, document_date, party_id, subtotal_amount, total_amount, paid_amount, remaining_amount, created_by, approved_by)
-                 VALUES (?,'PAYMENT','APPROVED',?,?,?,?,?,0,?,?)",
-                [$docCode, $pdate, $partyId ?: null, $amount, $amount, $amount, $actor, $actor]
-            );
-            fin360_exec($conn, 'UPDATE dbo.fin360_cash_accounts SET current_book_balance = current_book_balance - ? WHERE cash_account_id=?', [$amount, $cashId]);
-            $docId = (string)fin360_scalar($conn, 'SELECT MAX(document_id) FROM dbo.fin360_documents WHERE document_code=?', [$docCode]);
-            fin360_audit($conn, 'CREATE', 'fin360_payments', $payCode, null, ['direction' => 'OUT', 'amount' => $amount]);
-            fin360_audit($conn, 'CREATE', 'fin360_documents', $docId, null, ['type' => 'PAYMENT', 'amount' => $amount]);
-            fin360_redirect($tab, 'ok', 'پرداخت ثبت شد.');
+            fin360_register_payment($conn, $tab, $actor);
         }
 
         case 'jobcard_settlement': {
@@ -280,7 +319,7 @@ try {
             );
             $sid = (string)fin360_scalar($conn, 'SELECT MAX(settlement_id) FROM dbo.fin360_jobcard_settlements WHERE settlement_code=?', [$code]);
             fin360_audit($conn, 'CREATE', 'fin360_jobcard_settlements', $sid, null, ['final' => $final, 'remaining' => $remaining, 'status' => $st]);
-            fin360_redirect($tab, 'ok', 'تسویه JobCard ثبت شد. مانده: ' . number_format($remaining, 0));
+            fin360_redirect($tab, 'ok', 'تسویه JobCard ثبت شد. مانده: ' . fin360_format_money($remaining));
         }
 
         case 'tax_rule': {

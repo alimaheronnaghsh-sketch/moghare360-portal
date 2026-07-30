@@ -87,4 +87,6 @@ body.f360-body{
 .f360-status.warn{background:rgba(232,184,74,.15);color:var(--f360-warn)}
 .f360-status.danger{background:rgba(229,115,115,.15);color:var(--f360-danger)}
 .f360-report-line{display:flex;justify-content:space-between;padding:.35rem 0;border-bottom:1px dashed rgba(255,255,255,.06);font-size:.88rem}
-.f360-report-line.total{font-weight:700;color:var(--f360-primary);border-bottom:none;margin-top:.35rem}
+.f360-money-input{font-variant-numeric:tabular-nums;direction:ltr;text-align:left}
+.f360-fieldset{border:1px dashed var(--f360-border);border-radius:12px;padding:.75rem;margin:.25rem 0}
+.f360-fieldset legend{font-size:.78rem;color:var(--f360-muted);padding:0 .35rem}
