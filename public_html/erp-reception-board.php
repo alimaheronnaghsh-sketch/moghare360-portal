@@ -47,10 +47,13 @@ try {
 
 $kpi = [
     'customers' => 0, 'vehicles' => 0, 'cases' => 0, 'cases_draft' => 0,
-    'docs_missing' => 0, 'cartable_open' => 0, 'complaints_open' => 0,
-    'surveys_low' => 0, 'reminders_due' => 0, 'returns_open' => 0,
-    'promos_active' => 0, 'sms_draft' => 0, 'online_requests' => 0,
-    'avg_completion' => 0,
+    'cases_open' => 0, 'cases_complete' => 0,
+    'docs_total' => 0, 'docs_ok' => 0, 'docs_missing' => 0,
+    'cartable_open' => 0, 'complaints_open' => 0, 'complaints_critical' => 0,
+    'surveys_low' => 0, 'surveys_done' => 0, 'survey_avg' => 0,
+    'reminders_due' => 0, 'returns_open' => 0, 'returns_progress' => 0,
+    'promos_active' => 0, 'sms_draft' => 0, 'sms_ready' => 0,
+    'vip_club' => 0, 'online_requests' => 0, 'avg_completion' => 0,
 ];
 $customers = $vehicles = $cases = $documents = $cartable = $surveys = $complaints = $clubs = $reminders = $returns = $promotions = $assignments = $campaigns = $recipients = $audits = $onlineRequests = [];
 
@@ -58,15 +61,25 @@ if ($dbOk && $conn) {
     $kpi['customers'] = (int)(crm360_scalar($conn, 'SELECT COUNT(*) FROM dbo.crm360_customer_profiles') ?? 0);
     $kpi['vehicles'] = (int)(crm360_scalar($conn, 'SELECT COUNT(*) FROM dbo.crm360_vehicle_profiles') ?? 0);
     $kpi['cases'] = (int)(crm360_scalar($conn, 'SELECT COUNT(*) FROM dbo.crm360_reception_cases') ?? 0);
-    $kpi['cases_draft'] = (int)(crm360_scalar($conn, "SELECT COUNT(*) FROM dbo.crm360_reception_cases WHERE case_status IN ('DRAFT','IN_PROGRESS')") ?? 0);
+    $kpi['cases_draft'] = (int)(crm360_scalar($conn, "SELECT COUNT(*) FROM dbo.crm360_reception_cases WHERE case_status IN ('DRAFT','PROFILE_INCOMPLETE','IN_PROGRESS')") ?? 0);
+    $kpi['cases_open'] = (int)(crm360_scalar($conn, "SELECT COUNT(*) FROM dbo.crm360_reception_cases WHERE case_status NOT IN ('CLOSED','CANCELLED','DELIVERED')") ?? 0);
+    $kpi['cases_complete'] = (int)(crm360_scalar($conn, "SELECT COUNT(*) FROM dbo.crm360_reception_cases WHERE profile_completion_percent >= 100 OR case_status IN ('READY_FOR_CONTRACT','CONTRACT_PENDING','CONTRACT_SIGNED','IN_SERVICE','READY_FOR_DELIVERY','DELIVERED','CLOSED')") ?? 0);
+    $kpi['docs_total'] = (int)(crm360_scalar($conn, 'SELECT COUNT(*) FROM dbo.crm360_case_documents') ?? 0);
+    $kpi['docs_ok'] = (int)(crm360_scalar($conn, "SELECT COUNT(*) FROM dbo.crm360_case_documents WHERE document_status IN ('UPLOADED','VERIFIED','SIGNED')") ?? 0);
     $kpi['docs_missing'] = (int)(crm360_scalar($conn, "SELECT COUNT(*) FROM dbo.crm360_case_documents WHERE document_status='MISSING'") ?? 0);
-    $kpi['cartable_open'] = (int)(crm360_scalar($conn, "SELECT COUNT(*) FROM dbo.crm360_customer_cartable WHERE item_status='OPEN'") ?? 0);
-    $kpi['complaints_open'] = (int)(crm360_scalar($conn, "SELECT COUNT(*) FROM dbo.crm360_complaints WHERE complaint_status='OPEN'") ?? 0);
+    $kpi['cartable_open'] = (int)(crm360_scalar($conn, "SELECT COUNT(*) FROM dbo.crm360_customer_cartable WHERE item_status IN ('OPEN','IN_PROGRESS','OVERDUE')") ?? 0);
+    $kpi['complaints_open'] = (int)(crm360_scalar($conn, "SELECT COUNT(*) FROM dbo.crm360_complaints WHERE complaint_status IN ('OPEN','UNDER_REVIEW','CORRECTION_REQUIRED')") ?? 0);
+    $kpi['complaints_critical'] = (int)(crm360_scalar($conn, "SELECT COUNT(*) FROM dbo.crm360_complaints WHERE severity='CRITICAL' AND complaint_status NOT IN ('CLOSED','CANCELLED','REJECTED')") ?? 0);
     $kpi['surveys_low'] = (int)(crm360_scalar($conn, "SELECT COUNT(*) FROM dbo.crm360_satisfaction_surveys WHERE overall_score<=3 AND overall_score>0") ?? 0);
-    $kpi['reminders_due'] = (int)(crm360_scalar($conn, "SELECT COUNT(*) FROM dbo.crm360_service_reminders WHERE reminder_status IN ('SCHEDULED','NEEDS_FOLLOWUP') AND due_date<=CAST(GETDATE() AS DATE)") ?? 0);
-    $kpi['returns_open'] = (int)(crm360_scalar($conn, "SELECT COUNT(*) FROM dbo.crm360_return_pipeline WHERE result_status='OPEN'") ?? 0);
+    $kpi['surveys_done'] = (int)(crm360_scalar($conn, "SELECT COUNT(*) FROM dbo.crm360_satisfaction_surveys WHERE survey_status IN ('COMPLETED','NEEDS_FOLLOWUP','CLOSED') AND overall_score>0") ?? 0);
+    $kpi['survey_avg'] = (float)(crm360_scalar($conn, "SELECT ISNULL(AVG(CAST(overall_score AS FLOAT)),0) FROM dbo.crm360_satisfaction_surveys WHERE overall_score>0") ?? 0);
+    $kpi['reminders_due'] = (int)(crm360_scalar($conn, "SELECT COUNT(*) FROM dbo.crm360_service_reminders WHERE reminder_status IN ('DUE_SOON','DUE','OVERDUE','SCHEDULED','NEEDS_FOLLOWUP')") ?? 0);
+    $kpi['returns_open'] = (int)(crm360_scalar($conn, "SELECT COUNT(*) FROM dbo.crm360_return_pipeline WHERE result_status='OPEN' OR return_stage NOT IN ('RETURNED','LOST','CLOSED')") ?? 0);
+    $kpi['returns_progress'] = (int)(crm360_scalar($conn, "SELECT COUNT(*) FROM dbo.crm360_return_pipeline WHERE return_stage IN ('BOOKED','RETURNED','OFFER_SENT','CONTACTED')") ?? 0);
     $kpi['promos_active'] = (int)(crm360_scalar($conn, "SELECT COUNT(*) FROM dbo.crm360_promotions WHERE promotion_status='ACTIVE'") ?? 0);
     $kpi['sms_draft'] = (int)(crm360_scalar($conn, "SELECT COUNT(*) FROM dbo.crm360_sms_campaigns WHERE campaign_status='DRAFT'") ?? 0);
+    $kpi['sms_ready'] = (int)(crm360_scalar($conn, "SELECT COUNT(*) FROM dbo.crm360_sms_campaigns WHERE campaign_status IN ('READY_FOR_REVIEW','APPROVED_FOR_EXPORT','EXPORTED')") ?? 0);
+    $kpi['vip_club'] = (int)(crm360_scalar($conn, "SELECT COUNT(*) FROM dbo.crm360_customer_club WHERE tier_code IN ('GOLD','PLATINUM','VIP')") ?? 0);
     $kpi['avg_completion'] = (int)(crm360_scalar($conn, 'SELECT ISNULL(AVG(profile_completion_percent),0) FROM dbo.crm360_reception_cases') ?? 0);
     $onlineRequests = crm360_online_requests($conn, 30);
     $kpi['online_requests'] = count($onlineRequests);
@@ -96,27 +109,57 @@ if ($dbOk && $conn) {
     $promoOpts = crm360_promotion_options($conn);
 }
 
-$completionPct = $kpi['avg_completion'];
-$cartPct = $kpi['cartable_open'] > 0 ? max(20, 100 - min(80, $kpi['cartable_open'] * 5)) : 90;
-$docPct = $kpi['docs_missing'] > 0 ? max(10, 100 - min(90, $kpi['docs_missing'] * 3)) : 95;
-$satPct = $kpi['surveys_low'] > 0 ? max(15, 100 - $kpi['surveys_low'] * 10) : 88;
+$caseDenom = (int)$kpi['cases_open'];
+$casePct = $caseDenom > 0 ? (int)round(100 * $kpi['cases_complete'] / $caseDenom) : 0;
+$docPct = $kpi['docs_total'] > 0 ? (int)round(100 * $kpi['docs_ok'] / $kpi['docs_total']) : 0;
+$satPct = $kpi['survey_avg'] > 0 ? (int)round(($kpi['survey_avg'] / 5) * 100) : 0;
+$returnPct = $kpi['returns_open'] > 0 ? (int)round(100 * $kpi['returns_progress'] / $kpi['returns_open']) : 0;
+$hubOpenCartable = [];
+foreach ($cartable as $cbRow) {
+    $st = (string)($cbRow['item_status'] ?? '');
+    if (in_array($st, ['OPEN', 'IN_PROGRESS', 'OVERDUE'], true)) {
+        $hubOpenCartable[] = $cbRow;
+        if (count($hubOpenCartable) >= 5) {
+            break;
+        }
+    }
+}
+$hubAudits = array_slice($audits, 0, 5);
+$hubSections = [
+    ['پروفایل مشتری', 'erp-crm-customer-profile.php', 'ثبت و مشاهده پروفایل'],
+    ['پروفایل خودرو', 'erp-crm-vehicle-profile.php', 'خودرو و پلاک'],
+    ['تکمیل پرونده پذیرش', 'erp-crm-case.php', 'پرونده پذیرش'],
+    ['قرارداد و مدارک', 'erp-crm-documents.php', 'مدارک و امضا'],
+    ['کارتابل مشتری', 'erp-crm-cartable.php', 'پیگیری کارتابل'],
+    ['رضایت‌سنجی', 'erp-crm-satisfaction.php', 'تجربه مشتری'],
+    ['شکایت و اصلاحیه', 'erp-crm-complaints.php', 'شکایت باز'],
+    ['باشگاه مشتریان', 'erp-crm-club.php', 'سطح باشگاه'],
+    ['یادآوری سرویس‌های دوره‌ای', 'erp-crm-reminders.php', 'سررسید سرویس'],
+    ['بازگشت مشتری', 'erp-crm-return.php', 'پیگیری بازگشت'],
+    ['پروموشن', 'erp-crm-promotions.php', 'پیشنهاد فعال'],
+    ['کمپین پیامکی', 'erp-crm-sms-campaigns.php', 'پیش‌نویس و خروجی'],
+];
 ?>
 <!DOCTYPE html>
 <html lang="fa" dir="rtl">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>مرکز پذیرش و CRM — MOGHARE360</title>
+<title>مرکز ارتباط با مشتریان — MOGHARE360</title>
 <link rel="stylesheet" href="assets/css/m360-suite-theme.css">
 <link rel="stylesheet" href="assets/css/m360-crm.css">
 </head>
 <body class="c360-body">
 <div class="c360-wrap">
-  <div class="c360-crumb"><a href="personnel.html">پرسنل</a> / <a href="personnel.html">CRM و پذیرش</a> / مرکز پذیرش</div>
+  <div class="c360-crumb"><a href="personnel.html">پرسنل</a> / <a href="personnel.html">ارتباط با مشتریان</a> / داشبورد</div>
   <header class="c360-head">
     <div>
-      <h1>مرکز پذیرش و CRM</h1>
-      <p>پروفایل مشتری و خودرو، تکمیل پرونده پذیرش، مدارک، کارتابل، رضایت‌سنجی، شکایت، باشگاه، یادآوری، بازگشت مشتری، پروموشن و کمپین پیامکی</p>
+      <h1>مرکز ارتباط با مشتریان</h1>
+      <p>پروفایل، پذیرش، مدارک، کارتابل، رضایت، شکایت، باشگاه، یادآوری، بازگشت، پروموشن و کمپین</p>
+      <div class="c360-head-meta">
+        <a class="c360-btn" href="personnel.html">بازگشت به صفحه پرسنل</a>
+        <span class="c360-badge">پایگاه داده moghare360_ERP</span>
+      </div>
     </div>
     <div>
       <?php if ($devMode): ?><span class="c360-badge">حالت توسعه محلی</span><?php endif; ?>
@@ -131,19 +174,6 @@ $satPct = $kpi['surveys_low'] > 0 ? max(15, 100 - $kpi['surveys_low'] * 10) : 88
     <div class="c360-flash err"><?= crm360_h($dbErr) ?></div>
   <?php endif; ?>
 
-  <div class="c360-actions">
-    <a class="c360-btn primary" href="?tab=customers">ثبت مشتری</a>
-    <a class="c360-btn" href="?tab=vehicles">ثبت خودرو</a>
-    <a class="c360-btn" href="?tab=cases">ایجاد پرونده</a>
-    <a class="c360-btn" href="?tab=documents">مدارک</a>
-    <a class="c360-btn" href="?tab=cartable">کارتابل</a>
-    <a class="c360-btn" href="?tab=satisfaction">رضایت‌سنجی</a>
-    <a class="c360-btn" href="?tab=complaints">شکایت</a>
-    <a class="c360-btn" href="?tab=sms">کمپین پیامک</a>
-    <a class="c360-btn" href="?tab=audit">Audit</a>
-    <a class="c360-btn" href="erp-reception-workbench.php">میز کار پذیرش</a>
-  </div>
-
   <nav class="c360-tabs">
     <?php foreach ($tabs as $k => $label): ?>
       <a href="?tab=<?= crm360_h($k) ?>" class="<?= $tab === $k ? 'active' : '' ?>"><?= crm360_h($label) ?></a>
@@ -151,32 +181,121 @@ $satPct = $kpi['surveys_low'] > 0 ? max(15, 100 - $kpi['surveys_low'] * 10) : 88
   </nav>
 
 <?php if ($tab === 'dashboard'): ?>
-  <section class="c360-kpi-grid">
-    <?php
-    $cards = [
-        ['مشتریان', $kpi['customers'], false],
-        ['خودروها', $kpi['vehicles'], false],
-        ['پرونده‌های پذیرش', $kpi['cases'], false],
-        ['پرونده ناقص', $kpi['cases_draft'], false],
-        ['مدارک MISSING', $kpi['docs_missing'], false],
-        ['کارتابل باز', $kpi['cartable_open'], false],
-        ['شکایت باز', $kpi['complaints_open'], false],
-        ['رضایت پایین', $kpi['surveys_low'], false],
-        ['یادآوری سررسید', $kpi['reminders_due'], false],
-        ['بازگشت مشتری', $kpi['returns_open'], false],
-        ['درخواست آنلاین', $kpi['online_requests'], false],
-        ['میانگین تکمیل', $kpi['avg_completion'] . '%', false],
-    ];
-    foreach ($cards as [$lbl, $val, $money]): ?>
-      <div class="c360-kpi"><span><?= crm360_h($lbl) ?></span><strong><?= crm360_h((string)$val) ?></strong></div>
-    <?php endforeach; ?>
+  <section class="c360-status-grid">
+    <div class="c360-status-card">
+      <span class="c360-light ok"></span>
+      <span>تکمیل پرونده‌ها</span>
+      <strong><?= (int)$kpi['cases_complete'] ?> / <?= (int)$caseDenom ?></strong>
+      <em><?= $casePct ?>%</em>
+    </div>
+    <div class="c360-status-card">
+      <span class="c360-light <?= $docPct >= 80 ? 'ok' : ($kpi['docs_total'] ? 'warn' : 'idle') ?>"></span>
+      <span>مدارک کامل</span>
+      <strong><?= (int)$kpi['docs_ok'] ?> / <?= (int)$kpi['docs_total'] ?></strong>
+      <em><?= $docPct ?>%</em>
+    </div>
+    <div class="c360-status-card">
+      <span class="c360-light <?= $kpi['survey_avg'] >= 4 ? 'ok' : ($kpi['survey_avg'] > 0 ? 'warn' : 'idle') ?>"></span>
+      <span>رضایت مشتری</span>
+      <strong><?= number_format($kpi['survey_avg'], 1) ?> / ۵</strong>
+      <em><?= (int)$kpi['surveys_done'] ?> نظر</em>
+    </div>
+    <div class="c360-status-card <?= $kpi['complaints_open'] > 0 ? 'is-alert' : '' ?>">
+      <span class="c360-light <?= $kpi['complaints_critical'] > 0 ? 'danger' : ($kpi['complaints_open'] > 0 ? 'warn' : 'ok') ?>"></span>
+      <span>شکایات باز</span>
+      <strong><?= (int)$kpi['complaints_open'] ?></strong>
+      <em>بحرانی: <?= (int)$kpi['complaints_critical'] ?></em>
+    </div>
+    <div class="c360-status-card">
+      <span class="c360-light <?= $kpi['reminders_due'] > 0 ? 'warn' : 'ok' ?>"></span>
+      <span>یادآوری‌های سررسید</span>
+      <strong><?= (int)$kpi['reminders_due'] ?></strong>
+      <em>سررسید / پیگیری</em>
+    </div>
+    <div class="c360-status-card">
+      <span class="c360-light <?= $kpi['returns_open'] > 0 ? 'warn' : 'idle' ?>"></span>
+      <span>بازگشت مشتری</span>
+      <strong><?= (int)$kpi['returns_progress'] ?> / <?= (int)$kpi['returns_open'] ?></strong>
+      <em><?= $returnPct ?>%</em>
+    </div>
+    <div class="c360-status-card">
+      <span class="c360-light <?= $kpi['sms_ready'] > 0 ? 'ok' : 'idle' ?>"></span>
+      <span>کمپین آماده خروجی</span>
+      <strong><?= (int)$kpi['sms_ready'] ?></strong>
+      <em>پیش‌نویس: <?= (int)$kpi['sms_draft'] ?></em>
+    </div>
+    <div class="c360-status-card">
+      <span class="c360-light <?= $kpi['vip_club'] > 0 ? 'ok' : 'idle' ?>"></span>
+      <span>مشتریان VIP / باشگاه</span>
+      <strong><?= (int)$kpi['vip_club'] ?></strong>
+      <em>طلایی / پلاتین / VIP</em>
+    </div>
   </section>
+
   <div class="c360-gauge-row">
-    <?= crm360_gauge($completionPct, 'تکمیل پرونده') ?>
-    <?= crm360_gauge($docPct, 'وضعیت مدارک', '#66bb6a') ?>
-    <?= crm360_gauge($cartPct, 'کارتابل', '#e8b84a') ?>
+    <?= crm360_gauge($casePct, 'تکمیل پرونده‌ها') ?>
+    <?= crm360_gauge($docPct, 'مدارک کامل', '#66bb6a') ?>
     <?= crm360_gauge($satPct, 'رضایت مشتری', '#3ecf8e') ?>
+    <?= crm360_gauge($returnPct, 'بازگشت مشتری', '#e8b84a') ?>
   </div>
+
+  <section class="c360-panel">
+    <h2>بخش‌های ارتباط با مشتریان</h2>
+    <div class="c360-hub-grid">
+      <?php foreach ($hubSections as [$title, $href, $hint]): ?>
+        <a class="c360-hub-card" href="<?= crm360_h($href) ?>">
+          <strong><?= crm360_h($title) ?></strong>
+          <span><?= crm360_h($hint) ?></span>
+        </a>
+      <?php endforeach; ?>
+    </div>
+  </section>
+
+  <div class="c360-grid2">
+    <section class="c360-panel">
+      <h2>کارتابل باز</h2>
+      <?php if (!$hubOpenCartable): ?>
+        <p class="c360-muted">موردی باز نیست.</p>
+      <?php else: ?>
+        <div class="c360-table-wrap">
+          <table class="c360-table">
+            <thead><tr><th>عنوان</th><th>مشتری</th><th>وضعیت</th></tr></thead>
+            <tbody>
+            <?php foreach ($hubOpenCartable as $cb): ?>
+              <tr>
+                <td><?= crm360_h((string)($cb['item_title'] ?? '')) ?></td>
+                <td><?= crm360_h((string)($cb['full_name'] ?? '')) ?></td>
+                <td><span class="c360-status"><?= crm360_h((string)($cb['item_status'] ?? '')) ?></span></td>
+              </tr>
+            <?php endforeach; ?>
+            </tbody>
+          </table>
+        </div>
+      <?php endif; ?>
+    </section>
+    <section class="c360-panel">
+      <h2>آخرین رویدادهای Audit</h2>
+      <?php if (!$hubAudits): ?>
+        <p class="c360-muted">رویدادی ثبت نشده است.</p>
+      <?php else: ?>
+        <div class="c360-table-wrap">
+          <table class="c360-table">
+            <thead><tr><th>رویداد</th><th>موجودیت</th><th>زمان</th></tr></thead>
+            <tbody>
+            <?php foreach ($hubAudits as $au): ?>
+              <tr>
+                <td><?= crm360_h((string)($au['action_code'] ?? '')) ?></td>
+                <td><?= crm360_h((string)($au['entity_name'] ?? '')) ?> #<?= crm360_h((string)($au['entity_id'] ?? '')) ?></td>
+                <td><?= crm360_h((string)($au['event_time'] ?? '')) ?></td>
+              </tr>
+            <?php endforeach; ?>
+            </tbody>
+          </table>
+        </div>
+      <?php endif; ?>
+    </section>
+  </div>
+
   <?php if ($onlineRequests): ?>
   <section class="c360-panel">
     <h2>درخواست‌های آنلاین (فقط خواندنی)</h2>
@@ -184,7 +303,7 @@ $satPct = $kpi['surveys_low'] > 0 ? max(15, 100 - $kpi['surveys_low'] * 10) : 88
       <table class="c360-table">
         <thead><tr><th>شناسه</th><th>موبایل</th><th>پلاک</th><th>وضعیت</th><th>تاریخ</th><th>اقدام</th></tr></thead>
         <tbody>
-        <?php foreach ($onlineRequests as $or): ?>
+        <?php foreach (array_slice($onlineRequests, 0, 5) as $or): ?>
           <tr>
             <td><?= crm360_h((string)$or['online_request_id']) ?></td>
             <td><?= crm360_h((string)($or['mobile'] ?? '')) ?></td>

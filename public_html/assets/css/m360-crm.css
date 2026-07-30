@@ -86,3 +86,27 @@ body.c360-body{
 .c360-missing-list{margin:.5rem 0;padding:0;list-style:none}
 .c360-missing-list li{font-size:.78rem;color:var(--c360-warn);padding:.2rem 0}
 .c360-inline-form{display:flex;flex-wrap:wrap;gap:.35rem;align-items:center}
+.c360-head-meta{display:flex;flex-wrap:wrap;gap:.55rem;align-items:center;margin-top:.7rem}
+.c360-status-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.7rem;margin-bottom:1.15rem}
+.c360-status-card{
+  position:relative;background:linear-gradient(165deg,rgba(62,207,142,.12),var(--c360-panel));
+  border:1px solid var(--c360-border);border-radius:14px;padding:.85rem .9rem .75rem
+}
+.c360-status-card.is-alert{border-color:rgba(229,115,115,.45);background:linear-gradient(165deg,rgba(229,115,115,.12),var(--c360-panel))}
+.c360-status-card>span:not(.c360-light){display:block;font-size:.72rem;color:var(--c360-muted);margin:.15rem 0 .35rem}
+.c360-status-card strong{display:block;font-size:1.15rem;color:var(--c360-primary);font-variant-numeric:tabular-nums}
+.c360-status-card em{display:block;margin-top:.25rem;font-style:normal;font-size:.7rem;color:var(--c360-muted)}
+.c360-light{display:inline-block;width:.55rem;height:.55rem;border-radius:50%;background:rgba(255,255,255,.2);box-shadow:0 0 0 3px rgba(255,255,255,.04)}
+.c360-light.ok{background:var(--c360-ok);box-shadow:0 0 8px rgba(102,187,106,.45)}
+.c360-light.warn{background:var(--c360-warn);box-shadow:0 0 8px rgba(232,184,74,.4)}
+.c360-light.danger{background:var(--c360-danger);box-shadow:0 0 8px rgba(229,115,115,.45)}
+.c360-light.idle{background:rgba(143,179,163,.45)}
+.c360-hub-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:.7rem}
+.c360-hub-card{
+  display:flex;flex-direction:column;gap:.35rem;padding:.95rem 1rem;border-radius:14px;text-decoration:none;
+  color:var(--c360-text);background:linear-gradient(160deg,rgba(62,207,142,.14),var(--c360-panel2));
+  border:1px solid var(--c360-border);min-height:88px;transition:border-color .15s ease,transform .15s ease
+}
+.c360-hub-card:hover{border-color:var(--c360-primary);transform:translateY(-1px);color:#fff}
+.c360-hub-card strong{font-size:.92rem}
+.c360-hub-card span{font-size:.72rem;color:var(--c360-muted)}
