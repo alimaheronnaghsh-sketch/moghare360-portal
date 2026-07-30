@@ -361,6 +361,360 @@ function crm360_gauge(int $pct, string $label, string $color = '#3ecf8e'): strin
     return '<div class="c360-gauge-card"><div class="c360-gauge"><svg viewBox="0 0 100 100"><circle class="c360-gauge-track" cx="50" cy="50" r="45"/><circle class="c360-gauge-value" cx="50" cy="50" r="45" stroke="' . crm360_h($color) . '" stroke-dasharray="' . $c . '" stroke-dashoffset="' . $off . '"/></svg><div class="c360-gauge-center"><strong>' . $pct . '%</strong><span>وضعیت</span></div></div><h4>' . crm360_h($label) . '</h4></div>';
 }
 
+/**
+ * Rich gauge card for one-row executive strip.
+ *
+ * @param array{pct:int,label:string,value:string,sub?:string,color?:string,title?:string,tone?:string} $g
+ */
+function crm360_gauge_card(array $g): string
+{
+    $pct = max(0, min(100, (int)($g['pct'] ?? 0)));
+    $color = (string)($g['color'] ?? '#3ecf8e');
+    $tone = (string)($g['tone'] ?? '');
+    $c = 2 * M_PI * 42;
+    $off = $c * (1 - $pct / 100);
+    $cls = 'crm-gauge-card' . ($tone !== '' ? ' is-' . preg_replace('/[^a-z]/', '', $tone) : '');
+    $title = (string)($g['title'] ?? ($g['label'] ?? ''));
+    $html = '<article class="' . crm360_h($cls) . '" title="' . crm360_h($title) . '">';
+    $html .= '<div class="crm-gauge-ring"><svg viewBox="0 0 100 100" aria-hidden="true">';
+    $html .= '<circle class="c360-gauge-track" cx="50" cy="50" r="42"/>';
+    $html .= '<circle class="c360-gauge-value" cx="50" cy="50" r="42" stroke="' . crm360_h($color) . '" stroke-dasharray="' . $c . '" stroke-dashoffset="' . $off . '"/>';
+    $html .= '</svg><div class="crm-gauge-center"><strong>' . crm360_h((string)($g['value'] ?? ($pct . '%'))) . '</strong></div></div>';
+    $html .= '<h4>' . crm360_h((string)($g['label'] ?? '')) . '</h4>';
+    if (!empty($g['sub'])) {
+        $html .= '<p class="crm-gauge-sub">' . crm360_h((string)$g['sub']) . '</p>';
+    }
+    $html .= '</article>';
+    return $html;
+}
+
+/**
+ * @return list<array{id:int,title:string,subtitle:string,badge:string}>
+ */
+function crm360_search_customers($conn, string $q, int $limit = 10): array
+{
+    $limit = max(1, min(10, $limit));
+    $q = trim($q);
+    if (mb_strlen($q) < 2) {
+        return [];
+    }
+    $like = '%' . $q . '%';
+    $rows = crm360_rows(
+        $conn,
+        'SELECT TOP ' . $limit . ' customer_profile_id, full_name, mobile, national_id, customer_ref_text, customer_status, vip_level
+         FROM dbo.crm360_customer_profiles
+         WHERE full_name LIKE ? OR mobile LIKE ? OR national_id LIKE ? OR customer_ref_text LIKE ?
+            OR CAST(customer_profile_id AS NVARCHAR(20)) LIKE ?
+         ORDER BY customer_profile_id DESC',
+        [$like, $like, $like, $like, $like]
+    );
+    $out = [];
+    foreach ($rows as $r) {
+        $vip = strtoupper((string)($r['vip_level'] ?? 'NONE'));
+        $status = function_exists('m360_rui_label')
+            ? m360_rui_label((string)($r['customer_status'] ?? ''))
+            : (string)($r['customer_status'] ?? '');
+        $badge = $status;
+        if ($vip !== '' && $vip !== 'NONE') {
+            $badge .= ' · ' . (function_exists('m360_rui_label') ? m360_rui_label($vip) : $vip);
+        }
+        $out[] = [
+            'id' => (int)$r['customer_profile_id'],
+            'title' => (string)($r['full_name'] ?? ''),
+            'subtitle' => trim((string)($r['mobile'] ?? '')),
+            'badge' => $badge,
+        ];
+    }
+    return $out;
+}
+
+/**
+ * @return list<array{id:int,title:string,subtitle:string,badge:string,customer_id?:int}>
+ */
+function crm360_search_vehicles($conn, string $q, int $limit = 10, ?int $customerId = null): array
+{
+    $limit = max(1, min(10, $limit));
+    $q = trim($q);
+    if (mb_strlen($q) < 2) {
+        return [];
+    }
+    $like = '%' . $q . '%';
+    $sql = 'SELECT TOP ' . $limit . ' v.vehicle_profile_id, v.plate_no, v.vin, v.brand, v.model, v.vehicle_ref_text, v.customer_profile_id, c.full_name
+            FROM dbo.crm360_vehicle_profiles v
+            LEFT JOIN dbo.crm360_customer_profiles c ON c.customer_profile_id=v.customer_profile_id
+            WHERE (v.plate_no LIKE ? OR v.vin LIKE ? OR v.brand LIKE ? OR v.model LIKE ? OR v.vehicle_ref_text LIKE ?
+               OR CAST(v.vehicle_profile_id AS NVARCHAR(20)) LIKE ?)';
+    $params = [$like, $like, $like, $like, $like, $like];
+    // Prefer selected customer's vehicles first; still allow broader matches.
+    $prio = ($customerId !== null && $customerId > 0) ? (int)$customerId : 0;
+    $sql .= ' ORDER BY CASE WHEN v.customer_profile_id=' . $prio . ' THEN 0 ELSE 1 END, v.vehicle_profile_id DESC';
+    $rows = crm360_rows($conn, $sql, $params);
+    $out = [];
+    foreach ($rows as $r) {
+        $plate = trim((string)($r['plate_no'] ?? ''));
+        $bm = trim((string)($r['brand'] ?? '') . ' ' . (string)($r['model'] ?? ''));
+        $owner = trim((string)($r['full_name'] ?? ''));
+        $title = ($plate !== '' ? $plate : 'بدون پلاک') . ' | ' . ($bm !== '' ? $bm : '—');
+        $out[] = [
+            'id' => (int)$r['vehicle_profile_id'],
+            'title' => $title,
+            'subtitle' => $owner !== '' ? ('مشتری مالک: ' . $owner) : 'بدون مالک',
+            'badge' => $owner !== '' ? $owner : '',
+            'customer_id' => (int)($r['customer_profile_id'] ?? 0),
+        ];
+    }
+    return $out;
+}
+
+/**
+ * Operational dashboard metrics (read-only).
+ *
+ * @return array<string,mixed>
+ */
+function crm360_dashboard_metrics($conn): array
+{
+    $m = [
+        'cases_week' => 0,
+        'completed_today' => 0,
+        'completed_week' => 0,
+        'cases_week_total' => 0,
+        'cars_inside' => 0,
+        'dissatisfaction' => 0,
+        'satisfaction_avg' => 0.0,
+        'satisfaction_pct' => 0,
+        'loyal_month' => 0,
+        'customers_total' => 0,
+        'customers_vip' => 0,
+        'customers_normal' => 0,
+        'vip_pct' => 0,
+        'normal_pct' => 0,
+        'service_mix' => [],
+        'returns_quarter' => 0,
+    ];
+    if (!$conn) {
+        return $m;
+    }
+
+    $completed = "case_status IN (N'CLOSED',N'DELIVERED',N'CONTRACT_SIGNED',N'READY_FOR_DELIVERY') OR profile_completion_percent >= 100";
+    $m['cases_week'] = (int)(crm360_scalar($conn, "SELECT COUNT(*) FROM dbo.crm360_reception_cases WHERE created_at >= DATEADD(day, -7, SYSUTCDATETIME())") ?? 0);
+    $m['cases_week_total'] = $m['cases_week'];
+    $m['completed_today'] = (int)(crm360_scalar($conn, "SELECT COUNT(*) FROM dbo.crm360_reception_cases WHERE CONVERT(date, updated_at)=CONVERT(date, SYSUTCDATETIME()) AND ($completed)") ?? 0);
+    $m['completed_week'] = (int)(crm360_scalar($conn, "SELECT COUNT(*) FROM dbo.crm360_reception_cases WHERE updated_at >= DATEADD(day, -7, SYSUTCDATETIME()) AND ($completed)") ?? 0);
+    $m['cars_inside'] = (int)(crm360_scalar(
+        $conn,
+        "SELECT COUNT(*) FROM dbo.crm360_reception_cases WHERE case_status IN (N'IN_SERVICE',N'WAITING_CUSTOMER',N'READY_FOR_DELIVERY',N'READY_FOR_CONTRACT',N'CONTRACT_PENDING',N'CONTRACT_SIGNED')"
+    ) ?? 0);
+
+    $openComplaints = (int)(crm360_scalar($conn, "SELECT COUNT(*) FROM dbo.crm360_complaints WHERE complaint_status IN (N'OPEN',N'UNDER_REVIEW',N'CORRECTION_REQUIRED',N'IN_PROGRESS')") ?? 0);
+    $lowSurveys = (int)(crm360_scalar($conn, "SELECT COUNT(*) FROM dbo.crm360_satisfaction_surveys WHERE overall_score > 0 AND overall_score <= 3") ?? 0);
+    $m['dissatisfaction'] = $openComplaints + $lowSurveys;
+    $m['satisfaction_avg'] = (float)(crm360_scalar($conn, "SELECT ISNULL(AVG(CAST(overall_score AS FLOAT)),0) FROM dbo.crm360_satisfaction_surveys WHERE overall_score>0") ?? 0);
+    $surveyTotal = (int)(crm360_scalar($conn, "SELECT COUNT(*) FROM dbo.crm360_satisfaction_surveys WHERE overall_score>0") ?? 0);
+    $surveyGood = (int)(crm360_scalar($conn, "SELECT COUNT(*) FROM dbo.crm360_satisfaction_surveys WHERE overall_score>=4") ?? 0);
+    $m['satisfaction_pct'] = $surveyTotal > 0 ? (int)round(100 * $surveyGood / $surveyTotal) : 0;
+
+    $m['loyal_month'] = (int)(crm360_scalar(
+        $conn,
+        "SELECT COUNT(*) FROM dbo.crm360_customer_club
+         WHERE tier_code IN (N'GOLD',N'PLATINUM',N'VIP')
+           AND (
+             (last_activity_date IS NOT NULL AND last_activity_date >= DATEFROMPARTS(YEAR(SYSUTCDATETIME()), MONTH(SYSUTCDATETIME()), 1))
+             OR updated_at >= DATEFROMPARTS(YEAR(SYSUTCDATETIME()), MONTH(SYSUTCDATETIME()), 1)
+           )"
+    ) ?? 0);
+
+    $m['customers_total'] = (int)(crm360_scalar($conn, 'SELECT COUNT(*) FROM dbo.crm360_customer_profiles') ?? 0);
+    $m['customers_vip'] = (int)(crm360_scalar(
+        $conn,
+        "SELECT COUNT(*) FROM dbo.crm360_customer_profiles
+         WHERE UPPER(ISNULL(vip_level,N'NONE')) NOT IN (N'NONE',N'',N'NEW')
+            OR customer_profile_id IN (SELECT customer_profile_id FROM dbo.crm360_customer_club WHERE tier_code IN (N'GOLD',N'PLATINUM',N'VIP'))"
+    ) ?? 0);
+    $m['customers_normal'] = max(0, $m['customers_total'] - $m['customers_vip']);
+    if ($m['customers_total'] > 0) {
+        $m['vip_pct'] = (int)round(100 * $m['customers_vip'] / $m['customers_total']);
+        $m['normal_pct'] = 100 - $m['vip_pct'];
+    }
+
+    $mixRows = crm360_rows(
+        $conn,
+        "SELECT TOP 20 ISNULL(NULLIF(LTRIM(RTRIM(service_type)),N''), N'OTHER') AS service_type, COUNT(*) AS cnt
+         FROM dbo.crm360_reception_cases
+         WHERE created_at >= DATEADD(day, -30, SYSUTCDATETIME())
+         GROUP BY ISNULL(NULLIF(LTRIM(RTRIM(service_type)),N''), N'OTHER')
+         ORDER BY COUNT(*) DESC"
+    );
+    $mixTotal = 0;
+    foreach ($mixRows as $r) {
+        $mixTotal += (int)($r['cnt'] ?? 0);
+    }
+    $mix = [];
+    foreach ($mixRows as $r) {
+        $code = (string)($r['service_type'] ?? 'OTHER');
+        $cnt = (int)($r['cnt'] ?? 0);
+        $label = function_exists('m360_rui_label') ? m360_rui_label($code) : $code;
+        if ($code === 'OTHER' || $label === $code) {
+            $label = $code === 'OTHER' ? 'سایر' : $label;
+        }
+        $mix[] = [
+            'code' => $code,
+            'label' => $label,
+            'count' => $cnt,
+            'pct' => $mixTotal > 0 ? (int)round(100 * $cnt / $mixTotal) : 0,
+        ];
+    }
+    $m['service_mix'] = $mix;
+
+    $m['returns_quarter'] = (int)(crm360_scalar(
+        $conn,
+        "SELECT COUNT(*) FROM dbo.crm360_return_pipeline
+         WHERE (
+             result_status IN (N'RETURNED',N'SUCCESS')
+             OR return_stage IN (N'RETURNED',N'BOOKED',N'WON')
+         )
+         AND COALESCE(last_contact_date, next_action_date, CONVERT(date, updated_at), CONVERT(date, created_at))
+             >= DATEADD(day, -90, CONVERT(date, SYSUTCDATETIME()))"
+    ) ?? 0);
+
+    return $m;
+}
+
+function crm360_render_search_picker(string $entity, string $hiddenName, string $label, string $placeholder, string $createHref, string $createLabel, string $emptyMsg): string
+{
+    $uid = 'crm_pick_' . preg_replace('/[^a-z0-9_]/', '', $entity . '_' . $hiddenName);
+    $html = '<div class="crm-picker" data-entity="' . crm360_h($entity) . '" data-uid="' . crm360_h($uid) . '">';
+    $html .= '<label class="crm-picker-label">' . crm360_h($label) . '</label>';
+    $html .= '<input type="hidden" name="' . crm360_h($hiddenName) . '" id="' . crm360_h($uid) . '_id" value="" required>';
+    $html .= '<div class="crm-picker-selected" id="' . crm360_h($uid) . '_selected" hidden></div>';
+    $html .= '<div class="crm-picker-search-row">';
+    $html .= '<input type="search" class="crm-picker-q" id="' . crm360_h($uid) . '_q" placeholder="' . crm360_h($placeholder) . '" autocomplete="off">';
+    $html .= '<a class="c360-btn" href="' . crm360_h($createHref) . '">' . crm360_h($createLabel) . '</a>';
+    $html .= '</div>';
+    $html .= '<div class="crm-picker-results" id="' . crm360_h($uid) . '_results" hidden></div>';
+    $html .= '<p class="crm-picker-empty c360-muted" id="' . crm360_h($uid) . '_empty" hidden>' . crm360_h($emptyMsg) . ' <a href="' . crm360_h($createHref) . '">' . crm360_h($createLabel) . '</a></p>';
+    $html .= '</div>';
+    return $html;
+}
+
+function crm360_search_picker_script(): string
+{
+    return <<<'JS'
+<script>
+(function () {
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+  function bindPicker(root) {
+    var entity = root.getAttribute('data-entity');
+    var uid = root.getAttribute('data-uid');
+    var qEl = document.getElementById(uid + '_q');
+    var idEl = document.getElementById(uid + '_id');
+    var resEl = document.getElementById(uid + '_results');
+    var selEl = document.getElementById(uid + '_selected');
+    var emptyEl = document.getElementById(uid + '_empty');
+    var timer = null;
+    function customerId() {
+      var c = document.getElementById('crm_pick_customer_customer_profile_id_id');
+      return c && c.value ? c.value : '';
+    }
+    function renderSelected(item) {
+      idEl.value = String(item.id);
+      idEl.removeAttribute('required');
+      idEl.setAttribute('data-filled', '1');
+      selEl.hidden = false;
+      selEl.innerHTML = '<strong>' + esc(item.title) + '</strong><span>' + esc(item.subtitle || '') + '</span>'
+        + '<button type="button" class="c360-btn crm-picker-clear">حذف</button>';
+      selEl.querySelector('.crm-picker-clear').addEventListener('click', function () {
+        idEl.value = '';
+        idEl.setAttribute('required', 'required');
+        idEl.removeAttribute('data-filled');
+        selEl.hidden = true;
+        selEl.innerHTML = '';
+        qEl.value = '';
+        qEl.focus();
+      });
+      resEl.hidden = true;
+      emptyEl.hidden = true;
+      if (entity === 'customer') {
+        document.querySelectorAll('.crm-picker[data-entity="vehicle"]').forEach(function (vp) {
+          var vid = vp.getAttribute('data-uid');
+          var vh = document.getElementById(vid + '_id');
+          if (vh) { vh.value = ''; vh.setAttribute('required', 'required'); }
+          var vs = document.getElementById(vid + '_selected');
+          if (vs) { vs.hidden = true; vs.innerHTML = ''; }
+        });
+      }
+    }
+    function search() {
+      var q = (qEl.value || '').trim();
+      if (q.length < 2) {
+        resEl.hidden = true;
+        emptyEl.hidden = true;
+        resEl.innerHTML = '';
+        return;
+      }
+      var url = 'erp-crm-search-api.php?entity=' + encodeURIComponent(entity) + '&q=' + encodeURIComponent(q);
+      if (entity === 'vehicle' && customerId()) {
+        url += '&customer_id=' + encodeURIComponent(customerId());
+      }
+      fetch(url, { credentials: 'same-origin', headers: { 'Accept': 'application/json' } })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          var items = (data && data.items) ? data.items : [];
+          if (!items.length) {
+            resEl.hidden = true;
+            resEl.innerHTML = '';
+            emptyEl.hidden = false;
+            return;
+          }
+          emptyEl.hidden = true;
+          resEl.hidden = false;
+          resEl.innerHTML = items.map(function (it) {
+            return '<button type="button" class="crm-picker-item" data-id="' + esc(it.id) + '">'
+              + '<strong>' + esc(it.title) + '</strong>'
+              + '<span>' + esc(it.subtitle || '') + '</span>'
+              + (it.badge ? '<em>' + esc(it.badge) + '</em>' : '')
+              + '</button>';
+          }).join('');
+          resEl.querySelectorAll('.crm-picker-item').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+              var id = parseInt(btn.getAttribute('data-id'), 10);
+              var found = items.find(function (x) { return parseInt(x.id, 10) === id; });
+              if (found) renderSelected(found);
+            });
+          });
+        })
+        .catch(function () {
+          resEl.hidden = true;
+          emptyEl.hidden = false;
+        });
+    }
+    qEl.addEventListener('input', function () {
+      clearTimeout(timer);
+      timer = setTimeout(search, 280);
+    });
+    var form = root.closest('form');
+    if (form) {
+      form.addEventListener('submit', function (ev) {
+        if (!idEl.value) {
+          ev.preventDefault();
+          emptyEl.hidden = false;
+          qEl.focus();
+          alert(entity === 'customer'
+            ? 'لطفاً مشتری را از جستجو انتخاب کنید یا مشتری جدید بسازید.'
+            : 'لطفاً خودرو را از جستجو انتخاب کنید یا خودرو جدید بسازید.');
+        }
+      });
+    }
+  }
+  document.querySelectorAll('.crm-picker').forEach(bindPicker);
+})();
+</script>
+JS;
+}
+
 function crm360_customer_options($conn): string
 {
     $html = '<option value="">— انتخاب مشتری —</option>';

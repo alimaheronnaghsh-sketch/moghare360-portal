@@ -133,8 +133,11 @@ try {
         case 'create_case': {
             $custId = crm360_fi('customer_profile_id');
             $vehId = crm360_fi('vehicle_profile_id');
-            if ($custId <= 0 || $vehId <= 0) {
-                crm360_redirect($tab, 'err', 'مشتری و خودرو الزامی است.');
+            if ($custId <= 0) {
+                crm360_redirect($tab, 'err', 'لطفاً مشتری را از جستجو انتخاب کنید یا مشتری جدید بسازید.');
+            }
+            if ($vehId <= 0) {
+                crm360_redirect($tab, 'err', 'لطفاً خودرو را از جستجو انتخاب کنید یا خودرو جدید بسازید.');
             }
             $reqId = crm360_f('existing_request_id');
             $existingReqId = $reqId !== '' ? (int)$reqId : null;

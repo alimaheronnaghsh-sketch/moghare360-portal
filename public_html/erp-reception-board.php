@@ -205,11 +205,37 @@ $receptionCards = [
 $dashboardQuickActions = [
     ['title' => 'افزودن مشتری جدید', 'href' => '?tab=customers&panel=create_customer', 'meta' => 'ثبت پروفایل'],
     ['title' => 'افزودن خودرو جدید', 'href' => '?tab=customers&panel=create_vehicle', 'meta' => 'ثبت خودرو'],
+    ['title' => 'ایجاد پرونده پذیرش', 'href' => '?tab=reception&panel=cases', 'meta' => 'پرونده جدید'],
     ['title' => 'ورود اطلاعات قدیمی', 'href' => '?tab=legacy', 'meta' => 'Legacy'],
     ['title' => 'VIP و باشگاه', 'href' => '?tab=vip', 'meta' => (int)count($vipPending) . ' در انتظار'],
     ['title' => 'درخواست‌های آنلاین', 'href' => 'erp-reception-online-requests.php', 'meta' => (int)$rx['online_new'] . ' جدید'],
     ['title' => 'پذیرش حضوری', 'href' => 'erp-reception-walkin-create.php', 'meta' => (int)$rx['walkin_today'] . ' امروز'],
 ];
+
+$dashMetrics = $dbOk && $conn ? crm360_dashboard_metrics($conn) : crm360_dashboard_metrics(null);
+$weekCases = (int)$dashMetrics['cases_week'];
+$weekGaugePct = (int)min(100, $weekCases);
+$weekCompleted = (int)$dashMetrics['completed_week'];
+$weekCompletePct = $weekCases > 0 ? (int)round(100 * $weekCompleted / max(1, $weekCases)) : 0;
+$carsInside = (int)$dashMetrics['cars_inside'];
+$dissat = (int)$dashMetrics['dissatisfaction'];
+$dissatPct = (int)min(100, $dissat * 10);
+$satPctDash = (int)$dashMetrics['satisfaction_pct'];
+$loyalMonth = (int)$dashMetrics['loyal_month'];
+$loyalPct = (int)$dashMetrics['customers_total'] > 0
+    ? (int)round(100 * $loyalMonth / max(1, (int)$dashMetrics['customers_total']))
+    : 0;
+$normalPct = (int)$dashMetrics['normal_pct'];
+$vipPct = (int)$dashMetrics['vip_pct'];
+$returnsQ = (int)$dashMetrics['returns_quarter'];
+$serviceMix = is_array($dashMetrics['service_mix'] ?? null) ? $dashMetrics['service_mix'] : [];
+$serviceMixTop = array_slice($serviceMix, 0, 4);
+$serviceMixTitle = '';
+foreach ($serviceMixTop as $sm) {
+    $serviceMixTitle .= ($sm['label'] ?? '') . ' ' . (int)($sm['pct'] ?? 0) . '% · ';
+}
+$serviceMixTitle = rtrim($serviceMixTitle, ' · ');
+$serviceMixPrimaryPct = (int)($serviceMixTop[0]['pct'] ?? 0);
 
 $customerHubCards = [
     ['title' => 'افزودن مشتری جدید', 'href' => '?tab=customers&panel=create_customer'],
@@ -274,34 +300,90 @@ $experiencePanels = [
 
 <?php if ($tab === 'dashboard'): ?>
   <h2 class="c360-layer-title">داشبورد</h2>
-  <section class="c360-status-grid">
-    <div class="c360-status-card"><span class="c360-light ok"></span><span>پرونده‌های ساخته‌شده</span><strong><?= (int)$kpi['cases'] ?></strong></div>
-    <div class="c360-status-card"><span class="c360-light <?= $rx['case_incomplete'] ? 'warn' : 'ok' ?>"></span><span>پرونده ناقص</span><strong><?= (int)$rx['case_incomplete'] ?></strong></div>
-    <div class="c360-status-card"><span class="c360-light <?= $rx['ready_contract'] ? 'warn' : 'idle' ?>"></span><span>آماده قرارداد</span><strong><?= (int)$rx['ready_contract'] ?></strong></div>
-    <div class="c360-status-card"><span class="c360-light <?= ($rx['contract_signed'] || $rx['crm_contract_signed']) ? 'ok' : 'idle' ?>"></span><span>قرارداد امضاشده</span><strong><?= (int)max($rx['contract_signed'], $rx['crm_contract_signed']) ?></strong></div>
-    <div class="c360-status-card"><span class="c360-light ok"></span><span>مشتریان</span><strong><?= (int)$kpi['customers'] ?></strong></div>
-    <div class="c360-status-card"><span class="c360-light ok"></span><span>خودروها</span><strong><?= (int)$kpi['vehicles'] ?></strong></div>
-    <div class="c360-status-card <?= $kpi['complaints_open'] > 0 ? 'is-alert' : '' ?>"><span class="c360-light <?= $kpi['complaints_critical'] > 0 ? 'danger' : ($kpi['complaints_open'] > 0 ? 'warn' : 'ok') ?>"></span><span>شکایات باز</span><strong><?= (int)$kpi['complaints_open'] ?></strong></div>
-    <div class="c360-status-card"><span class="c360-light <?= $kpi['cartable_open'] > 0 ? 'warn' : 'ok' ?>"></span><span>کارتابل باز</span><strong><?= (int)$kpi['cartable_open'] ?></strong></div>
-  </section>
-
-  <div class="c360-gauge-row">
-    <?= crm360_gauge($casePct, 'تکمیل پرونده‌ها') ?>
-    <?= crm360_gauge($docPct, 'مدارک کامل', '#66bb6a') ?>
-    <?= crm360_gauge($satPct, 'رضایت مشتری', '#3ecf8e') ?>
-    <?= crm360_gauge($returnPct, 'بازگشت مشتری', '#e8b84a') ?>
-  </div>
-
   <section class="c360-panel c360-hub-section">
     <div class="c360-section-head"><div><h2>اقدام سریع</h2></div></div>
-    <div class="c360-hub-grid">
+    <div class="crm-qa-strip">
       <?php foreach ($dashboardQuickActions as $card): ?>
-        <a class="c360-hub-card" href="<?= crm360_h($card['href']) ?>">
+        <a class="c360-hub-card crm-qa-card" href="<?= crm360_h($card['href']) ?>">
           <strong><?= crm360_h($card['title']) ?></strong>
           <em class="c360-hub-meta"><?= crm360_h($card['meta']) ?></em>
           <span class="c360-hub-go">ورود</span>
         </a>
       <?php endforeach; ?>
+    </div>
+  </section>
+
+  <section class="c360-panel c360-hub-section">
+    <div class="c360-section-head"><div><h2>شاخص‌های عملیاتی</h2></div></div>
+    <div class="crm-gauge-strip" aria-label="شاخص‌های داشبورد">
+      <?= crm360_gauge_card([
+          'pct' => $weekGaugePct,
+          'label' => 'پرونده‌های هفته',
+          'value' => $weekCases > 100 ? '100+' : (string)$weekCases,
+          'sub' => 'از ۱۰۰',
+          'color' => '#3ecf8e',
+          'title' => 'تعداد واقعی: ' . $weekCases,
+      ]) ?>
+      <?= crm360_gauge_card([
+          'pct' => $weekCompletePct,
+          'label' => 'تکمیل امروز / هفته',
+          'value' => (string)$weekCompletePct . '%',
+          'sub' => 'امروز ' . (int)$dashMetrics['completed_today'] . ' · هفته ' . $weekCompleted,
+          'color' => '#66bb6a',
+      ]) ?>
+      <?= crm360_gauge_card([
+          'pct' => (int)min(100, $carsInside * 5),
+          'label' => 'خودرو داخل مجموعه',
+          'value' => (string)$carsInside,
+          'sub' => 'در حال خدمات',
+          'color' => '#42a5f5',
+      ]) ?>
+      <?= crm360_gauge_card([
+          'pct' => $dissatPct,
+          'label' => 'نارضایتی',
+          'value' => (string)$dissat,
+          'sub' => $dissat > 0 ? 'نیازمند پیگیری' : 'بدون مورد',
+          'color' => $dissat > 0 ? '#e57373' : '#66bb6a',
+          'tone' => $dissat > 0 ? 'warn' : '',
+      ]) ?>
+      <?= crm360_gauge_card([
+          'pct' => $satPctDash,
+          'label' => 'رضایت',
+          'value' => ((float)$dashMetrics['satisfaction_avg'] > 0 ? number_format((float)$dashMetrics['satisfaction_avg'], 1) : '—'),
+          'sub' => $satPctDash > 0 ? ($satPctDash . '% امتیاز خوب') : 'بدون داده',
+          'color' => '#3ecf8e',
+      ]) ?>
+      <?= crm360_gauge_card([
+          'pct' => $loyalPct,
+          'label' => 'وفادارهای ماه',
+          'value' => (string)$loyalMonth,
+          'sub' => 'باشگاه مشتریان',
+          'color' => '#e8b84a',
+          'title' => 'بر اساس سطح باشگاه GOLD/PLATINUM/VIP و فعالیت از اول ماه',
+      ]) ?>
+      <?= crm360_gauge_card([
+          'pct' => $vipPct,
+          'label' => 'عادی / VIP',
+          'value' => $vipPct . '%',
+          'sub' => 'عادی ' . $normalPct . '% · VIP ' . $vipPct . '%',
+          'color' => '#ab47bc',
+          'title' => 'عادی: ' . (int)$dashMetrics['customers_normal'] . ' · VIP: ' . (int)$dashMetrics['customers_vip'],
+      ]) ?>
+      <?= crm360_gauge_card([
+          'pct' => $serviceMixPrimaryPct,
+          'label' => 'تفکیک خدمات',
+          'value' => $serviceMixPrimaryPct > 0 ? ($serviceMixPrimaryPct . '%') : '—',
+          'sub' => $serviceMixTitle !== '' ? $serviceMixTitle : 'بدون داده',
+          'color' => '#26a69a',
+          'title' => $serviceMixTitle !== '' ? $serviceMixTitle : 'بدون داده ۳۰ روز اخیر',
+      ]) ?>
+      <?= crm360_gauge_card([
+          'pct' => (int)min(100, $returnsQ * 10),
+          'label' => 'بازگشت فصل گذشته',
+          'value' => (string)$returnsQ,
+          'sub' => '۹۰ روز اخیر',
+          'color' => '#ffa726',
+      ]) ?>
     </div>
   </section>
 
@@ -382,8 +464,24 @@ $experiencePanels = [
         <?= crm360_csrf_field() ?>
         <input type="hidden" name="action" value="create_case">
         <input type="hidden" name="return_tab" value="cases">
-        <label>مشتری<select name="customer_profile_id" required><?= $custOpts ?></select></label>
-        <label>خودرو<select name="vehicle_profile_id" required><?= $vehOpts ?></select></label>
+        <?= crm360_render_search_picker(
+            'customer',
+            'customer_profile_id',
+            'جستجوی مشتری',
+            'نام، موبایل، کد ملی یا کد مشتری را وارد کنید',
+            '?tab=customers&panel=create_customer',
+            'افزودن مشتری جدید',
+            'مشتری پیدا نشد'
+        ) ?>
+        <?= crm360_render_search_picker(
+            'vehicle',
+            'vehicle_profile_id',
+            'جستجوی خودرو',
+            'پلاک، VIN، برند یا مدل را وارد کنید',
+            '?tab=customers&panel=create_vehicle',
+            'افزودن خودرو جدید',
+            'خودرو پیدا نشد'
+        ) ?>
         <label>شناسه درخواست آنلاین<input name="existing_request_id" type="number" value="<?= $prefReq > 0 ? $prefReq : '' ?>"></label>
         <label>نوع<select name="case_type"><option value="WALKIN">حضوری</option><option value="ONLINE">آنلاین</option><option value="RETURNING">مراجع مجدد</option></select></label>
         <label>نوع خدمت<input name="service_type" required></label>
@@ -449,8 +547,47 @@ $experiencePanels = [
     <?php endforeach; ?>
   </div>
   <?php
-    $custList = m360_rui_paginate(m360_rui_sort_rows($customers, 'customer_profile_id', 'desc'), max(1, (int)($_GET['cust_page'] ?? 1)), 10);
-    $vehList = m360_rui_paginate(m360_rui_sort_rows($vehicles, 'vehicle_profile_id', 'desc'), max(1, (int)($_GET['veh_page'] ?? 1)), 10);
+    $custQ = trim((string)($_GET['q'] ?? ''));
+    $vehQ = trim((string)($_GET['vq'] ?? ''));
+    $custSort = (string)($_GET['csort'] ?? 'customer_profile_id');
+    $custDir = strtolower((string)($_GET['cdir'] ?? 'desc')) === 'asc' ? 'asc' : 'desc';
+    $vehSort = (string)($_GET['vsort'] ?? 'vehicle_profile_id');
+    $vehDir = strtolower((string)($_GET['vdir'] ?? 'desc')) === 'asc' ? 'asc' : 'desc';
+    if (!in_array($custSort, ['customer_profile_id', 'full_name', 'mobile', 'created_at'], true)) {
+        $custSort = 'customer_profile_id';
+    }
+    if (!in_array($vehSort, ['vehicle_profile_id', 'plate_no', 'brand', 'full_name'], true)) {
+        $vehSort = 'vehicle_profile_id';
+    }
+    $customersFiltered = $customers;
+    if ($custQ !== '') {
+        $customersFiltered = array_values(array_filter($customers, static function ($c) use ($custQ) {
+            $hay = mb_strtolower(trim(
+                (string)($c['full_name'] ?? '') . ' ' .
+                (string)($c['mobile'] ?? '') . ' ' .
+                (string)($c['national_id'] ?? '') . ' ' .
+                (string)($c['customer_ref_text'] ?? '') . ' ' .
+                (string)($c['customer_profile_id'] ?? '')
+            ));
+            return mb_strpos($hay, mb_strtolower($custQ)) !== false;
+        }));
+    }
+    $vehiclesFiltered = $vehicles;
+    if ($vehQ !== '') {
+        $vehiclesFiltered = array_values(array_filter($vehicles, static function ($v) use ($vehQ) {
+            $hay = mb_strtolower(trim(
+                (string)($v['plate_no'] ?? '') . ' ' .
+                (string)($v['vin'] ?? '') . ' ' .
+                (string)($v['brand'] ?? '') . ' ' .
+                (string)($v['model'] ?? '') . ' ' .
+                (string)($v['full_name'] ?? '') . ' ' .
+                (string)($v['vehicle_profile_id'] ?? '')
+            ));
+            return mb_strpos($hay, mb_strtolower($vehQ)) !== false;
+        }));
+    }
+    $custList = m360_rui_paginate(m360_rui_sort_rows($customersFiltered, $custSort, $custDir), max(1, (int)($_GET['cust_page'] ?? 1)), 10);
+    $vehList = m360_rui_paginate(m360_rui_sort_rows($vehiclesFiltered, $vehSort, $vehDir), max(1, (int)($_GET['veh_page'] ?? 1)), 10);
   ?>
   <?php if ($panel === 'create_customer'): ?>
     <section class="c360-panel">
@@ -479,7 +616,15 @@ $experiencePanels = [
         <?= crm360_csrf_field() ?>
         <input type="hidden" name="action" value="create_vehicle">
         <input type="hidden" name="return_tab" value="customers">
-        <label>مشتری<select name="customer_profile_id" required><?= $custOpts ?></select></label>
+        <?= crm360_render_search_picker(
+            'customer',
+            'customer_profile_id',
+            'جستجوی مشتری',
+            'نام، موبایل، کد ملی یا کد مشتری را وارد کنید',
+            '?tab=customers&panel=create_customer',
+            'افزودن مشتری جدید',
+            'مشتری پیدا نشد'
+        ) ?>
         <label>برند<select name="brand" required><?= crm360_brand_options() ?></select></label>
         <label>مدل<input name="model" required></label>
         <label>پلاک<input name="plate_no"></label>
@@ -495,6 +640,26 @@ $experiencePanels = [
   <?php if ($panel === '' || $panel === 'create_customer'): ?>
     <section class="c360-panel">
       <h2>فهرست مشتریان</h2>
+      <form class="c360-filter-bar" method="get" action="erp-reception-board.php">
+        <input type="hidden" name="tab" value="customers">
+        <?php if ($panel !== ''): ?><input type="hidden" name="panel" value="<?= crm360_h($panel) ?>"><?php endif; ?>
+        <label>جستجو<input type="search" name="q" value="<?= crm360_h($custQ) ?>" placeholder="نام، موبایل، کد ملی"></label>
+        <label>مرتب‌سازی
+          <select name="csort">
+            <option value="customer_profile_id" <?= $custSort === 'customer_profile_id' ? 'selected' : '' ?>>شناسه</option>
+            <option value="full_name" <?= $custSort === 'full_name' ? 'selected' : '' ?>>نام</option>
+            <option value="mobile" <?= $custSort === 'mobile' ? 'selected' : '' ?>>موبایل</option>
+            <option value="created_at" <?= $custSort === 'created_at' ? 'selected' : '' ?>>تاریخ</option>
+          </select>
+        </label>
+        <label>جهت
+          <select name="cdir">
+            <option value="desc" <?= $custDir === 'desc' ? 'selected' : '' ?>>نزولی</option>
+            <option value="asc" <?= $custDir === 'asc' ? 'selected' : '' ?>>صعودی</option>
+          </select>
+        </label>
+        <label>&nbsp;<button type="submit" class="c360-btn">اعمال</button></label>
+      </form>
       <div class="c360-table-wrap"><table class="c360-table">
         <thead><tr><th>شناسه</th><th>نام</th><th>موبایل</th><th>وضعیت</th><th>VIP</th><th>ثبت</th></tr></thead>
         <tbody><?php foreach ($custList['rows'] as $c): ?><tr>
@@ -506,12 +671,32 @@ $experiencePanels = [
           <td><?= crm360_h(m360_rui_jalali_date((string)($c['created_at'] ?? ''))) ?></td>
         </tr><?php endforeach; ?></tbody>
       </table></div>
-      <?php m360_rui_render_pagination($custList, m360_rui_query_keep(['tab' => 'customers', 'panel' => $panel], ['cust_page']), 'cust_page'); ?>
+      <?php m360_rui_render_pagination($custList, m360_rui_query_keep(['tab' => 'customers', 'panel' => $panel, 'q' => $custQ, 'csort' => $custSort, 'cdir' => $custDir], ['cust_page']), 'cust_page'); ?>
     </section>
   <?php endif; ?>
   <?php if ($panel === '' || $panel === 'vehicles' || $panel === 'create_vehicle'): ?>
     <section class="c360-panel">
       <h2>فهرست خودروها</h2>
+      <form class="c360-filter-bar" method="get" action="erp-reception-board.php">
+        <input type="hidden" name="tab" value="customers">
+        <input type="hidden" name="panel" value="<?= crm360_h($panel ?: 'vehicles') ?>">
+        <label>جستجو<input type="search" name="vq" value="<?= crm360_h($vehQ) ?>" placeholder="پلاک، VIN، برند، مدل"></label>
+        <label>مرتب‌سازی
+          <select name="vsort">
+            <option value="vehicle_profile_id" <?= $vehSort === 'vehicle_profile_id' ? 'selected' : '' ?>>شناسه</option>
+            <option value="plate_no" <?= $vehSort === 'plate_no' ? 'selected' : '' ?>>پلاک</option>
+            <option value="brand" <?= $vehSort === 'brand' ? 'selected' : '' ?>>برند</option>
+            <option value="full_name" <?= $vehSort === 'full_name' ? 'selected' : '' ?>>مشتری</option>
+          </select>
+        </label>
+        <label>جهت
+          <select name="vdir">
+            <option value="desc" <?= $vehDir === 'desc' ? 'selected' : '' ?>>نزولی</option>
+            <option value="asc" <?= $vehDir === 'asc' ? 'selected' : '' ?>>صعودی</option>
+          </select>
+        </label>
+        <label>&nbsp;<button type="submit" class="c360-btn">اعمال</button></label>
+      </form>
       <div class="c360-table-wrap"><table class="c360-table">
         <thead><tr><th>شناسه</th><th>مشتری</th><th>برند/مدل</th><th>پلاک</th><th>VIN</th><th>کارکرد</th></tr></thead>
         <tbody><?php foreach ($vehList['rows'] as $v): ?><tr>
@@ -523,7 +708,7 @@ $experiencePanels = [
           <td><?= crm360_h((string)($v['mileage'] ?? '')) ?></td>
         </tr><?php endforeach; ?></tbody>
       </table></div>
-      <?php m360_rui_render_pagination($vehList, m360_rui_query_keep(['tab' => 'customers', 'panel' => $panel ?: 'vehicles'], ['veh_page']), 'veh_page'); ?>
+      <?php m360_rui_render_pagination($vehList, m360_rui_query_keep(['tab' => 'customers', 'panel' => $panel ?: 'vehicles', 'vq' => $vehQ, 'vsort' => $vehSort, 'vdir' => $vehDir], ['veh_page']), 'veh_page'); ?>
     </section>
   <?php endif; ?>
 
@@ -550,8 +735,24 @@ $experiencePanels = [
         <?= crm360_csrf_field() ?>
         <input type="hidden" name="action" value="legacy_create_case">
         <input type="hidden" name="return_tab" value="legacy">
-        <label>مشتری<select name="customer_profile_id" required><?= $custOpts ?></select></label>
-        <label>خودرو<select name="vehicle_profile_id" required><?= $vehOpts ?></select></label>
+        <?= crm360_render_search_picker(
+            'customer',
+            'customer_profile_id',
+            'جستجوی مشتری',
+            'نام، موبایل، کد ملی یا کد مشتری را وارد کنید',
+            '?tab=customers&panel=create_customer',
+            'افزودن مشتری جدید',
+            'مشتری پیدا نشد'
+        ) ?>
+        <?= crm360_render_search_picker(
+            'vehicle',
+            'vehicle_profile_id',
+            'جستجوی خودرو',
+            'پلاک، VIN، برند یا مدل را وارد کنید',
+            '?tab=customers&panel=create_vehicle',
+            'افزودن خودرو جدید',
+            'خودرو پیدا نشد'
+        ) ?>
         <label>خدمت<input name="service_type"></label>
         <label>مرجع قدیمی<input name="source_ref_text"></label>
         <label>یادداشت<textarea name="notes" rows="2"></textarea></label>
@@ -1029,5 +1230,6 @@ $experiencePanels = [
 <?php endif; ?>
 
 </div>
+<?= crm360_search_picker_script() ?>
 </body>
 </html>
