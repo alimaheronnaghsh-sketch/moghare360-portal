@@ -89,7 +89,7 @@ $m360CustomerPageBoot = [
     'restoreForm' => true,
     'submitSuccess' => false,
     'walkinResumeRequestId' => $walkinResumeRequestId,
-    'walkinStage56LockedMessage' => 'ابتدا مراحل ۱ تا ۴ را تکمیل و پرونده را ایجاد کنید.',
+    'walkinStage56LockedMessage' => 'ابتدا اطلاعات مشتری، خودرو و خدمات را تکمیل و پرونده را ایجاد کنید.',
 ];
 ?>
 <!DOCTYPE html>
@@ -98,7 +98,7 @@ $m360CustomerPageBoot = [
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="robots" content="noindex, nofollow">
-    <title>ثبت درخواست حضوری (ورود پرسنل) — MOGHARE360</title>
+    <title>پذیرش حضوری — MOGHARE360</title>
     <link rel="stylesheet" href="assets/css/mirror.css">
     <link rel="stylesheet" href="assets/css/moghare360-v1-luxury-ui.css">
 </head>
@@ -107,10 +107,9 @@ $m360CustomerPageBoot = [
     <header class="m360-rw-header">
         <div class="m360-rw-header__top">
             <a class="m360-rw-back" href="erp-reception-board.php">بازگشت به مرکز ارتباط با مشتریان</a>
-            <span class="m360-rw-badge">مدل واحد فرم پذیرش</span>
         </div>
-        <h1 class="m360-rw-title">پذیرش حضوری — مدل ۸ مرحله‌ای واحد</h1>
-        <p class="m360-rw-subtitle">همان فرم و همان ۸ مرحلهٔ پذیرش آنلاین؛ فقط مسئول مرحله ۱ جستجوی مشتری توسط پذیرش است (نه OTP). مراحل ۵ و ۶ پس از ثبت اولیه در همان پرونده واحد با همان رندر عکس/مدارک تکمیل می‌شود.</p>
+        <h1 class="m360-rw-title">پذیرش حضوری</h1>
+        <p class="m360-rw-subtitle">اطلاعات مشتری و خودرو را ثبت یا انتخاب کنید.</p>
     </header>
 
     <?php if (!$dbOk || empty($actor['ok'])): ?>
@@ -121,12 +120,6 @@ $m360CustomerPageBoot = [
                 <?= m360_rw_h((string)($flash['message'] ?? '')) ?>
             </section>
         <?php endif; ?>
-
-        <section class="m360-card m360-form m360-walkin-note">
-            <strong>کانال:</strong> STAFF_ASSISTED_WALKIN —
-            ماتریس بازیگر: مراحل ۱ تا ۶ و ۸ = پذیرش؛ مرحله ۷ = مشتری (امضا/OTP).
-            رندر مراحل ۵/۶ همان <code>erp-reception-intake-file.php</code> است.
-        </section>
 
         <section class="m360-card m360-form">
             <form class="m360-customer-form m360-walkin-form" method="post" action="erp-reception-walkin-save.php" novalidate>
@@ -142,34 +135,65 @@ $m360CustomerPageBoot = [
 
                 <?php
                 $walkinStages = m360_intake_stage_registry(M360_INTAKE_CHANNEL_WALKIN);
-                $walkinCreateStepMap = [
-                    'otp' => 'm360_section_customer_search',
-                    'customer' => 'm360_section_profile',
-                    'vehicle' => 'm360_section_vehicle',
-                    'service' => 'm360_section_request',
+                $walkinLockedMessage = 'ابتدا اطلاعات مشتری، خودرو و خدمات را تکمیل و پرونده را ایجاد کنید.';
+                // Operator-facing compact stepper (6 labels). Internal stage keys/logic unchanged.
+                $walkinCompactSteps = [
+                    [
+                        'num' => 1,
+                        'label' => 'مشتری',
+                        'stage_key' => 'otp',
+                        'data_step' => 'm360_section_customer_search',
+                    ],
+                    [
+                        'num' => 2,
+                        'label' => 'خودرو',
+                        'stage_key' => 'vehicle',
+                        'data_step' => 'm360_section_vehicle',
+                    ],
+                    [
+                        'num' => 3,
+                        'label' => 'خدمات',
+                        'stage_key' => 'service',
+                        'data_step' => 'm360_section_request',
+                    ],
+                    [
+                        'num' => 4,
+                        'label' => 'بررسی خودرو',
+                        'stage_key' => 'condition',
+                        'data_step' => '',
+                    ],
+                    [
+                        'num' => 5,
+                        'label' => 'مدارک و توافقات',
+                        'stage_key' => 'documents',
+                        'data_step' => '',
+                    ],
+                    [
+                        'num' => 6,
+                        'label' => 'تأیید و ثبت',
+                        'stage_key' => 'signature',
+                        'data_step' => '',
+                    ],
                 ];
-                $walkinLockedMessage = 'ابتدا مراحل ۱ تا ۴ را تکمیل و پرونده را ایجاد کنید.';
                 ?>
-                <nav class="m360-customer-wizard-progress m360-rw-wizard-progress" id="m360_wizard_progress" aria-label="پیشرفت ۸ مرحله پذیرش حضوری" data-m360-channel="STAFF_ASSISTED_WALKIN" data-m360-stage-count="8" data-m360-walkin-create="1" data-m360-request-id="<?= (int)$walkinResumeRequestId ?>">
+                <nav class="m360-customer-wizard-progress m360-rw-wizard-progress" id="m360_wizard_progress" aria-label="پیشرفت پذیرش حضوری" data-m360-stage-count="8" data-m360-walkin-create="1" data-m360-request-id="<?= (int)$walkinResumeRequestId ?>">
                     <ol class="m360-customer-wizard-progress__list m360-rw-wizard-progress-track">
-                        <?php foreach ($walkinStages as $stageKey => $stageMeta): ?>
+                        <?php foreach ($walkinCompactSteps as $compactStep): ?>
                             <?php
-                            $stageNum = (int)($stageMeta['num'] ?? 0);
-                            $isCreateStep = isset($walkinCreateStepMap[$stageKey]);
+                            $stageKey = (string)$compactStep['stage_key'];
+                            $stageMeta = $walkinStages[$stageKey] ?? [];
+                            $dataStep = (string)($compactStep['data_step'] ?? '');
                             $href = '';
                             $locked = false;
-                            if ($isCreateStep) {
-                                $dataStep = $walkinCreateStepMap[$stageKey];
+                            if ($dataStep !== '') {
+                                // Create-page step — unlocked.
                             } elseif ($walkinResumeRequestId > 0 && $stageKey === 'condition') {
-                                $dataStep = '';
                                 $href = 'erp-reception-intake-file.php?online_request_id=' . $walkinResumeRequestId
                                     . '&active_step=condition&walkin_resume=1#section-condition-photos';
                             } elseif ($walkinResumeRequestId > 0 && $stageKey === 'documents') {
-                                $dataStep = '';
                                 $href = 'erp-reception-intake-file.php?online_request_id=' . $walkinResumeRequestId
                                     . '&active_step=documents&walkin_resume=1#section-agreements';
                             } else {
-                                $dataStep = '';
                                 $locked = true;
                             }
                             $liClass = $locked ? 'm360-customer-wizard-progress__item--locked' : '';
@@ -181,30 +205,45 @@ $m360CustomerPageBoot = [
                                 class="<?= m360_rw_h($liClass) ?>"
                                 data-step="<?= m360_rw_h($dataStep) ?>"
                                 data-stage-key="<?= m360_rw_h($stageKey) ?>"
-                                data-actor="<?= m360_rw_h((string)$stageMeta['actor']) ?>"
+                                data-actor="<?= m360_rw_h((string)($stageMeta['actor'] ?? '')) ?>"
                                 data-locked="<?= $locked ? '1' : '0' ?>"
                                 <?php if ($href !== ''): ?>data-href="<?= m360_rw_h($href) ?>"<?php endif; ?>
                                 <?php if ($locked): ?>aria-disabled="true" title="<?= m360_rw_h($walkinLockedMessage) ?>"<?php endif; ?>
                             >
-                                <?= m360_rw_h((string)$stageMeta['num']) ?>. <?= m360_rw_h((string)$stageMeta['label']) ?>
-                                <span class="m360-rw-wizard-progress-actor"><?= m360_rw_h(m360_intake_actor_label_fa((string)$stageMeta['actor'])) ?></span>
+                                <?= (int)$compactStep['num'] ?>. <?= m360_rw_h((string)$compactStep['label']) ?>
                             </li>
+                        <?php endforeach; ?>
+                        <?php
+                        // Hidden progress anchors so wizard JS can still mark profile / referral internal steps.
+                        $walkinHiddenProgress = [
+                            ['stage_key' => 'customer', 'data_step' => 'm360_section_profile'],
+                            ['stage_key' => 'referral', 'data_step' => ''],
+                        ];
+                        foreach ($walkinHiddenProgress as $hiddenStep):
+                            $stageKey = (string)$hiddenStep['stage_key'];
+                            $stageMeta = $walkinStages[$stageKey] ?? [];
+                            $dataStep = (string)($hiddenStep['data_step'] ?? '');
+                            $locked = $dataStep === '';
+                            ?>
+                            <li
+                                class="m360-step--hidden"
+                                hidden
+                                aria-hidden="true"
+                                data-step="<?= m360_rw_h($dataStep) ?>"
+                                data-stage-key="<?= m360_rw_h($stageKey) ?>"
+                                data-actor="<?= m360_rw_h((string)($stageMeta['actor'] ?? '')) ?>"
+                                data-locked="<?= $locked ? '1' : '0' ?>"
+                            ></li>
                         <?php endforeach; ?>
                     </ol>
                 </nav>
-                <section class="m360-rw-flash is-info" id="m360_walkin_stage56_lock_note" role="status">
-                    مراحل ۱ تا ۴ در این صفحه تکمیل می‌شود. مراحل ۵ و ۶ فقط در پرونده واحد
-                    (<code>erp-reception-intake-file.php</code>) اجرا می‌شوند — بدون فرم تکراری در این صفحه.
-                    <?php if ($walkinResumeRequestId < 1): ?>
-                        <strong><?= m360_rw_h($walkinLockedMessage) ?></strong>
+                <section class="m360-rw-flash is-info" id="m360_walkin_stage56_lock_note" role="status"<?= $walkinResumeRequestId < 1 ? ' hidden' : '' ?>>
+                    <?php if ($walkinResumeRequestId > 0): ?>
+                        <a class="m360-rw-btn m360-rw-btn-secondary" href="erp-reception-intake-file.php?online_request_id=<?= (int)$walkinResumeRequestId ?>&amp;active_step=condition#section-condition-photos">ادامه بررسی خودرو</a>
+                        <a class="m360-rw-btn m360-rw-btn-secondary" href="erp-reception-intake-file.php?online_request_id=<?= (int)$walkinResumeRequestId ?>&amp;active_step=documents#section-agreements">ادامه مدارک و توافقات</a>
                     <?php else: ?>
-                        <a class="m360-rw-btn m360-rw-btn-secondary" href="erp-reception-intake-file.php?online_request_id=<?= (int)$walkinResumeRequestId ?>&amp;active_step=condition#section-condition-photos">ادامه مرحله ۵ برای پرونده <?= (int)$walkinResumeRequestId ?></a>
-                        <a class="m360-rw-btn m360-rw-btn-secondary" href="erp-reception-intake-file.php?online_request_id=<?= (int)$walkinResumeRequestId ?>&amp;active_step=documents#section-agreements">ادامه مرحله ۶</a>
+                        <strong><?= m360_rw_h($walkinLockedMessage) ?></strong>
                     <?php endif; ?>
-                </section>
-
-                <section class="m360-rw-flash is-info" id="m360_walkin_otp_note">
-                    پذیرش حضوری با جستجوی مشتری شروع می‌شود؛ OTP اولیه برای ایجاد درخواست لازم نیست، اما امضای قرارداد همچنان فقط در پروفایل مشتری و با OTP انجام می‌شود.
                 </section>
 
                 <section id="m360_step_welcome" class="m360-step-card m360-step--hidden" aria-hidden="true" hidden></section>
@@ -214,8 +253,8 @@ $m360CustomerPageBoot = [
                     <div class="m360-step-header">
                         <span class="m360-step-badge" aria-hidden="true">۱</span>
                         <div class="m360-step-header__text">
-                            <h3 id="m360_customer_search_title" class="m360-section-title"><?= m360_rw_h(m360_rw_canonical_intake_step_label('customer_search')) ?></h3>
-                            <p class="m360-step-sub">مشتری را با موبایل یا کد ملی جستجو کنید. اگر پیدا شد، فرم از مرحله اطلاعات خودرو ادامه می‌دهد؛ اگر پیدا نشد، اطلاعات مشتری جدید تکمیل می‌شود.</p>
+                            <h3 id="m360_customer_search_title" class="m360-section-title">جست‌وجوی مشتری</h3>
+                            <p class="m360-step-sub">مشتری را با شماره موبایل یا کد ملی جست‌وجو کنید.</p>
                         </div>
                     </div>
                     <div class="m360-form-grid">
@@ -227,7 +266,7 @@ $m360CustomerPageBoot = [
                     <p id="m360_walkin_customer_search_status" class="m360-otp-status" role="status" aria-live="polite"></p>
                     <div class="m360-wizard-nav">
                         <button type="button" id="m360_walkin_new_customer_btn" class="m360-btn m360-btn-secondary">مشتری جدید</button>
-                        <button type="button" id="m360_walkin_customer_search_btn" class="m360-btn m360-luxury-action">جستجو و ادامه</button>
+                        <button type="button" id="m360_walkin_customer_search_btn" class="m360-btn m360-luxury-action">جست‌وجو</button>
                     </div>
                 </section>
 
@@ -236,8 +275,8 @@ $m360CustomerPageBoot = [
                     <div class="m360-step-header">
                         <span class="m360-step-badge" aria-hidden="true">۲</span>
                         <div class="m360-step-header__text">
-                            <h3 id="m360_profile_title" class="m360-section-title"><?= m360_rw_h(m360_rw_canonical_intake_step_label('customer')) ?></h3>
-                            <p class="m360-step-sub">همان بخش مشتری فرم آنلاین؛ فقط موبایل اینجا توسط پذیرش وارد می‌شود و OTP اولیه ندارد.</p>
+                            <h3 id="m360_profile_title" class="m360-section-title">اطلاعات مشتری</h3>
+                            <p class="m360-step-sub">در صورت نبود مشتری، اطلاعات او را ثبت کنید.</p>
                         </div>
                     </div>
                     <div class="m360-form-grid">
@@ -269,11 +308,11 @@ $m360CustomerPageBoot = [
                             <option value="">ابتدا استان را انتخاب کنید</option>
                         </select>
                     </div>
-                    <label for="customer_notes" class="m360-sub-label">یادداشت مشتری / جستجوی دستی</label>
-                    <textarea id="customer_notes" name="customer_notes" maxlength="1000" placeholder="اگر مشتری قبلاً پرونده دارد، موبایل یا نام را وارد کنید؛ سیستم مشتری موجود را با موبایل canonical resolve می‌کند."></textarea>
+                    <label for="customer_notes" class="m360-sub-label">یادداشت مشتری</label>
+                    <textarea id="customer_notes" name="customer_notes" maxlength="1000" placeholder="در صورت نیاز، توضیح کوتاه بنویسید."></textarea>
                     <div class="m360-wizard-nav">
-                        <button type="button" class="m360-btn m360-btn-secondary m360-wizard-prev" data-target="m360_section_customer_search">قبلی</button>
-                        <button type="button" class="m360-btn m360-luxury-action m360-wizard-next" data-target="m360_section_vehicle">مرحله بعد — خودرو</button>
+                        <button type="button" class="m360-btn m360-btn-secondary m360-wizard-prev" data-target="m360_section_customer_search">بازگشت</button>
+                        <button type="button" class="m360-btn m360-luxury-action m360-wizard-next" data-target="m360_section_vehicle">ادامه</button>
                     </div>
                 </section>
 
@@ -282,12 +321,11 @@ $m360CustomerPageBoot = [
                     <div class="m360-step-header">
                         <span class="m360-step-badge" aria-hidden="true">۳</span>
                         <div class="m360-step-header__text">
-                            <h3 id="m360_vehicle_title" class="m360-section-title"><?= m360_rw_h(m360_rw_canonical_intake_step_label('vehicle')) ?></h3>
-                            <p class="m360-step-sub">کنترل برند، کلاس خودرو، سال تولید و پلاک دقیقاً از مدل آنلاین استفاده می‌کند.</p>
+                            <h3 id="m360_vehicle_title" class="m360-section-title">اطلاعات خودرو</h3>
                         </div>
                     </div>
                     <div id="m360_vehicle_picker" class="m360-vehicle-picker" hidden>
-                        <p class="m360-muted">در حالت حضوری، خودروی موجود از روی موبایل canonical بعد از ثبت/resolve بررسی می‌شود.</p>
+                        <p class="m360-muted">در صورت وجود خودرو در سوابق مشتری، از فهرست زیر انتخاب کنید.</p>
                         <div id="m360_vehicle_picker_list" class="m360-vehicle-picker__list" role="radiogroup" aria-label="انتخاب خودرو"></div>
                         <div id="m360_vehicle_out_of_scope" class="m360-vehicle-out-of-scope" hidden>
                             <ul id="m360_vehicle_out_of_scope_list" class="m360-vehicle-out-of-scope__list"></ul>
@@ -396,8 +434,8 @@ $m360CustomerPageBoot = [
                         </select>
                     </div>
                     <div class="m360-wizard-nav">
-                        <button type="button" class="m360-btn m360-btn-secondary m360-wizard-prev" data-target="m360_section_profile">قبلی</button>
-                        <button type="button" class="m360-btn m360-luxury-action m360-wizard-next" data-target="m360_section_request">مرحله بعد — درخواست</button>
+                        <button type="button" class="m360-btn m360-btn-secondary m360-wizard-prev" data-target="m360_section_profile">بازگشت</button>
+                        <button type="button" class="m360-btn m360-luxury-action m360-wizard-next" data-target="m360_section_request">ادامه</button>
                     </div>
                 </section>
 
@@ -406,8 +444,7 @@ $m360CustomerPageBoot = [
                     <div class="m360-step-header">
                         <span class="m360-step-badge" aria-hidden="true">۴</span>
                         <div class="m360-step-header__text">
-                            <h3 id="m360_request_title" class="m360-section-title"><?= m360_rw_h(m360_rw_canonical_intake_step_label('service')) ?></h3>
-                            <p class="m360-step-sub">همان مدل service/request آنلاین همراه با مسیر عیب، گزینه‌های تشخیصی و تاریخ مراجعه.</p>
+                            <h3 id="m360_request_title" class="m360-section-title">خدمات</h3>
                         </div>
                     </div>
                     <label for="request_type">نوع درخواست <span class="m360-req">*</span></label>
@@ -436,10 +473,9 @@ $m360CustomerPageBoot = [
                     </div>
                     <p id="visit_time_hint" class="m360-visit-hint" style="display:none">ساعت حضور برای کارشناسی معمولاً بین 8:30 تا 11:30 است.</p>
                     <div class="m360-wizard-nav">
-                        <button type="button" class="m360-btn m360-btn-secondary m360-wizard-prev" data-target="m360_section_vehicle">قبلی</button>
-                        <button type="submit" id="m360_submit_btn" class="m360-btn m360-luxury-action">ثبت پرونده و ادامه مرحله ۵ (عکس‌ها در پرونده واحد)</button>
+                        <button type="button" class="m360-btn m360-btn-secondary m360-wizard-prev" data-target="m360_section_vehicle">بازگشت</button>
+                        <button type="submit" id="m360_submit_btn" class="m360-btn m360-luxury-action">ثبت و ادامه</button>
                     </div>
-                    <p class="m360-rw-muted" role="note">پس از ثبت موفق، به <code>erp-reception-intake-file.php</code> با <code>active_step=condition</code> هدایت می‌شوید. مراحل ۵ و ۶ در این صفحه اجرا نمی‌شوند.</p>
                 </section>
             </form>
         </section>
