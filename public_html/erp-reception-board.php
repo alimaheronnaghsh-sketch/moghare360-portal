@@ -55,6 +55,17 @@ $kpi = [
     'promos_active' => 0, 'sms_draft' => 0, 'sms_ready' => 0,
     'vip_club' => 0, 'online_requests' => 0, 'avg_completion' => 0,
 ];
+$rx = [
+    'online_new' => 0,
+    'online_pending' => 0,
+    'walkin_today' => 0,
+    'case_incomplete' => 0,
+    'ready_contract' => 0,
+    'contract_unsigned' => 0,
+    'contract_signed' => 0,
+    'ready_jobcard' => 0,
+    'closed_done' => 0,
+];
 $customers = $vehicles = $cases = $documents = $cartable = $surveys = $complaints = $clubs = $reminders = $returns = $promotions = $assignments = $campaigns = $recipients = $audits = $onlineRequests = [];
 
 if ($dbOk && $conn) {
@@ -83,6 +94,23 @@ if ($dbOk && $conn) {
     $kpi['avg_completion'] = (int)(crm360_scalar($conn, 'SELECT ISNULL(AVG(profile_completion_percent),0) FROM dbo.crm360_reception_cases') ?? 0);
     $onlineRequests = crm360_online_requests($conn, 30);
     $kpi['online_requests'] = count($onlineRequests);
+
+    if (crm360_table_exists($conn, 'erp_customer_online_requests')) {
+        $rx['online_new'] = (int)(crm360_scalar($conn, "SELECT COUNT(*) FROM dbo.erp_customer_online_requests WHERE request_status=N'NEW'") ?? 0);
+        $rx['online_pending'] = (int)(crm360_scalar($conn, "SELECT COUNT(*) FROM dbo.erp_customer_online_requests WHERE request_status IN (N'NEW',N'PENDING',N'UNDER_REVIEW')") ?? 0);
+        $rx['walkin_today'] = (int)(crm360_scalar($conn, "SELECT COUNT(*) FROM dbo.erp_customer_online_requests WHERE CONVERT(date, created_at)=CONVERT(date, SYSUTCDATETIME()) AND request_payload_json LIKE N'%STAFF_ASSISTED_WALKIN%'") ?? 0);
+        $rx['ready_jobcard'] = (int)(crm360_scalar($conn, "SELECT COUNT(*) FROM dbo.erp_customer_online_requests WHERE request_status IN (N'ACCEPTED',N'UNDER_REVIEW') AND (converted_jobcard_id IS NULL OR converted_jobcard_id=0)") ?? 0);
+        $rx['closed_done'] = (int)(crm360_scalar($conn, "SELECT COUNT(*) FROM dbo.erp_customer_online_requests WHERE request_status IN (N'CONVERTED_TO_JOBCARD',N'REJECTED')") ?? 0);
+    }
+    $rx['case_incomplete'] = (int)$kpi['cases_draft'];
+    $rx['ready_contract'] = (int)(crm360_scalar($conn, "SELECT COUNT(*) FROM dbo.crm360_reception_cases WHERE case_status IN (N'READY_FOR_CONTRACT',N'CONTRACT_PENDING')") ?? 0);
+    if (crm360_table_exists($conn, 'erp_intake_contracts')) {
+        $rx['contract_unsigned'] = (int)(crm360_scalar($conn, "SELECT COUNT(*) FROM dbo.erp_intake_contracts WHERE contract_status IN (N'DRAFT',N'SENT',N'VIEWED')") ?? 0);
+        $rx['contract_signed'] = (int)(crm360_scalar($conn, "SELECT COUNT(*) FROM dbo.erp_intake_contracts WHERE contract_status IN (N'SIGNED',N'OVERRIDDEN')") ?? 0);
+    }
+    if ($rx['closed_done'] === 0) {
+        $rx['closed_done'] = (int)(crm360_scalar($conn, "SELECT COUNT(*) FROM dbo.crm360_reception_cases WHERE case_status IN (N'DELIVERED',N'CLOSED')") ?? 0);
+    }
 
     $customers = crm360_rows($conn, 'SELECT TOP 100 * FROM dbo.crm360_customer_profiles ORDER BY customer_profile_id DESC');
     $vehicles = crm360_rows($conn, 'SELECT TOP 100 v.*, c.full_name FROM dbo.crm360_vehicle_profiles v INNER JOIN dbo.crm360_customer_profiles c ON c.customer_profile_id=v.customer_profile_id ORDER BY v.vehicle_profile_id DESC');
@@ -125,14 +153,60 @@ foreach ($cartable as $cbRow) {
     }
 }
 $hubAudits = array_slice($audits, 0, 5);
-$hubSections = [
+$receptionCards = [
+    [
+        'title' => 'درخواست‌های آنلاین',
+        'hint' => 'فهرست مسیر موجود آنلاین',
+        'href' => 'erp-reception-online-requests.php',
+        'badge' => 'مسیر موجود',
+        'badge2' => 'فقط خواندنی / تبدیل از مسیر موجود',
+    ],
+    [
+        'title' => 'پذیرش حضوری',
+        'hint' => 'ثبت حضوری از مسیر موجود',
+        'href' => 'erp-reception-walkin-create.php',
+        'badge' => 'پذیرش حضوری',
+        'badge2' => 'مسیر موجود',
+    ],
+    [
+        'title' => 'تکمیل پرونده پذیرش',
+        'hint' => 'ادامه تکمیل از فهرست موجود',
+        'href' => 'erp-reception-online-requests.php',
+        'badge' => 'تکمیل پرونده',
+        'badge2' => 'بدون مسیر موازی',
+    ],
+    [
+        'title' => 'پرونده‌های در جریان',
+        'hint' => 'کارت کار و پرونده‌های فعال',
+        'href' => 'erp-reception-jobcards.php',
+        'badge' => 'مسیر موجود',
+        'badge2' => '',
+    ],
+    [
+        'title' => 'قرارداد و مدارک',
+        'hint' => 'قراردادهای پذیرش موجود',
+        'href' => 'erp-intake-contracts.php',
+        'badge' => 'مسیر موجود',
+        'badge2' => '',
+    ],
+    [
+        'title' => 'کارتابل مشتری',
+        'hint' => 'پیگیری تماس و مدارک',
+        'href' => 'erp-crm-cartable.php',
+        'badge' => 'پیگیری مشتری',
+        'badge2' => '',
+    ],
+];
+$hubExperience = [
     ['پروفایل مشتری', 'erp-crm-customer-profile.php', 'ثبت و مشاهده پروفایل'],
     ['پروفایل خودرو', 'erp-crm-vehicle-profile.php', 'خودرو و پلاک'],
-    ['تکمیل پرونده پذیرش', 'erp-crm-case.php', 'پرونده پذیرش'],
-    ['قرارداد و مدارک', 'erp-crm-documents.php', 'مدارک و امضا'],
+    ['تکمیل پرونده پذیرش', 'erp-crm-case.php', 'غنی‌سازی پرونده CRM'],
+    ['قرارداد و مدارک', 'erp-crm-documents.php', 'چک‌لیست مدارک CRM'],
     ['کارتابل مشتری', 'erp-crm-cartable.php', 'پیگیری کارتابل'],
     ['رضایت‌سنجی', 'erp-crm-satisfaction.php', 'تجربه مشتری'],
     ['شکایت و اصلاحیه', 'erp-crm-complaints.php', 'شکایت باز'],
+];
+$hubLoyalty = [
     ['باشگاه مشتریان', 'erp-crm-club.php', 'سطح باشگاه'],
     ['یادآوری سرویس‌های دوره‌ای', 'erp-crm-reminders.php', 'سررسید سرویس'],
     ['بازگشت مشتری', 'erp-crm-return.php', 'پیگیری بازگشت'],
@@ -158,7 +232,9 @@ $hubSections = [
       <p>پروفایل، پذیرش، مدارک، کارتابل، رضایت، شکایت، باشگاه، یادآوری، بازگشت، پروموشن و کمپین</p>
       <div class="c360-head-meta">
         <a class="c360-btn" href="personnel.html">بازگشت به صفحه پرسنل</a>
+        <a class="c360-btn" href="erp-reception-workbench.php">میز کار پذیرش</a>
         <span class="c360-badge">پایگاه داده moghare360_ERP</span>
+        <span class="c360-badge">بدون مسیر موازی</span>
       </div>
     </div>
     <div>
@@ -181,6 +257,39 @@ $hubSections = [
   </nav>
 
 <?php if ($tab === 'dashboard'): ?>
+  <section class="c360-panel c360-hub-section">
+    <div class="c360-section-head">
+      <div>
+        <h2>پرونده‌های پذیرش</h2>
+        <p class="c360-section-sub">ورود و پیگیری مسیرهای موجود پذیرش آنلاین و حضوری</p>
+      </div>
+      <span class="c360-badge">مسیر موجود</span>
+    </div>
+    <section class="c360-status-grid c360-rx-grid">
+      <div class="c360-status-card"><span class="c360-light <?= $rx['online_new'] ? 'warn' : 'idle' ?>"></span><span>درخواست آنلاین جدید</span><strong><?= (int)$rx['online_new'] ?></strong></div>
+      <div class="c360-status-card"><span class="c360-light <?= $rx['online_pending'] ? 'warn' : 'ok' ?>"></span><span>آنلاین در انتظار تکمیل</span><strong><?= (int)$rx['online_pending'] ?></strong></div>
+      <div class="c360-status-card"><span class="c360-light <?= $rx['walkin_today'] ? 'ok' : 'idle' ?>"></span><span>پذیرش حضوری امروز</span><strong><?= (int)$rx['walkin_today'] ?></strong></div>
+      <div class="c360-status-card"><span class="c360-light <?= $rx['case_incomplete'] ? 'warn' : 'ok' ?>"></span><span>پرونده پذیرش ناقص</span><strong><?= (int)$rx['case_incomplete'] ?></strong></div>
+      <div class="c360-status-card"><span class="c360-light <?= $rx['ready_contract'] ? 'warn' : 'idle' ?>"></span><span>آماده قرارداد</span><strong><?= (int)$rx['ready_contract'] ?></strong></div>
+      <div class="c360-status-card"><span class="c360-light <?= $rx['contract_unsigned'] ? 'warn' : 'ok' ?>"></span><span>قرارداد امضانشده</span><strong><?= (int)$rx['contract_unsigned'] ?></strong></div>
+      <div class="c360-status-card"><span class="c360-light <?= $rx['contract_signed'] ? 'ok' : 'idle' ?>"></span><span>قرارداد امضاشده</span><strong><?= (int)$rx['contract_signed'] ?></strong></div>
+      <div class="c360-status-card"><span class="c360-light <?= $rx['ready_jobcard'] ? 'warn' : 'idle' ?>"></span><span>آماده انتقال به سالن</span><strong><?= (int)$rx['ready_jobcard'] ?></strong></div>
+      <div class="c360-status-card"><span class="c360-light idle"></span><span>تحویل‌شده / بسته‌شده</span><strong><?= (int)$rx['closed_done'] ?></strong></div>
+    </section>
+    <div class="c360-hub-grid">
+      <?php foreach ($receptionCards as $card): ?>
+        <a class="c360-hub-card c360-hub-card--rx" href="<?= crm360_h($card['href']) ?>">
+          <div class="c360-hub-badges">
+            <span class="c360-mini-badge"><?= crm360_h($card['badge']) ?></span>
+            <?php if ($card['badge2'] !== ''): ?><span class="c360-mini-badge is-mute"><?= crm360_h($card['badge2']) ?></span><?php endif; ?>
+          </div>
+          <strong><?= crm360_h($card['title']) ?></strong>
+          <span><?= crm360_h($card['hint']) ?></span>
+        </a>
+      <?php endforeach; ?>
+    </div>
+  </section>
+
   <section class="c360-status-grid">
     <div class="c360-status-card">
       <span class="c360-light ok"></span>
@@ -239,10 +348,32 @@ $hubSections = [
     <?= crm360_gauge($returnPct, 'بازگشت مشتری', '#e8b84a') ?>
   </div>
 
-  <section class="c360-panel">
-    <h2>بخش‌های ارتباط با مشتریان</h2>
+  <section class="c360-panel c360-hub-section">
+    <div class="c360-section-head">
+      <div>
+        <h2>ارتباط و تجربه مشتری</h2>
+        <p class="c360-section-sub">پروفایل، غنی‌سازی پرونده، کارتابل، رضایت و شکایت</p>
+      </div>
+    </div>
     <div class="c360-hub-grid">
-      <?php foreach ($hubSections as [$title, $href, $hint]): ?>
+      <?php foreach ($hubExperience as [$title, $href, $hint]): ?>
+        <a class="c360-hub-card" href="<?= crm360_h($href) ?>">
+          <strong><?= crm360_h($title) ?></strong>
+          <span><?= crm360_h($hint) ?></span>
+        </a>
+      <?php endforeach; ?>
+    </div>
+  </section>
+
+  <section class="c360-panel c360-hub-section">
+    <div class="c360-section-head">
+      <div>
+        <h2>وفاداری، بازگشت و کمپین</h2>
+        <p class="c360-section-sub">باشگاه، یادآوری، بازگشت، پروموشن و پیامک</p>
+      </div>
+    </div>
+    <div class="c360-hub-grid">
+      <?php foreach ($hubLoyalty as [$title, $href, $hint]): ?>
         <a class="c360-hub-card" href="<?= crm360_h($href) ?>">
           <strong><?= crm360_h($title) ?></strong>
           <span><?= crm360_h($hint) ?></span>
@@ -296,9 +427,17 @@ $hubSections = [
     </section>
   </div>
 
-  <?php if ($onlineRequests): ?>
   <section class="c360-panel">
-    <h2>درخواست‌های آنلاین (فقط خواندنی)</h2>
+    <div class="c360-section-head">
+      <div>
+        <h2>درخواست‌های آنلاین</h2>
+        <p class="c360-section-sub">نمای فشرده از مسیر موجود — تبدیل فقط از مسیر پذیرش</p>
+      </div>
+      <a class="c360-btn" href="erp-reception-online-requests.php">مشاهده همه</a>
+    </div>
+    <?php if (!$onlineRequests): ?>
+      <p class="c360-muted">درخواست آنلاینی ثبت نشده است.</p>
+    <?php else: ?>
     <div class="c360-table-wrap">
       <table class="c360-table">
         <thead><tr><th>شناسه</th><th>موبایل</th><th>پلاک</th><th>وضعیت</th><th>تاریخ</th><th>اقدام</th></tr></thead>
@@ -310,14 +449,17 @@ $hubSections = [
             <td><?= crm360_h((string)($or['vehicle_plate'] ?? '')) ?></td>
             <td><span class="c360-status"><?= crm360_h((string)($or['request_status'] ?? '')) ?></span></td>
             <td><?= crm360_h((string)($or['created_at'] ?? '')) ?></td>
-            <td><a class="c360-btn" href="?tab=cases&amp;req=<?= (int)$or['online_request_id'] ?>">ایجاد پرونده</a></td>
+            <td>
+              <a class="c360-btn" href="erp-reception-online-request-detail.php?request_id=<?= (int)$or['online_request_id'] ?>">جزئیات</a>
+              <a class="c360-btn" href="erp-reception-intake-file.php?online_request_id=<?= (int)$or['online_request_id'] ?>">تکمیل پرونده</a>
+            </td>
           </tr>
         <?php endforeach; ?>
         </tbody>
       </table>
     </div>
+    <?php endif; ?>
   </section>
-  <?php endif; ?>
 
 <?php elseif ($tab === 'customers'): ?>
   <div class="c360-grid2">

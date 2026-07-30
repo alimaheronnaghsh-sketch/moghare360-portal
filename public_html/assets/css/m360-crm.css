@@ -110,3 +110,16 @@ body.c360-body{
 .c360-hub-card:hover{border-color:var(--c360-primary);transform:translateY(-1px);color:#fff}
 .c360-hub-card strong{font-size:.92rem}
 .c360-hub-card span{font-size:.72rem;color:var(--c360-muted)}
+.c360-hub-section{margin-bottom:1.15rem}
+.c360-section-head{display:flex;flex-wrap:wrap;align-items:flex-start;justify-content:space-between;gap:.75rem;margin-bottom:.85rem}
+.c360-section-head h2{margin:0;font-size:1.05rem;color:var(--c360-primary)}
+.c360-section-sub{margin:.3rem 0 0;font-size:.8rem;color:var(--c360-muted)}
+.c360-rx-grid{margin-bottom:.95rem}
+.c360-hub-card--rx{min-height:108px;background:linear-gradient(165deg,rgba(62,207,142,.2),var(--c360-panel))}
+.c360-hub-badges{display:flex;flex-wrap:wrap;gap:.3rem;margin-bottom:.25rem}
+.c360-mini-badge{
+  display:inline-flex;align-items:center;padding:.15rem .45rem;border-radius:999px;font-size:.65rem;
+  border:1px solid rgba(62,207,142,.35);color:var(--c360-primary);background:rgba(62,207,142,.08)
+}
+.c360-mini-badge.is-mute{color:var(--c360-muted);border-color:var(--c360-border);background:rgba(255,255,255,.03)}
+.c360-hub-section .c360-panel h2,.c360-panel > .c360-section-head h2{margin:0}
