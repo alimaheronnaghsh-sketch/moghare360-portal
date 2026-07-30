@@ -10,6 +10,7 @@ header('X-Robots-Tag: noindex, nofollow');
 
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-reception-jobcard-helper.php';
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-operational-shell-helper.php';
+require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'reception-ui-helper.php';
 
 m360_reception_jobcard_require_staff();
 if (session_status() === PHP_SESSION_ACTIVE) {
@@ -28,10 +29,15 @@ if ($dbOk) {
         $conn,
         $statusFilter === 'ALL' ? null : $statusFilter,
         $contractFilter === 'ALL' ? null : $contractFilter,
-        150
+        500
     );
 }
-
+$sort = preg_replace('/[^a-z0-9_]/', '', strtolower((string)($_GET['sort'] ?? 'id'))) ?: 'id';
+$dir = strtolower((string)($_GET['dir'] ?? 'desc')) === 'asc' ? 'asc' : 'desc';
+$sortKey = $sort === 'date' ? 'created_at' : 'jobcard_id';
+$jobcards = m360_rui_sort_rows($jobcards, $sortKey, $dir);
+$pageInfo = m360_rui_paginate($jobcards, max(1, (int)($_GET['page'] ?? 1)), 10);
+$jobcardRows = $pageInfo['rows'];
 ?>
 <!DOCTYPE html>
 <html lang="fa" dir="rtl">
@@ -43,13 +49,13 @@ if ($dbOk) {
     <link rel="stylesheet" href="assets/moghare360-ui/moghare360-soft-run-release.css">
     <link rel="stylesheet" href="<?= m360_operational_shell_h(m360_operational_shell_css_href()) ?>">
     <style>
-        .p2-jc-wrap { max-width: 1240px; margin: 0 auto; }
+        .p2-jc-wrap { max-width: 1240px; margin: 0 auto; overflow-x: auto; }
         .p2-jc-filters { display: flex; flex-wrap: wrap; gap: 0.45rem; margin-bottom: 0.75rem; }
         .p2-jc-filters a { padding: 0.4rem 0.8rem; border-radius: 999px; border: 1px solid #d4d4d8; text-decoration: none; color: #27272a; font-size: 0.85rem; background: #fff; }
         .p2-jc-filters a.active { background: #166534; color: #fff; border-color: #166534; }
         .p2-jc-filters .label { width: 100%; font-size: 0.8rem; color: #71717a; margin-top: 0.5rem; }
-        .p2-jc-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
-        .p2-jc-table th, .p2-jc-table td { padding: 0.6rem 0.45rem; border-bottom: 1px solid #e5e7eb; text-align: right; vertical-align: top; }
+        .p2-jc-table { width: 100%; border-collapse: collapse; font-size: clamp(11px, 0.72vw, 13px); table-layout: fixed; }
+        .p2-jc-table th, .p2-jc-table td { padding: 0.42rem 0.45rem; border-bottom: 1px solid #e5e7eb; text-align: right; vertical-align: middle; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .p2-jc-table th { background: #fafafa; font-weight: 600; color: #52525b; }
         .p2-jc-badge { display: inline-block; padding: 0.18rem 0.5rem; border-radius: 999px; font-size: 0.76rem; background: #f4f4f5; }
         .p2-jc-badge.signed { background: #dcfce7; color: #166534; }
@@ -62,10 +68,13 @@ if ($dbOk) {
 </head>
 <body style="background:#f8fafc;margin:0;padding:1.25rem;color:#18181b;">
 <div class="w1c-wrap p2-jc-wrap">
+    <p style="margin:0 0 .75rem"><a href="erp-reception-board.php" style="color:#166534;text-decoration:none;font-weight:600">← بازگشت به مرکز ارتباط با مشتریان</a></p>
     <?php m360_operational_shell_render_board('reception_jobcards'); ?>
     <header class="w1c-banner">
         <h1>کارت‌های کار پذیرش</h1>
         <p>پیگیری مراجعه، ثبت ورود و آماده‌سازی فنی</p>
+        <p style="margin:.4rem 0 0;font-size:.85rem"><a href="?<?= m360_rui_h(m360_rui_query_keep(['sort'=>'id','dir'=>$sort==='id'&&$dir==='desc'?'asc':'desc','page'=>1])) ?>">مرتب‌سازی شناسه</a>
+        · <a href="?<?= m360_rui_h(m360_rui_query_keep(['sort'=>'date','dir'=>$sort==='date'&&$dir==='desc'?'asc':'desc','page'=>1])) ?>">مرتب‌سازی تاریخ</a></p>
     </header>
 
     <?php if ($p15Missing): ?>
@@ -123,7 +132,7 @@ if ($dbOk) {
                         </tr>
                         </thead>
                         <tbody>
-                        <?php foreach ($jobcards as $jc):
+                        <?php foreach ($jobcardRows as $jc):
                             $cs = $jc['contract_summary'] ?? [];
                             $badgeClass = 'unsigned';
                             if (($cs['code'] ?? '') === 'SIGNED') {
@@ -136,21 +145,22 @@ if ($dbOk) {
                         ?>
                             <tr>
                                 <td><?= m360_reception_jobcard_h((string)$jc['jobcard_id']) ?></td>
-                                <td><?= m360_reception_jobcard_h(substr((string)($jc['created_at'] ?? ''), 0, 16)) ?></td>
-                                <td><?= m360_reception_jobcard_h((string)($jc['customer_name'] ?? '-')) ?></td>
+                                <td><?= m360_rui_h(m360_rui_jalali_date((string)($jc['created_at'] ?? ''))) ?></td>
+                                <td style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="<?= m360_reception_jobcard_h((string)($jc['customer_name'] ?? '-')) ?>"><?= m360_reception_jobcard_h((string)($jc['customer_name'] ?? '-')) ?></td>
                                 <td><?= m360_reception_jobcard_h((string)($jc['customer_mobile'] ?? '-')) ?></td>
-                                <td><?= m360_reception_jobcard_h((string)($jc['vehicle_label'] ?? '-')) ?></td>
+                                <td style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="<?= m360_reception_jobcard_h((string)($jc['vehicle_label'] ?? '-')) ?>"><?= m360_reception_jobcard_h((string)($jc['vehicle_label'] ?? '-')) ?></td>
                                 <td><?= m360_reception_jobcard_h((string)($jc['plate_number'] ?? '-')) ?></td>
-                                <td><?= m360_reception_jobcard_h((string)($jc['source_label'] ?? '-')) ?></td>
-                                <td><span class="p2-jc-badge"><?= m360_reception_jobcard_h((string)($jc['status_label'] ?? '')) ?></span></td>
-                                <td><span class="p2-jc-badge <?= m360_reception_jobcard_h($badgeClass) ?>"><?= m360_reception_jobcard_h((string)($cs['label'] ?? '-')) ?></span></td>
-                                <td><?= m360_reception_jobcard_h(substr($signedAt !== '' ? $signedAt : $arrival, 0, 16) ?: '-') ?></td>
-                                <td><a class="p2-jc-btn" href="erp-reception-jobcard-detail.php?jobcard_id=<?= (int)$jc['jobcard_id'] ?>">جزئیات</a></td>
+                                <td><?= m360_rui_h(m360_rui_label((string)($jc['source_label'] ?? $jc['source'] ?? '-'))) ?></td>
+                                <td><span class="p2-jc-badge"><?= m360_rui_h(m360_rui_label((string)($jc['status_label'] ?? $jc['status'] ?? ''))) ?></span></td>
+                                <td><span class="p2-jc-badge <?= m360_reception_jobcard_h($badgeClass) ?>"><?= m360_rui_h(m360_rui_label((string)($cs['label'] ?? $cs['code'] ?? '-'))) ?></span></td>
+                                <td><?= m360_rui_h(m360_rui_jalali_date($signedAt !== '' ? $signedAt : $arrival)) ?></td>
+                                <td><a class="p2-jc-btn" href="erp-reception-jobcard-detail.php?jobcard_id=<?= (int)$jc['jobcard_id'] ?>">ورود</a></td>
                             </tr>
                         <?php endforeach; ?>
                         </tbody>
                     </table>
                 </div>
+                <?php m360_rui_render_pagination($pageInfo, m360_rui_query_keep([], ['page'])); ?>
             <?php endif; ?>
         </section>
     <?php endif; ?>

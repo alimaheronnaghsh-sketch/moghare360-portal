@@ -106,7 +106,7 @@ $m360CustomerPageBoot = [
 <div class="m360-wrap m360-rw-wrap">
     <header class="m360-rw-header">
         <div class="m360-rw-header__top">
-            <a class="m360-rw-back" href="erp-reception-workbench.php?section=reception">← میز کار پذیرش</a>
+            <a class="m360-rw-back" href="erp-reception-board.php">بازگشت به مرکز ارتباط با مشتریان</a>
             <span class="m360-rw-badge">مدل واحد فرم پذیرش</span>
         </div>
         <h1 class="m360-rw-title">پذیرش حضوری — مدل ۸ مرحله‌ای واحد</h1>
@@ -446,7 +446,7 @@ $m360CustomerPageBoot = [
     <?php endif; ?>
 
     <footer class="m360-rw-footer">
-        <a href="erp-reception-workbench.php?section=reception">میز کار پذیرش</a>
+        <a href="erp-reception-board.php">بازگشت به مرکز ارتباط با مشتریان</a>
         <a href="erp-reception-online-requests.php">صف درخواست‌ها</a>
         <a href="erp-product-home.php">خانه محصول</a>
     </footer>

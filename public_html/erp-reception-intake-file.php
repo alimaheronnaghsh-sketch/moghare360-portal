@@ -217,7 +217,7 @@ $m360RwJsVer = 'p1-unification-' . (is_file($m360RwJsPath) ? (string)filemtime($
 <div class="m360-wrap m360-rw-wrap">
     <header class="m360-rw-header m360-rw-header--compact">
         <div class="m360-rw-header__top">
-            <a class="m360-rw-back" href="erp-reception-workbench.php">← میز کار پذیرش</a>
+            <a class="m360-rw-back" href="erp-reception-board.php">بازگشت به مرکز ارتباط با مشتریان</a>
             <span class="m360-rw-gate-chip <?= m360_rw_h($gateClass) ?>"><?= m360_rw_h((string)($gate['label_fa'] ?? '')) ?></span>
         </div>
         <h1 class="m360-rw-title">پرونده پذیرش #<?= m360_rw_h((string)$onlineRequestId) ?></h1>
@@ -767,7 +767,7 @@ $m360RwJsVer = 'p1-unification-' . (is_file($m360RwJsPath) ? (string)filemtime($
         </div>
 
         <nav class="m360-rw-footer">
-            <a href="erp-reception-workbench.php">میز کار پذیرش</a>
+            <a href="erp-reception-board.php">بازگشت به مرکز ارتباط با مشتریان</a>
             <a href="erp-reception-online-requests.php">درخواست‌های آنلاین</a>
             <a href="erp-reception-online-request-detail.php?request_id=<?= $onlineRequestId ?>">جزئیات درخواست</a>
         </nav>

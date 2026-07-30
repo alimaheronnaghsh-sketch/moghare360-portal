@@ -5,6 +5,7 @@ header('Content-Type: text/html; charset=UTF-8');
 header('X-Robots-Tag: noindex, nofollow');
 
 require_once __DIR__ . '/includes/crm360-helper.php';
+require_once __DIR__ . '/includes/reception-ui-helper.php';
 
 crm360_csrf_boot();
 $actorInfo = crm360_actor();
@@ -120,7 +121,7 @@ if ($dbOk && $conn) {
     }
     $walkinRequests = [];
     if (crm360_table_exists($conn, 'erp_customer_online_requests')) {
-        $walkinRequests = crm360_rows($conn, "SELECT TOP 8 online_request_id, mobile, vehicle_plate, request_status, created_at FROM dbo.erp_customer_online_requests WHERE request_payload_json LIKE N'%STAFF_ASSISTED_WALKIN%' ORDER BY online_request_id DESC");
+        $walkinRequests = crm360_rows($conn, "SELECT TOP 100 online_request_id, mobile, vehicle_plate, request_status, created_at FROM dbo.erp_customer_online_requests WHERE request_payload_json LIKE N'%STAFF_ASSISTED_WALKIN%' ORDER BY online_request_id DESC");
     }
 
     $customers = crm360_rows($conn, 'SELECT TOP 100 * FROM dbo.crm360_customer_profiles ORDER BY customer_profile_id DESC');
@@ -164,7 +165,14 @@ foreach ($cartable as $cbRow) {
     }
 }
 $hubAudits = array_slice($audits, 0, 5);
-$hubCases = array_slice($cases, 0, 12);
+$casesPage = max(1, (int)($_GET['cases_page'] ?? 1));
+$casesSorted = m360_rui_sort_rows($cases, 'case_id', 'desc');
+$casesPageInfo = m360_rui_paginate($casesSorted, $casesPage, 10);
+$hubCases = $casesPageInfo['rows'];
+$onlinePage = max(1, (int)($_GET['online_page'] ?? 1));
+$onlinePageInfo = m360_rui_paginate($onlineRequests, $onlinePage, 10);
+$walkinPage = max(1, (int)($_GET['walkin_page'] ?? 1));
+$walkinPageInfo = m360_rui_paginate($walkinRequests, $walkinPage, 10);
 $receptionCards = [
     ['title' => 'درخواست‌های آنلاین', 'href' => 'erp-reception-online-requests.php', 'count' => (int)$rx['online_new'], 'unit' => 'جدید'],
     ['title' => 'پذیرش حضوری', 'href' => 'erp-reception-walkin-create.php', 'count' => (int)$rx['walkin_today'], 'unit' => 'امروز'],
@@ -205,7 +213,7 @@ $hubLoyalty = [
 </head>
 <body class="c360-body">
 <div class="c360-wrap">
-  <div class="c360-crumb"><a href="personnel.html">پرسنل</a> / <a href="personnel.html">ارتباط با مشتریان</a> / داشبورد</div>
+  <div class="c360-crumb"><a href="personnel.html">پرسنل</a> / <a href="erp-reception-board.php">ارتباط با مشتریان</a> / داشبورد</div>
   <header class="c360-head">
     <div>
       <h1>مرکز ارتباط با مشتریان</h1>
@@ -301,23 +309,24 @@ $hubLoyalty = [
     <?php else: ?>
     <div class="c360-table-wrap">
       <table class="c360-table">
-        <thead><tr><th>کد پرونده</th><th>مشتری</th><th>خودرو</th><th>نوع</th><th>وضعیت</th><th>تکمیل</th><th>بروزرسانی</th><th></th></tr></thead>
+        <thead><tr><th>کد پرونده</th><th>مشتری</th><th>خودرو</th><th>نوع</th><th>وضعیت</th><th>تکمیل</th><th>بروزرسانی</th><th class="c360-action-cell"></th></tr></thead>
         <tbody>
         <?php foreach ($hubCases as $c): ?>
           <tr>
-            <td><?= crm360_h((string)($c['case_code'] ?? '')) ?></td>
-            <td><?= crm360_h((string)($c['full_name'] ?? '')) ?></td>
-            <td><?= crm360_h(trim((string)($c['brand'] ?? '') . ' ' . (string)($c['model'] ?? ''))) ?></td>
-            <td><?= crm360_h((string)($c['case_type'] ?? '')) ?></td>
-            <td><span class="c360-status"><?= crm360_h((string)($c['case_status'] ?? '')) ?></span></td>
+            <td title="<?= crm360_h((string)($c['case_code'] ?? '')) ?>"><?= crm360_h((string)($c['case_code'] ?? '')) ?></td>
+            <td title="<?= crm360_h((string)($c['full_name'] ?? '')) ?>"><?= crm360_h((string)($c['full_name'] ?? '')) ?></td>
+            <td title="<?= crm360_h(trim((string)($c['brand'] ?? '') . ' ' . (string)($c['model'] ?? ''))) ?>"><?= crm360_h(trim((string)($c['brand'] ?? '') . ' ' . (string)($c['model'] ?? ''))) ?></td>
+            <td><?= crm360_h(m360_rui_label((string)($c['case_type'] ?? ''))) ?></td>
+            <td><span class="c360-status"><?= crm360_h(m360_rui_label((string)($c['case_status'] ?? ''))) ?></span></td>
             <td><?= (int)($c['profile_completion_percent'] ?? 0) ?>%</td>
-            <td><?= crm360_h((string)($c['updated_at'] ?? $c['created_at'] ?? '')) ?></td>
-            <td><a class="c360-btn" href="erp-crm-case.php?case_id=<?= (int)$c['case_id'] ?>">ورود</a></td>
+              <td title="<?= crm360_h(m360_rui_jalali_date((string)($c['updated_at'] ?? $c['created_at'] ?? ''))) ?>"><?= crm360_h(m360_rui_jalali_date((string)($c['updated_at'] ?? $c['created_at'] ?? ''))) ?></td>
+            <td class="c360-action-cell"><a class="c360-btn" href="erp-crm-case.php?case_id=<?= (int)$c['case_id'] ?>">ورود</a></td>
           </tr>
         <?php endforeach; ?>
         </tbody>
       </table>
     </div>
+    <?php m360_rui_render_pagination($casesPageInfo, m360_rui_query_keep([], ['cases_page', 'page', 'online_page', 'walkin_page']), 'cases_page'); ?>
     <?php endif; ?>
   </section>
 
@@ -374,7 +383,7 @@ $hubLoyalty = [
               <tr>
                 <td><?= crm360_h((string)($cb['item_title'] ?? '')) ?></td>
                 <td><?= crm360_h((string)($cb['full_name'] ?? '')) ?></td>
-                <td><span class="c360-status"><?= crm360_h((string)($cb['item_status'] ?? '')) ?></span></td>
+                <td><span class="c360-status"><?= crm360_h(m360_rui_label((string)($cb['item_status'] ?? ''))) ?></span></td>
               </tr>
             <?php endforeach; ?>
             </tbody>
@@ -395,7 +404,7 @@ $hubLoyalty = [
               <tr>
                 <td><?= crm360_h((string)($au['action_code'] ?? '')) ?></td>
                 <td><?= crm360_h((string)($au['entity_name'] ?? '')) ?> #<?= crm360_h((string)($au['entity_id'] ?? '')) ?></td>
-                <td><?= crm360_h((string)($au['event_time'] ?? '')) ?></td>
+                <td><?= crm360_h(m360_rui_jalali_date((string)($au['event_time'] ?? ''))) ?></td>
               </tr>
             <?php endforeach; ?>
             </tbody>
@@ -411,26 +420,27 @@ $hubLoyalty = [
         <div><h2>درخواست‌های آنلاین اخیر</h2></div>
         <a class="c360-btn" href="erp-reception-online-requests.php">مشاهده همه</a>
       </div>
-      <?php if (!$onlineRequests): ?>
+      <?php if (!$onlinePageInfo['rows']): ?>
         <p class="c360-muted">درخواست آنلاینی ثبت نشده است.</p>
       <?php else: ?>
       <div class="c360-table-wrap">
         <table class="c360-table">
-          <thead><tr><th>شناسه</th><th>موبایل</th><th>پلاک</th><th>وضعیت</th><th>تاریخ</th><th></th></tr></thead>
+          <thead><tr><th>شناسه</th><th>موبایل</th><th>پلاک</th><th>وضعیت</th><th>تاریخ</th><th class="c360-action-cell"></th></tr></thead>
           <tbody>
-          <?php foreach (array_slice($onlineRequests, 0, 8) as $or): ?>
+          <?php foreach ($onlinePageInfo['rows'] as $or): ?>
             <tr>
               <td><?= crm360_h((string)$or['online_request_id']) ?></td>
-              <td><?= crm360_h((string)($or['mobile'] ?? '')) ?></td>
-              <td><?= crm360_h((string)($or['vehicle_plate'] ?? '')) ?></td>
-              <td><span class="c360-status"><?= crm360_h((string)($or['request_status'] ?? '')) ?></span></td>
-              <td><?= crm360_h((string)($or['created_at'] ?? '')) ?></td>
-              <td><a class="c360-btn" href="erp-reception-online-request-detail.php?request_id=<?= (int)$or['online_request_id'] ?>">ورود</a></td>
+              <td title="<?= crm360_h((string)($or['mobile'] ?? '')) ?>"><?= crm360_h((string)($or['mobile'] ?? '')) ?></td>
+              <td title="<?= crm360_h((string)($or['vehicle_plate'] ?? '')) ?>"><?= crm360_h((string)($or['vehicle_plate'] ?? '')) ?></td>
+              <td><span class="c360-status"><?= crm360_h(m360_rui_label((string)($or['request_status'] ?? ''))) ?></span></td>
+              <td><?= crm360_h(m360_rui_jalali_date((string)($or['created_at'] ?? ''))) ?></td>
+              <td class="c360-action-cell"><a class="c360-btn" href="erp-reception-online-request-detail.php?request_id=<?= (int)$or['online_request_id'] ?>">ورود</a></td>
             </tr>
           <?php endforeach; ?>
           </tbody>
         </table>
       </div>
+      <?php m360_rui_render_pagination($onlinePageInfo, m360_rui_query_keep([], ['online_page', 'page', 'cases_page', 'walkin_page']), 'online_page'); ?>
       <?php endif; ?>
     </section>
     <section class="c360-panel">
@@ -438,31 +448,36 @@ $hubLoyalty = [
         <div><h2>پذیرش حضوری اخیر</h2></div>
         <a class="c360-btn" href="erp-reception-walkin-create.php">ورود</a>
       </div>
-      <?php if (!$walkinRequests): ?>
+      <?php if (!$walkinPageInfo['rows']): ?>
         <p class="c360-muted">۰</p>
       <?php else: ?>
       <div class="c360-table-wrap">
         <table class="c360-table">
-          <thead><tr><th>شناسه</th><th>موبایل</th><th>پلاک</th><th>وضعیت</th><th>تاریخ</th><th></th></tr></thead>
+          <thead><tr><th>شناسه</th><th>موبایل</th><th>پلاک</th><th>وضعیت</th><th>تاریخ</th><th class="c360-action-cell"></th></tr></thead>
           <tbody>
-          <?php foreach ($walkinRequests as $wr): ?>
+          <?php foreach ($walkinPageInfo['rows'] as $wr): ?>
             <tr>
               <td><?= crm360_h((string)$wr['online_request_id']) ?></td>
-              <td><?= crm360_h((string)($wr['mobile'] ?? '')) ?></td>
-              <td><?= crm360_h((string)($wr['vehicle_plate'] ?? '')) ?></td>
-              <td><span class="c360-status"><?= crm360_h((string)($wr['request_status'] ?? '')) ?></span></td>
-              <td><?= crm360_h((string)($wr['created_at'] ?? '')) ?></td>
-              <td><a class="c360-btn" href="erp-reception-intake-file.php?online_request_id=<?= (int)$wr['online_request_id'] ?>">ورود</a></td>
+              <td title="<?= crm360_h((string)($wr['mobile'] ?? '')) ?>"><?= crm360_h((string)($wr['mobile'] ?? '')) ?></td>
+              <td title="<?= crm360_h((string)($wr['vehicle_plate'] ?? '')) ?>"><?= crm360_h((string)($wr['vehicle_plate'] ?? '')) ?></td>
+              <td><span class="c360-status"><?= crm360_h(m360_rui_label((string)($wr['request_status'] ?? ''))) ?></span></td>
+              <td><?= crm360_h(m360_rui_jalali_date((string)($wr['created_at'] ?? ''))) ?></td>
+              <td class="c360-action-cell"><a class="c360-btn" href="erp-reception-intake-file.php?online_request_id=<?= (int)$wr['online_request_id'] ?>">ورود</a></td>
             </tr>
           <?php endforeach; ?>
           </tbody>
         </table>
       </div>
+      <?php m360_rui_render_pagination($walkinPageInfo, m360_rui_query_keep([], ['walkin_page', 'page', 'cases_page', 'online_page']), 'walkin_page'); ?>
       <?php endif; ?>
     </section>
   </div>
 
 <?php elseif ($tab === 'customers'): ?>
+  <?php
+    $listPage = max(1, (int)($_GET['list_page'] ?? 1));
+    $custList = m360_rui_paginate(m360_rui_sort_rows($customers, 'customer_profile_id', 'desc'), $listPage, 10);
+  ?>
   <div class="c360-grid2">
     <section class="c360-panel">
       <h2>ثبت مشتری جدید</h2>
@@ -487,22 +502,27 @@ $hubLoyalty = [
         <table class="c360-table">
           <thead><tr><th>شناسه</th><th>نام</th><th>موبایل</th><th>وضعیت</th><th>VIP</th></tr></thead>
           <tbody>
-          <?php foreach ($customers as $c): ?>
+          <?php foreach ($custList['rows'] as $c): ?>
             <tr>
               <td><?= (int)$c['customer_profile_id'] ?></td>
-              <td><?= crm360_h((string)$c['full_name']) ?></td>
+              <td title="<?= crm360_h((string)$c['full_name']) ?>"><?= crm360_h((string)$c['full_name']) ?></td>
               <td><?= crm360_h((string)($c['mobile'] ?? '')) ?></td>
-              <td><span class="c360-status"><?= crm360_h((string)$c['customer_status']) ?></span></td>
-              <td><?= crm360_h((string)$c['vip_level']) ?></td>
+              <td><span class="c360-status"><?= crm360_h(m360_rui_label((string)$c['customer_status'])) ?></span></td>
+              <td><?= crm360_h(m360_rui_label((string)$c['vip_level'])) ?></td>
             </tr>
           <?php endforeach; ?>
           </tbody>
         </table>
       </div>
+      <?php m360_rui_render_pagination($custList, m360_rui_query_keep(['tab' => 'customers'], ['list_page', 'page']), 'list_page'); ?>
     </section>
   </div>
 
 <?php elseif ($tab === 'vehicles'): ?>
+  <?php
+    $listPage = max(1, (int)($_GET['list_page'] ?? 1));
+    $vehList = m360_rui_paginate(m360_rui_sort_rows($vehicles, 'vehicle_profile_id', 'desc'), $listPage, 10);
+  ?>
   <div class="c360-grid2">
     <section class="c360-panel">
       <h2>ثبت خودرو</h2>
@@ -527,23 +547,28 @@ $hubLoyalty = [
         <table class="c360-table">
           <thead><tr><th>شناسه</th><th>مشتری</th><th>برند/مدل</th><th>پلاک</th><th>VIN</th></tr></thead>
           <tbody>
-          <?php foreach ($vehicles as $v): ?>
+          <?php foreach ($vehList['rows'] as $v): ?>
             <tr>
               <td><?= (int)$v['vehicle_profile_id'] ?></td>
-              <td><?= crm360_h((string)$v['full_name']) ?></td>
-              <td><?= crm360_h((string)$v['brand']) ?> <?= crm360_h((string)$v['model']) ?></td>
+              <td title="<?= crm360_h((string)$v['full_name']) ?>"><?= crm360_h((string)$v['full_name']) ?></td>
+              <td title="<?= crm360_h((string)$v['brand'] . ' ' . (string)$v['model']) ?>"><?= crm360_h((string)$v['brand']) ?> <?= crm360_h((string)$v['model']) ?></td>
               <td><?= crm360_h((string)($v['plate_no'] ?? '')) ?></td>
-              <td><?= crm360_h((string)($v['vin'] ?? '')) ?></td>
+              <td title="<?= crm360_h((string)($v['vin'] ?? '')) ?>"><?= crm360_h((string)($v['vin'] ?? '')) ?></td>
             </tr>
           <?php endforeach; ?>
           </tbody>
         </table>
       </div>
+      <?php m360_rui_render_pagination($vehList, m360_rui_query_keep(['tab' => 'vehicles'], ['list_page', 'page']), 'list_page'); ?>
     </section>
   </div>
 
 <?php elseif ($tab === 'cases'): ?>
-  <?php $prefReq = (int)($_GET['req'] ?? 0); ?>
+  <?php
+    $prefReq = (int)($_GET['req'] ?? 0);
+    $listPage = max(1, (int)($_GET['list_page'] ?? 1));
+    $casesListInfo = m360_rui_paginate(m360_rui_sort_rows($cases, 'case_id', 'desc'), $listPage, 10);
+  ?>
   <div class="c360-grid2">
     <section class="c360-panel">
       <h2>ایجاد پرونده پذیرش</h2>
@@ -567,18 +592,17 @@ $hubLoyalty = [
       <h2>پرونده‌های پذیرش</h2>
       <div class="c360-table-wrap">
         <table class="c360-table">
-          <thead><tr><th>کد</th><th>مشتری</th><th>خودرو</th><th>خدمت</th><th>تکمیل</th><th>وضعیت</th><th>ناقص</th><th>به‌روز</th></tr></thead>
+          <thead><tr><th>کد</th><th>مشتری</th><th>خودرو</th><th>خدمت</th><th>تکمیل</th><th>وضعیت</th><th>به‌روز</th></tr></thead>
           <tbody>
-          <?php foreach ($cases as $c):
+          <?php foreach ($casesListInfo['rows'] as $c):
               $calc = $dbOk ? crm360_calc_case_completion($conn, (int)$c['case_id']) : ['percent' => 0, 'missing' => []]; ?>
             <tr>
-              <td><?= crm360_h((string)$c['case_code']) ?></td>
-              <td><?= crm360_h((string)$c['full_name']) ?></td>
-              <td><?= crm360_h((string)$c['brand']) ?> <?= crm360_h((string)$c['model']) ?></td>
-              <td><?= crm360_h((string)($c['service_type'] ?? '')) ?></td>
+              <td title="<?= crm360_h((string)$c['case_code']) ?>"><?= crm360_h((string)$c['case_code']) ?></td>
+              <td title="<?= crm360_h((string)$c['full_name']) ?>"><?= crm360_h((string)$c['full_name']) ?></td>
+              <td title="<?= crm360_h((string)$c['brand'] . ' ' . (string)$c['model']) ?>"><?= crm360_h((string)$c['brand']) ?> <?= crm360_h((string)$c['model']) ?></td>
+              <td title="<?= crm360_h((string)($c['service_type'] ?? '')) ?>"><?= crm360_h(m360_rui_label((string)($c['service_type'] ?? ''))) ?></td>
               <td><strong><?= (int)$calc['percent'] ?>%</strong></td>
-              <td><span class="c360-status"><?= crm360_h((string)$c['case_status']) ?></span></td>
-              <td><?php if ($calc['missing']): ?><ul class="c360-missing-list"><?php foreach ($calc['missing'] as $m): ?><li><?= crm360_h($m) ?></li><?php endforeach; ?></ul><?php else: ?>—<?php endif; ?></td>
+              <td><span class="c360-status"><?= crm360_h(m360_rui_label((string)$c['case_status'])) ?></span></td>
               <td>
                 <form class="c360-inline-form" method="post" action="erp-crm-action.php">
                   <?= crm360_csrf_field() ?>
@@ -588,7 +612,7 @@ $hubLoyalty = [
                   <input type="hidden" name="case_type" value="<?= crm360_h((string)$c['case_type']) ?>">
                   <input name="service_type" value="<?= crm360_h((string)($c['service_type'] ?? '')) ?>" placeholder="خدمت" style="width:90px">
                   <input name="responsible_staff" value="<?= crm360_h((string)($c['responsible_staff'] ?? '')) ?>" placeholder="مسئول" style="width:80px">
-                  <select name="case_status"><option value="DRAFT">DRAFT</option><option value="IN_PROGRESS" <?= ($c['case_status'] ?? '') === 'IN_PROGRESS' ? 'selected' : '' ?>>IN_PROGRESS</option><option value="READY" <?= ($c['case_status'] ?? '') === 'READY' ? 'selected' : '' ?>>READY</option><option value="CLOSED" <?= ($c['case_status'] ?? '') === 'CLOSED' ? 'selected' : '' ?>>CLOSED</option></select>
+                  <select name="case_status"><option value="DRAFT">پیش‌نویس</option><option value="IN_PROGRESS" <?= ($c['case_status'] ?? '') === 'IN_PROGRESS' ? 'selected' : '' ?>>در حال تکمیل</option><option value="READY" <?= ($c['case_status'] ?? '') === 'READY' ? 'selected' : '' ?>>آماده</option><option value="CLOSED" <?= ($c['case_status'] ?? '') === 'CLOSED' ? 'selected' : '' ?>>بسته‌شده</option></select>
                   <button type="submit" class="c360-btn">ذخیره</button>
                 </form>
               </td>
@@ -597,10 +621,15 @@ $hubLoyalty = [
           </tbody>
         </table>
       </div>
+      <?php m360_rui_render_pagination($casesListInfo, m360_rui_query_keep(['tab' => 'cases'], ['list_page', 'page']), 'list_page'); ?>
     </section>
   </div>
 
 <?php elseif ($tab === 'documents'): ?>
+  <?php
+    $listPage = max(1, (int)($_GET['list_page'] ?? 1));
+    $docList = m360_rui_paginate(m360_rui_sort_rows($documents, 'document_id', 'desc'), $listPage, 10);
+  ?>
   <section class="c360-panel">
     <h2>مدارک پرونده</h2>
     <p class="c360-note">DOCUMENT_VAULT_INTEGRATION_PENDING — مرجع فایل فعلاً در file_ref_text ذخیره می‌شود.</p>
@@ -615,13 +644,13 @@ $hubLoyalty = [
       <table class="c360-table">
         <thead><tr><th>پرونده</th><th>نوع</th><th>عنوان</th><th>وضعیت</th><th>مرجع فایل</th><th>به‌روزرسانی</th></tr></thead>
         <tbody>
-        <?php foreach ($documents as $d): ?>
+        <?php foreach ($docList['rows'] as $d): ?>
           <tr>
-            <td><?= crm360_h((string)($d['case_code'] ?? $d['case_id'])) ?></td>
-            <td><?= crm360_h((string)$d['document_type']) ?></td>
-            <td><?= crm360_h((string)$d['document_title']) ?></td>
-            <td><span class="c360-status <?= ($d['document_status'] ?? '') === 'MISSING' ? 'warn' : '' ?>"><?= crm360_h((string)$d['document_status']) ?></span></td>
-            <td><?= crm360_h((string)($d['file_ref_text'] ?? '')) ?></td>
+            <td title="<?= crm360_h((string)($d['case_code'] ?? $d['case_id'])) ?>"><?= crm360_h((string)($d['case_code'] ?? $d['case_id'])) ?></td>
+            <td><?= crm360_h(m360_rui_label((string)$d['document_type'])) ?></td>
+            <td title="<?= crm360_h((string)$d['document_title']) ?>"><?= crm360_h((string)$d['document_title']) ?></td>
+            <td><span class="c360-status <?= ($d['document_status'] ?? '') === 'MISSING' ? 'warn' : '' ?>"><?= crm360_h(m360_rui_label((string)$d['document_status'])) ?></span></td>
+            <td title="<?= crm360_h((string)($d['file_ref_text'] ?? '')) ?>"><?= crm360_h((string)($d['file_ref_text'] ?? '')) ?></td>
             <td>
               <form class="c360-inline-form" method="post" action="erp-crm-action.php">
                 <?= crm360_csrf_field() ?>
@@ -629,10 +658,10 @@ $hubLoyalty = [
                 <input type="hidden" name="return_tab" value="documents">
                 <input type="hidden" name="document_id" value="<?= (int)$d['document_id'] ?>">
                 <select name="document_status">
-                  <option value="MISSING">MISSING</option>
-                  <option value="UPLOADED">UPLOADED</option>
-                  <option value="VERIFIED">VERIFIED</option>
-                  <option value="REJECTED">REJECTED</option>
+                  <option value="MISSING">ناقص</option>
+                  <option value="UPLOADED">آپلود شده</option>
+                  <option value="VERIFIED">تأیید شده</option>
+                  <option value="REJECTED">رد شده</option>
                 </select>
                 <input name="file_ref_text" placeholder="file_ref" value="<?= crm360_h((string)($d['file_ref_text'] ?? '')) ?>">
                 <button type="submit" class="c360-btn">ثبت</button>
@@ -643,9 +672,14 @@ $hubLoyalty = [
         </tbody>
       </table>
     </div>
+    <?php m360_rui_render_pagination($docList, m360_rui_query_keep(['tab' => 'documents'], ['list_page', 'page']), 'list_page'); ?>
   </section>
 
 <?php elseif ($tab === 'cartable'): ?>
+  <?php
+    $listPage = max(1, (int)($_GET['list_page'] ?? 1));
+    $cbList = m360_rui_paginate(m360_rui_sort_rows($cartable, 'cartable_id', 'desc'), $listPage, 10);
+  ?>
   <div class="c360-grid2">
     <section class="c360-panel">
       <h2>ایجاد آیتم کارتابل</h2>
@@ -668,13 +702,13 @@ $hubLoyalty = [
         <table class="c360-table">
           <thead><tr><th>مشتری</th><th>عنوان</th><th>وضعیت</th><th>اولویت</th><th>سررسید</th><th>بستن</th></tr></thead>
           <tbody>
-          <?php foreach ($cartable as $cb): ?>
+          <?php foreach ($cbList['rows'] as $cb): ?>
             <tr>
-              <td><?= crm360_h((string)$cb['full_name']) ?></td>
-              <td><?= crm360_h((string)$cb['item_title']) ?></td>
-              <td><span class="c360-status"><?= crm360_h((string)$cb['item_status']) ?></span></td>
-              <td><?= crm360_h((string)$cb['priority_code']) ?></td>
-              <td><?= crm360_h((string)($cb['due_date'] ?? '')) ?></td>
+              <td title="<?= crm360_h((string)$cb['full_name']) ?>"><?= crm360_h((string)$cb['full_name']) ?></td>
+              <td title="<?= crm360_h((string)$cb['item_title']) ?>"><?= crm360_h((string)$cb['item_title']) ?></td>
+              <td><span class="c360-status"><?= crm360_h(m360_rui_label((string)$cb['item_status'])) ?></span></td>
+              <td><?= crm360_h(m360_rui_label((string)$cb['priority_code'])) ?></td>
+              <td><?= crm360_h(m360_rui_jalali_date((string)($cb['due_date'] ?? ''), false)) ?></td>
               <td><?php if (($cb['item_status'] ?? '') === 'OPEN'): ?>
                 <form method="post" action="erp-crm-action.php" class="c360-inline-form">
                   <?= crm360_csrf_field() ?>
@@ -689,10 +723,15 @@ $hubLoyalty = [
           </tbody>
         </table>
       </div>
+      <?php m360_rui_render_pagination($cbList, m360_rui_query_keep(['tab' => 'cartable'], ['list_page', 'page']), 'list_page'); ?>
     </section>
   </div>
 
 <?php elseif ($tab === 'satisfaction'): ?>
+  <?php
+    $listPage = max(1, (int)($_GET['list_page'] ?? 1));
+    $satList = m360_rui_paginate(m360_rui_sort_rows($surveys, 'survey_id', 'desc'), $listPage, 10);
+  ?>
   <div class="c360-grid2">
     <section class="c360-panel">
       <h2>ایجاد نظرسنجی</h2>
@@ -725,21 +764,26 @@ $hubLoyalty = [
         <table class="c360-table">
           <thead><tr><th>شناسه</th><th>مشتری</th><th>امتیاز</th><th>وضعیت</th></tr></thead>
           <tbody>
-          <?php foreach ($surveys as $s): ?>
+          <?php foreach ($satList['rows'] as $s): ?>
             <tr>
               <td><?= (int)$s['survey_id'] ?></td>
-              <td><?= crm360_h((string)$s['full_name']) ?></td>
+              <td title="<?= crm360_h((string)$s['full_name']) ?>"><?= crm360_h((string)$s['full_name']) ?></td>
               <td><?= (int)$s['overall_score'] ?></td>
-              <td><span class="c360-status <?= ($s['survey_status'] ?? '') === 'NEEDS_FOLLOWUP' ? 'warn' : '' ?>"><?= crm360_h((string)$s['survey_status']) ?></span></td>
+              <td><span class="c360-status <?= ($s['survey_status'] ?? '') === 'NEEDS_FOLLOWUP' ? 'warn' : '' ?>"><?= crm360_h(m360_rui_label((string)$s['survey_status'])) ?></span></td>
             </tr>
           <?php endforeach; ?>
           </tbody>
         </table>
       </div>
+      <?php m360_rui_render_pagination($satList, m360_rui_query_keep(['tab' => 'satisfaction'], ['list_page', 'page']), 'list_page'); ?>
     </section>
   </div>
 
 <?php elseif ($tab === 'complaints'): ?>
+  <?php
+    $listPage = max(1, (int)($_GET['list_page'] ?? 1));
+    $cpList = m360_rui_paginate(m360_rui_sort_rows($complaints, 'complaint_id', 'desc'), $listPage, 10);
+  ?>
   <div class="c360-grid2">
     <section class="c360-panel">
       <h2>ثبت شکایت</h2>
@@ -761,19 +805,19 @@ $hubLoyalty = [
         <table class="c360-table">
           <thead><tr><th>کد</th><th>مشتری</th><th>عنوان</th><th>وضعیت</th><th>به‌روز</th></tr></thead>
           <tbody>
-          <?php foreach ($complaints as $cp): ?>
+          <?php foreach ($cpList['rows'] as $cp): ?>
             <tr>
               <td><?= crm360_h((string)$cp['complaint_code']) ?></td>
-              <td><?= crm360_h((string)$cp['full_name']) ?></td>
-              <td><?= crm360_h((string)$cp['title']) ?></td>
-              <td><span class="c360-status"><?= crm360_h((string)$cp['complaint_status']) ?></span></td>
+              <td title="<?= crm360_h((string)$cp['full_name']) ?>"><?= crm360_h((string)$cp['full_name']) ?></td>
+              <td title="<?= crm360_h((string)$cp['title']) ?>"><?= crm360_h((string)$cp['title']) ?></td>
+              <td><span class="c360-status"><?= crm360_h(m360_rui_label((string)$cp['complaint_status'])) ?></span></td>
               <td>
                 <form class="c360-inline-form" method="post" action="erp-crm-action.php">
                   <?= crm360_csrf_field() ?>
                   <input type="hidden" name="action" value="update_complaint_status">
                   <input type="hidden" name="return_tab" value="complaints">
                   <input type="hidden" name="complaint_id" value="<?= (int)$cp['complaint_id'] ?>">
-                  <select name="complaint_status"><option value="OPEN">OPEN</option><option value="IN_PROGRESS">IN_PROGRESS</option><option value="CLOSED">CLOSED</option></select>
+                  <select name="complaint_status"><option value="OPEN">باز</option><option value="IN_PROGRESS">در حال تکمیل</option><option value="CLOSED">بسته‌شده</option></select>
                   <input name="correction_action" placeholder="اقدام اصلاحی (برای CLOSED)" style="width:140px">
                   <button type="submit" class="c360-btn">ثبت</button>
                 </form>
@@ -783,30 +827,35 @@ $hubLoyalty = [
           </tbody>
         </table>
       </div>
+      <?php m360_rui_render_pagination($cpList, m360_rui_query_keep(['tab' => 'complaints'], ['list_page', 'page']), 'list_page'); ?>
     </section>
   </div>
 
 <?php elseif ($tab === 'club'): ?>
+  <?php
+    $listPage = max(1, (int)($_GET['list_page'] ?? 1));
+    $clubList = m360_rui_paginate(m360_rui_sort_rows($clubs, 'club_id', 'desc'), $listPage, 10);
+  ?>
   <section class="c360-panel">
     <h2>باشگاه مشتریان</h2>
     <div class="c360-table-wrap">
       <table class="c360-table">
         <thead><tr><th>مشتری</th><th>سطح</th><th>امتیاز</th><th>بازدید</th><th>ریسک ریزش</th><th>به‌روز</th></tr></thead>
         <tbody>
-        <?php foreach ($clubs as $cl): ?>
+        <?php foreach ($clubList['rows'] as $cl): ?>
           <tr>
-            <td><?= crm360_h((string)$cl['full_name']) ?> — <?= crm360_h((string)($cl['mobile'] ?? '')) ?></td>
-            <td><?= crm360_h((string)$cl['tier_code']) ?></td>
+            <td title="<?= crm360_h((string)$cl['full_name'] . ' — ' . (string)($cl['mobile'] ?? '')) ?>"><?= crm360_h((string)$cl['full_name']) ?> — <?= crm360_h((string)($cl['mobile'] ?? '')) ?></td>
+            <td><?= crm360_h(m360_rui_label((string)$cl['tier_code'])) ?></td>
             <td><?= (int)$cl['points_balance'] ?></td>
             <td><?= (int)$cl['visit_count'] ?></td>
-            <td><?= crm360_h((string)$cl['churn_risk_level']) ?></td>
+            <td><?= crm360_h(m360_rui_label((string)$cl['churn_risk_level'])) ?></td>
             <td>
               <form class="c360-inline-form" method="post" action="erp-crm-action.php">
                 <?= crm360_csrf_field() ?>
                 <input type="hidden" name="action" value="update_club">
                 <input type="hidden" name="return_tab" value="club">
                 <input type="hidden" name="club_id" value="<?= (int)$cl['club_id'] ?>">
-                <select name="tier_code"><option value="NEW">NEW</option><option value="SILVER">SILVER</option><option value="GOLD">GOLD</option><option value="PLATINUM">PLATINUM</option></select>
+                <select name="tier_code"><option value="NEW">جدید</option><option value="SILVER">نقره‌ای</option><option value="GOLD">طلایی</option><option value="PLATINUM">پلاتین</option></select>
                 <input name="points_balance" type="number" value="<?= (int)$cl['points_balance'] ?>" style="width:70px">
                 <input name="visit_count" type="number" value="<?= (int)$cl['visit_count'] ?>" style="width:60px">
                 <button type="submit" class="c360-btn">ذخیره</button>
@@ -817,9 +866,14 @@ $hubLoyalty = [
         </tbody>
       </table>
     </div>
+    <?php m360_rui_render_pagination($clubList, m360_rui_query_keep(['tab' => 'club'], ['list_page', 'page']), 'list_page'); ?>
   </section>
 
 <?php elseif ($tab === 'reminders'): ?>
+  <?php
+    $listPage = max(1, (int)($_GET['list_page'] ?? 1));
+    $remList = m360_rui_paginate(m360_rui_sort_rows($reminders, 'reminder_id', 'desc'), $listPage, 10);
+  ?>
   <div class="c360-grid2">
     <section class="c360-panel">
       <h2>یادآوری سرویس</h2>
@@ -842,20 +896,20 @@ $hubLoyalty = [
         <table class="c360-table">
           <thead><tr><th>مشتری</th><th>خودرو</th><th>عنوان</th><th>سررسید</th><th>وضعیت</th><th>به‌روز</th></tr></thead>
           <tbody>
-          <?php foreach ($reminders as $r): ?>
+          <?php foreach ($remList['rows'] as $r): ?>
             <tr>
-              <td><?= crm360_h((string)$r['full_name']) ?></td>
-              <td><?= crm360_h((string)$r['brand']) ?> <?= crm360_h((string)$r['model']) ?></td>
-              <td><?= crm360_h((string)$r['reminder_title']) ?></td>
-              <td><?= crm360_h((string)($r['due_date'] ?? '')) ?></td>
-              <td><span class="c360-status"><?= crm360_h((string)$r['reminder_status']) ?></span></td>
+              <td title="<?= crm360_h((string)$r['full_name']) ?>"><?= crm360_h((string)$r['full_name']) ?></td>
+              <td title="<?= crm360_h((string)$r['brand'] . ' ' . (string)$r['model']) ?>"><?= crm360_h((string)$r['brand']) ?> <?= crm360_h((string)$r['model']) ?></td>
+              <td title="<?= crm360_h((string)$r['reminder_title']) ?>"><?= crm360_h((string)$r['reminder_title']) ?></td>
+              <td><?= crm360_h(m360_rui_jalali_date((string)($r['due_date'] ?? ''), false)) ?></td>
+              <td><span class="c360-status"><?= crm360_h(m360_rui_label((string)$r['reminder_status'])) ?></span></td>
               <td>
                 <form class="c360-inline-form" method="post" action="erp-crm-action.php">
                   <?= crm360_csrf_field() ?>
                   <input type="hidden" name="action" value="update_reminder_status">
                   <input type="hidden" name="return_tab" value="reminders">
                   <input type="hidden" name="reminder_id" value="<?= (int)$r['reminder_id'] ?>">
-                  <select name="reminder_status"><option value="SCHEDULED">SCHEDULED</option><option value="CONTACTED">CONTACTED</option><option value="NEEDS_FOLLOWUP">NEEDS_FOLLOWUP</option><option value="DONE">DONE</option></select>
+                  <select name="reminder_status"><option value="SCHEDULED">زمان‌بندی‌شده</option><option value="CONTACTED">تماس گرفته‌شده</option><option value="NEEDS_FOLLOWUP">نیازمند پیگیری</option><option value="DONE">انجام‌شده</option></select>
                   <button type="submit" class="c360-btn">ثبت</button>
                 </form>
               </td>
@@ -864,10 +918,15 @@ $hubLoyalty = [
           </tbody>
         </table>
       </div>
+      <?php m360_rui_render_pagination($remList, m360_rui_query_keep(['tab' => 'reminders'], ['list_page', 'page']), 'list_page'); ?>
     </section>
   </div>
 
 <?php elseif ($tab === 'returns'): ?>
+  <?php
+    $listPage = max(1, (int)($_GET['list_page'] ?? 1));
+    $retList = m360_rui_paginate(m360_rui_sort_rows($returns, 'return_id', 'desc'), $listPage, 10);
+  ?>
   <div class="c360-grid2">
     <section class="c360-panel">
       <h2>بازگشت مشتری</h2>
@@ -889,11 +948,11 @@ $hubLoyalty = [
         <table class="c360-table">
           <thead><tr><th>مشتری</th><th>مرحله</th><th>نتیجه</th><th>مسئول</th><th>به‌روز</th></tr></thead>
           <tbody>
-          <?php foreach ($returns as $ret): ?>
+          <?php foreach ($retList['rows'] as $ret): ?>
             <tr>
-              <td><?= crm360_h((string)$ret['full_name']) ?></td>
-              <td><?= crm360_h((string)$ret['return_stage']) ?></td>
-              <td><?= crm360_h((string)$ret['result_status']) ?></td>
+              <td title="<?= crm360_h((string)$ret['full_name']) ?>"><?= crm360_h((string)$ret['full_name']) ?></td>
+              <td><?= crm360_h(m360_rui_label((string)$ret['return_stage'])) ?></td>
+              <td><?= crm360_h(m360_rui_label((string)$ret['result_status'])) ?></td>
               <td><?= crm360_h((string)($ret['assigned_to'] ?? '')) ?></td>
               <td>
                 <form class="c360-inline-form" method="post" action="erp-crm-action.php">
@@ -901,8 +960,8 @@ $hubLoyalty = [
                   <input type="hidden" name="action" value="update_return">
                   <input type="hidden" name="return_tab" value="returns">
                   <input type="hidden" name="return_id" value="<?= (int)$ret['return_id'] ?>">
-                  <select name="return_stage"><option value="IDENTIFIED">IDENTIFIED</option><option value="CONTACTED">CONTACTED</option><option value="OFFERED">OFFERED</option><option value="WON">WON</option><option value="LOST">LOST</option></select>
-                  <select name="result_status"><option value="OPEN">OPEN</option><option value="SUCCESS">SUCCESS</option><option value="FAILED">FAILED</option></select>
+                  <select name="return_stage"><option value="IDENTIFIED">شناسایی‌شده</option><option value="CONTACTED">تماس گرفته‌شده</option><option value="OFFERED">پیشنهاد شده</option><option value="WON">موفق</option><option value="LOST">از دست‌رفته</option></select>
+                  <select name="result_status"><option value="OPEN">باز</option><option value="SUCCESS">موفق</option><option value="FAILED">ناموفق</option></select>
                   <button type="submit" class="c360-btn">ذخیره</button>
                 </form>
               </td>
@@ -911,10 +970,16 @@ $hubLoyalty = [
           </tbody>
         </table>
       </div>
+      <?php m360_rui_render_pagination($retList, m360_rui_query_keep(['tab' => 'returns'], ['list_page', 'page']), 'list_page'); ?>
     </section>
   </div>
 
 <?php elseif ($tab === 'promotions'): ?>
+  <?php
+    $listPage = max(1, (int)($_GET['list_page'] ?? 1));
+    $promoList = m360_rui_paginate(m360_rui_sort_rows($promotions, 'promotion_id', 'desc'), $listPage, 10);
+    $asgList = m360_rui_paginate(m360_rui_sort_rows($assignments, 'assignment_id', 'desc'), max(1, (int)($_GET['asg_page'] ?? 1)), 10);
+  ?>
   <div class="c360-grid2">
     <section class="c360-panel">
       <h2>ایجاد پروموشن</h2>
@@ -945,35 +1010,36 @@ $hubLoyalty = [
         <table class="c360-table">
           <thead><tr><th>کد</th><th>عنوان</th><th>وضعیت</th><th>شروع</th><th>پایان</th></tr></thead>
           <tbody>
-          <?php foreach ($promotions as $p): ?>
+          <?php foreach ($promoList['rows'] as $p): ?>
             <tr>
               <td><?= crm360_h((string)$p['promotion_code']) ?></td>
-              <td><?= crm360_h((string)$p['title']) ?></td>
-              <td><?= crm360_h((string)$p['promotion_status']) ?></td>
-              <td><?= crm360_h((string)$p['start_date']) ?></td>
-              <td><?= crm360_h((string)$p['end_date']) ?></td>
+              <td title="<?= crm360_h((string)$p['title']) ?>"><?= crm360_h((string)$p['title']) ?></td>
+              <td><?= crm360_h(m360_rui_label((string)$p['promotion_status'])) ?></td>
+              <td><?= crm360_h(m360_rui_jalali_date((string)$p['start_date'], false)) ?></td>
+              <td><?= crm360_h(m360_rui_jalali_date((string)$p['end_date'], false)) ?></td>
             </tr>
           <?php endforeach; ?>
           </tbody>
         </table>
       </div>
+      <?php m360_rui_render_pagination($promoList, m360_rui_query_keep(['tab' => 'promotions'], ['list_page', 'page', 'asg_page']), 'list_page'); ?>
       <h3 style="margin-top:1rem">تخصیص‌ها</h3>
       <div class="c360-table-wrap">
         <table class="c360-table">
           <thead><tr><th>پروموشن</th><th>مشتری</th><th>وضعیت</th><th>به‌روز</th></tr></thead>
           <tbody>
-          <?php foreach ($assignments as $pa): ?>
+          <?php foreach ($asgList['rows'] as $pa): ?>
             <tr>
-              <td><?= crm360_h((string)$pa['title']) ?></td>
-              <td><?= crm360_h((string)$pa['full_name']) ?></td>
-              <td><?= crm360_h((string)$pa['assignment_status']) ?></td>
+              <td title="<?= crm360_h((string)$pa['title']) ?>"><?= crm360_h((string)$pa['title']) ?></td>
+              <td title="<?= crm360_h((string)$pa['full_name']) ?>"><?= crm360_h((string)$pa['full_name']) ?></td>
+              <td><?= crm360_h(m360_rui_label((string)$pa['assignment_status'])) ?></td>
               <td>
                 <form class="c360-inline-form" method="post" action="erp-crm-action.php">
                   <?= crm360_csrf_field() ?>
                   <input type="hidden" name="action" value="update_assignment">
                   <input type="hidden" name="return_tab" value="promotions">
                   <input type="hidden" name="assignment_id" value="<?= (int)$pa['assignment_id'] ?>">
-                  <select name="assignment_status"><option value="ASSIGNED">ASSIGNED</option><option value="USED">USED</option><option value="EXPIRED">EXPIRED</option><option value="CANCELLED">CANCELLED</option></select>
+                  <select name="assignment_status"><option value="ASSIGNED">تخصیص‌یافته</option><option value="USED">استفاده‌شده</option><option value="EXPIRED">منقضی</option><option value="CANCELLED">لغوشده</option></select>
                   <button type="submit" class="c360-btn">ثبت</button>
                 </form>
               </td>
@@ -982,10 +1048,16 @@ $hubLoyalty = [
           </tbody>
         </table>
       </div>
+      <?php m360_rui_render_pagination($asgList, m360_rui_query_keep(['tab' => 'promotions'], ['asg_page', 'page', 'list_page']), 'asg_page'); ?>
     </section>
   </div>
 
 <?php elseif ($tab === 'sms'): ?>
+  <?php
+    $listPage = max(1, (int)($_GET['list_page'] ?? 1));
+    $smsList = m360_rui_paginate(m360_rui_sort_rows($campaigns, 'campaign_id', 'desc'), $listPage, 10);
+    $rcpList = m360_rui_paginate(m360_rui_sort_rows($recipients, 'recipient_id', 'desc'), max(1, (int)($_GET['rcp_page'] ?? 1)), 10);
+  ?>
   <div class="c360-grid2">
     <section class="c360-panel">
       <h2>کمپین پیامکی (بدون ارسال زنده)</h2>
@@ -1014,11 +1086,11 @@ $hubLoyalty = [
         <table class="c360-table">
           <thead><tr><th>کد</th><th>عنوان</th><th>وضعیت</th><th>اقدام</th></tr></thead>
           <tbody>
-          <?php foreach ($campaigns as $camp): ?>
+          <?php foreach ($smsList['rows'] as $camp): ?>
             <tr>
               <td><?= crm360_h((string)$camp['campaign_code']) ?></td>
-              <td><?= crm360_h((string)$camp['title']) ?></td>
-              <td><?= crm360_h((string)$camp['campaign_status']) ?></td>
+              <td title="<?= crm360_h((string)$camp['title']) ?>"><?= crm360_h((string)$camp['title']) ?></td>
+              <td><?= crm360_h(m360_rui_label((string)$camp['campaign_status'])) ?></td>
               <td class="c360-inline-form">
                 <form method="post" action="erp-crm-action.php" style="display:inline">
                   <?= crm360_csrf_field() ?>
@@ -1040,46 +1112,53 @@ $hubLoyalty = [
           </tbody>
         </table>
       </div>
+      <?php m360_rui_render_pagination($smsList, m360_rui_query_keep(['tab' => 'sms'], ['list_page', 'page', 'rcp_page']), 'list_page'); ?>
       <h3 style="margin-top:1rem">گیرندگان اخیر</h3>
       <div class="c360-table-wrap">
         <table class="c360-table">
           <thead><tr><th>کمپین</th><th>موبایل</th><th>رضایت</th><th>وضعیت</th><th>Batch</th></tr></thead>
           <tbody>
-          <?php foreach ($recipients as $rc): ?>
+          <?php foreach ($rcpList['rows'] as $rc): ?>
             <tr>
-              <td><?= crm360_h((string)$rc['campaign_title']) ?></td>
+              <td title="<?= crm360_h((string)$rc['campaign_title']) ?>"><?= crm360_h((string)$rc['campaign_title']) ?></td>
               <td><?= crm360_h((string)$rc['mobile']) ?></td>
-              <td><?= crm360_h((string)$rc['consent_status']) ?></td>
-              <td><?= crm360_h((string)$rc['recipient_status']) ?></td>
+              <td><?= crm360_h(m360_rui_label((string)$rc['consent_status'])) ?></td>
+              <td><?= crm360_h(m360_rui_label((string)$rc['recipient_status'])) ?></td>
               <td><?= crm360_h((string)($rc['export_batch_no'] ?? '')) ?></td>
             </tr>
           <?php endforeach; ?>
           </tbody>
         </table>
       </div>
+      <?php m360_rui_render_pagination($rcpList, m360_rui_query_keep(['tab' => 'sms'], ['rcp_page', 'page', 'list_page']), 'rcp_page'); ?>
     </section>
   </div>
 
 <?php elseif ($tab === 'audit'): ?>
+  <?php
+    $listPage = max(1, (int)($_GET['list_page'] ?? 1));
+    $auditList = m360_rui_paginate(m360_rui_sort_rows($audits, 'audit_id', 'desc'), $listPage, 10);
+  ?>
   <section class="c360-panel">
     <h2>Audit CRM360</h2>
     <div class="c360-table-wrap">
       <table class="c360-table">
         <thead><tr><th>زمان</th><th>کاربر</th><th>عمل</th><th>موجودیت</th><th>شناسه</th><th>صفحه</th></tr></thead>
         <tbody>
-        <?php foreach ($audits as $a): ?>
+        <?php foreach ($auditList['rows'] as $a): ?>
           <tr>
-            <td><?= crm360_h((string)($a['event_time'] ?? '')) ?></td>
-            <td><?= crm360_h((string)$a['actor_user']) ?></td>
-            <td><?= crm360_h((string)$a['action_code']) ?></td>
+            <td><?= crm360_h(m360_rui_jalali_date((string)($a['event_time'] ?? ''))) ?></td>
+            <td title="<?= crm360_h((string)$a['actor_user']) ?>"><?= crm360_h((string)$a['actor_user']) ?></td>
+            <td title="<?= crm360_h((string)$a['action_code']) ?>"><?= crm360_h((string)$a['action_code']) ?></td>
             <td><?= crm360_h((string)$a['entity_name']) ?></td>
             <td><?= crm360_h((string)($a['entity_id'] ?? '')) ?></td>
-            <td><?= crm360_h((string)($a['source_page'] ?? '')) ?></td>
+            <td title="<?= crm360_h((string)($a['source_page'] ?? '')) ?>"><?= crm360_h((string)($a['source_page'] ?? '')) ?></td>
           </tr>
         <?php endforeach; ?>
         </tbody>
       </table>
     </div>
+    <?php m360_rui_render_pagination($auditList, m360_rui_query_keep(['tab' => 'audit'], ['list_page', 'page']), 'list_page'); ?>
   </section>
 <?php endif; ?>
 
