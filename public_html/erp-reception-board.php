@@ -456,14 +456,9 @@ $experiencePanels = [
     <?php $docList = m360_rui_paginate(m360_rui_sort_rows($documents, 'document_id', 'desc'), max(1, (int)($_GET['list_page'] ?? 1)), 10); ?>
     <section class="c360-panel">
       <h2>مدارک پرونده</h2>
-      <form class="c360-form" method="post" action="erp-crm-action.php" style="max-width:420px;margin-bottom:1rem">
-        <?= crm360_csrf_field() ?>
-        <input type="hidden" name="action" value="generate_docs_checklist">
-        <input type="hidden" name="return_tab" value="documents">
-        <label>پرونده<select name="case_id" required><?= $caseOpts ?></select></label>
-        <button type="submit" class="c360-btn">ایجاد چک‌لیست</button>
-      </form>
-      <div class="c360-table-wrap"><table class="c360-table">
+      <p class="c360-muted">ایجاد چک‌لیست مدارک روی پرونده‌های crm360 قدیمی غیرفعال است. پذیرش عملیاتی از CRM اصلی انجام شود.</p>
+      <a class="c360-btn" href="?tab=customers">بازگشت به CRM اصلی</a>
+      <div class="c360-table-wrap" style="margin-top:1rem"><table class="c360-table">
         <thead><tr><th>پرونده</th><th>نوع</th><th>عنوان</th><th>وضعیت</th><th>به‌روز</th></tr></thead>
         <tbody><?php foreach ($docList['rows'] as $d): ?><tr>
           <td><?= crm360_h((string)($d['case_code'] ?? $d['case_id'])) ?></td>
@@ -611,88 +606,23 @@ $experiencePanels = [
   <h2 class="c360-layer-title">ورود اطلاعات قدیمی</h2>
   <?php $batchList = m360_rui_paginate(m360_rui_sort_rows($importBatches, 'import_batch_id', 'desc'), max(1, (int)($_GET['batch_page'] ?? 1)), 10); ?>
   <div class="c360-grid2">
-    <?php if (crm360_can('legacy_draft', $auth)): ?>
     <section class="c360-panel">
-      <h2>ثبت مشتری قدیمی</h2>
-      <form class="c360-form" method="post" action="erp-crm-action.php">
-        <?= crm360_csrf_field() ?>
-        <input type="hidden" name="action" value="legacy_create_customer">
-        <input type="hidden" name="return_tab" value="legacy">
-        <label>نام<input name="full_name" required></label>
-        <label>موبایل<input name="mobile"></label>
-        <label>کد ملی<input name="national_id"></label>
-        <label>نوع<select name="customer_type"><option value="PERSON">حقیقی</option><option value="COMPANY">حقوقی</option></select></label>
-        <label>یادداشت<textarea name="notes" rows="2"></textarea></label>
-        <button type="submit" class="c360-btn primary">ثبت</button>
-      </form>
-      <h3 style="margin-top:1rem">ثبت پرونده قدیمی</h3>
-      <form class="c360-form" method="post" action="erp-crm-action.php">
-        <?= crm360_csrf_field() ?>
-        <input type="hidden" name="action" value="legacy_create_case">
-        <input type="hidden" name="return_tab" value="legacy">
-        <?= crm360_render_search_picker(
-            'customer',
-            'customer_profile_id',
-            'جستجوی مشتری',
-            'نام، موبایل، کد ملی یا کد مشتری را وارد کنید',
-            '?tab=customers&panel=create_customer',
-            'افزودن مشتری جدید',
-            'مشتری پیدا نشد'
-        ) ?>
-        <?= crm360_render_search_picker(
-            'vehicle',
-            'vehicle_profile_id',
-            'جستجوی خودرو',
-            'پلاک، VIN، برند یا مدل را وارد کنید',
-            '?tab=customers&panel=create_vehicle',
-            'افزودن خودرو جدید',
-            'خودرو پیدا نشد'
-        ) ?>
-        <label>خدمت<input name="service_type"></label>
-        <label>مرجع قدیمی<input name="source_ref_text"></label>
-        <label>یادداشت<textarea name="notes" rows="2"></textarea></label>
-        <button type="submit" class="c360-btn">ثبت پرونده</button>
-      </form>
-      <h3 style="margin-top:1rem">ورود گروهی CSV</h3>
-      <form class="c360-form" method="post" action="erp-crm-action.php">
-        <?= crm360_csrf_field() ?>
-        <input type="hidden" name="action" value="legacy_batch_draft">
-        <input type="hidden" name="return_tab" value="legacy">
-        <label>نام منبع<input name="source_name" value="CSV_PASTE"></label>
-        <label>CSV<textarea name="paste_csv" rows="6" placeholder="full_name,mobile"></textarea></label>
-        <button type="submit" class="c360-btn">ایجاد پیش‌نویس</button>
-      </form>
+      <h2>مسیر قدیمی غیرفعال</h2>
+      <p class="c360-muted">این مسیر قدیمی غیرفعال شده است. عملیات مشتری و خودرو فقط از CRM اصلی انجام می‌شود.</p>
+      <div class="crm-primary-actions">
+        <a class="c360-btn primary" href="?tab=customers">بازگشت به CRM اصلی</a>
+        <a class="c360-btn primary" href="erp-customer-vehicle-create.php">افزودن مشتری و خودرو</a>
+      </div>
     </section>
-    <?php else: ?>
-    <section class="c360-panel"><p class="c360-muted">مجوز ورود اطلاعات قدیمی ندارید.</p></section>
-    <?php endif; ?>
     <section class="c360-panel">
-      <h2>دسته‌های ورود</h2>
+      <h2>دسته‌های ورود (فقط مشاهده)</h2>
       <div class="c360-table-wrap"><table class="c360-table">
-        <thead><tr><th>کد</th><th>منبع</th><th>وضعیت</th><th>ردیف</th><th>اقدام</th></tr></thead>
+        <thead><tr><th>کد</th><th>منبع</th><th>وضعیت</th><th>ردیف</th></tr></thead>
         <tbody><?php foreach ($batchList['rows'] as $b): ?><tr>
           <td><a href="?tab=legacy&batch_id=<?= (int)$b['import_batch_id'] ?>"><?= crm360_h((string)$b['batch_code']) ?></a></td>
           <td><?= crm360_h((string)($b['source_name'] ?? '')) ?></td>
           <td><?= crm360_h(m360_rui_label((string)($b['import_status'] ?? ''))) ?></td>
           <td><?= (int)($b['total_rows'] ?? 0) ?></td>
-          <td class="c360-inline-form">
-            <?php if (crm360_can('legacy_draft', $auth)): ?>
-            <form method="post" action="erp-crm-action.php" style="display:inline"><?= crm360_csrf_field() ?>
-              <input type="hidden" name="action" value="legacy_batch_validate">
-              <input type="hidden" name="return_tab" value="legacy">
-              <input type="hidden" name="import_batch_id" value="<?= (int)$b['import_batch_id'] ?>">
-              <button type="submit" class="c360-btn">اعتبارسنجی</button>
-            </form>
-            <?php endif; ?>
-            <?php if (crm360_can('legacy_approve', $auth)): ?>
-            <form method="post" action="erp-crm-action.php" style="display:inline"><?= crm360_csrf_field() ?>
-              <input type="hidden" name="action" value="legacy_batch_import">
-              <input type="hidden" name="return_tab" value="legacy">
-              <input type="hidden" name="import_batch_id" value="<?= (int)$b['import_batch_id'] ?>">
-              <button type="submit" class="c360-btn">ورود نهایی</button>
-            </form>
-            <?php endif; ?>
-          </td>
         </tr><?php endforeach; ?></tbody>
       </table></div>
       <?php m360_rui_render_pagination($batchList, m360_rui_query_keep(['tab' => 'legacy'], ['batch_page', 'batch_id']), 'batch_page'); ?>
@@ -763,15 +693,8 @@ $experiencePanels = [
       <?php if (crm360_can('vip_approve', $auth)): ?>
       <section class="c360-panel">
         <h2>بررسی درخواست</h2>
-        <form class="c360-form" method="post" action="erp-crm-action.php">
-          <?= crm360_csrf_field() ?>
-          <input type="hidden" name="action" value="vip_review">
-          <input type="hidden" name="return_tab" value="vip">
-          <label>شناسه درخواست<input name="vip_request_id" type="number" required></label>
-          <label>تصمیم<select name="decision"><option value="APPROVED">تأیید</option><option value="REJECTED">رد</option></select></label>
-          <label>یادداشت<textarea name="review_note" rows="2"></textarea></label>
-          <button type="submit" class="c360-btn">ثبت</button>
-        </form>
+        <p class="c360-muted">تأیید VIP که سطح مشتری را در crm360_* تغییر می‌دهد غیرفعال شده است. مسیر قدیمی نوشتن روی پروفایل مشتری مسدود است.</p>
+        <a class="c360-btn" href="?tab=customers">بازگشت به CRM اصلی</a>
       </section>
       <?php endif; ?>
     </div>

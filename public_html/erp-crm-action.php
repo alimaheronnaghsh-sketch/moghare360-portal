@@ -1,14 +1,85 @@
 <?php
 declare(strict_types=1);
 
-header('Content-Type: text/html; charset=UTF-8');
-
 require_once __DIR__ . '/includes/crm360-helper.php';
 
-if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
-    header('Location: erp-reception-board.php');
+/**
+ * Legacy write quarantine: no INSERT/UPDATE/DELETE against crm360 customer/vehicle/case masters.
+ * Canonical CRM writes use erp_* routes only.
+ */
+function crm360_action_wants_json(): bool
+{
+    $accept = strtolower((string)($_SERVER['HTTP_ACCEPT'] ?? ''));
+    $xhr = strtolower((string)($_SERVER['HTTP_X_REQUESTED_WITH'] ?? ''));
+    $fmt = strtolower(trim((string)($_POST['format'] ?? $_GET['format'] ?? '')));
+    return $fmt === 'json'
+        || str_contains($accept, 'application/json')
+        || $xhr === 'xmlhttprequest';
+}
+
+function crm360_redirect(string $tab, string $type, string $msg): void
+{
+    if (session_status() !== PHP_SESSION_ACTIVE) {
+        @session_start();
+    }
+    $_SESSION['crm360_flash'] = ['type' => $type, 'msg' => $msg];
+    header('Location: erp-reception-board.php?tab=' . urlencode($tab));
     exit;
 }
+
+function crm360_reject_legacy_master_write(string $fallbackTab = 'customers'): void
+{
+    $msg = 'این مسیر قدیمی غیرفعال شده است. عملیات مشتری و خودرو فقط از CRM اصلی انجام می‌شود.';
+    if (crm360_action_wants_json()) {
+        http_response_code(410);
+        header('Content-Type: application/json; charset=UTF-8');
+        header('X-Robots-Tag: noindex, nofollow');
+        echo json_encode([
+            'ok' => false,
+            'code' => 'LEGACY_CRM_WRITE_ROUTE_DISABLED',
+            'message' => $msg,
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+    $tab = preg_replace('/[^a-z_]/', '', (string)($_POST['return_tab'] ?? $fallbackTab)) ?: $fallbackTab;
+    if ($tab === '' || $tab === 'dashboard') {
+        $tab = 'customers';
+    }
+    crm360_redirect($tab === 'legacy' ? 'customers' : $tab, 'warn', $msg);
+}
+
+/** @var list<string> */
+$crm360MasterWriteActions = [
+    'create_customer',
+    'create_vehicle',
+    'create_case',
+    'update_case_fields',
+    'legacy_create_customer',
+    'legacy_create_vehicle',
+    'legacy_create_case',
+    'legacy_batch_draft',
+    'legacy_batch_validate',
+    'legacy_batch_import',
+    'vip_review', // APPROVED path updates dbo.crm360_customer_profiles
+    'generate_docs_checklist', // syncs dbo.crm360_reception_cases
+    'update_document_status', // syncs dbo.crm360_reception_cases
+];
+
+if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
+    if (crm360_action_wants_json()) {
+        http_response_code(410);
+        header('Content-Type: application/json; charset=UTF-8');
+        echo json_encode([
+            'ok' => false,
+            'code' => 'LEGACY_CRM_WRITE_ROUTE_DISABLED',
+            'message' => 'این مسیر قدیمی غیرفعال شده است.',
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+    crm360_redirect('customers', 'warn', 'این مسیر قدیمی غیرفعال شده است. عملیات مشتری و خودرو فقط از CRM اصلی انجام می‌شود.');
+}
+
+header('Content-Type: text/html; charset=UTF-8');
 
 crm360_csrf_require();
 
@@ -16,6 +87,10 @@ $tab = preg_replace('/[^a-z_]/', '', (string)($_POST['return_tab'] ?? 'dashboard
 $action = (string)($_POST['action'] ?? '');
 $actorInfo = crm360_actor();
 $actor = $actorInfo['actor'];
+
+if ($action === '' || in_array($action, $crm360MasterWriteActions, true)) {
+    crm360_reject_legacy_master_write('customers');
+}
 
 function crm360_f(string $k, $default = ''): string
 {
@@ -27,13 +102,6 @@ function crm360_fi(string $k): int
     return (int)($_POST[$k] ?? 0);
 }
 
-function crm360_redirect(string $tab, string $type, string $msg): void
-{
-    $_SESSION['crm360_flash'] = ['type' => $type, 'msg' => $msg];
-    header('Location: erp-reception-board.php?tab=' . urlencode($tab));
-    exit;
-}
-
 try {
     $conn = crm360_db();
 } catch (Throwable $e) {
@@ -43,6 +111,7 @@ try {
 try {
     switch ($action) {
         case 'create_customer': {
+            crm360_reject_legacy_master_write('customers');
             if (!crm360_can('customer_create')) {
                 crm360_redirect($tab, 'err', 'مجوز ثبت مشتری ندارید.');
             }
@@ -87,6 +156,7 @@ try {
         }
 
         case 'create_vehicle': {
+            crm360_reject_legacy_master_write('customers');
             if (!crm360_can('vehicle_create')) {
                 crm360_redirect($tab, 'err', 'مجوز ثبت خودرو ندارید.');
             }
@@ -131,6 +201,7 @@ try {
         }
 
         case 'create_case': {
+            crm360_reject_legacy_master_write('customers');
             $custId = crm360_fi('customer_profile_id');
             $vehId = crm360_fi('vehicle_profile_id');
             if ($custId <= 0) {
@@ -171,6 +242,7 @@ try {
         }
 
         case 'update_case_fields': {
+            crm360_reject_legacy_master_write('customers');
             $caseId = crm360_fi('case_id');
             if ($caseId <= 0) {
                 crm360_redirect($tab, 'err', 'شناسه پرونده نامعتبر است.');
@@ -198,6 +270,7 @@ try {
         }
 
         case 'generate_docs_checklist': {
+            crm360_reject_legacy_master_write('customers');
             $caseId = crm360_fi('case_id');
             if ($caseId <= 0 || !crm360_generate_docs_checklist($conn, $caseId, $actor)) {
                 crm360_redirect($tab, 'err', 'ایجاد چک‌لیست مدارک ناموفق بود.');
@@ -207,6 +280,7 @@ try {
         }
 
         case 'update_document_status': {
+            crm360_reject_legacy_master_write('customers');
             $docId = crm360_fi('document_id');
             $status = strtoupper(crm360_f('document_status', 'MISSING'));
             $allowed = ['MISSING', 'UPLOADED', 'VERIFIED', 'REJECTED'];
@@ -695,6 +769,7 @@ try {
         }
 
         case 'legacy_create_customer': {
+            crm360_reject_legacy_master_write('customers');
             if (!crm360_can('legacy_draft')) {
                 crm360_redirect($tab, 'err', 'مجوز ثبت مشتری قدیمی ندارید.');
             }
@@ -737,6 +812,7 @@ try {
         }
 
         case 'legacy_create_case': {
+            crm360_reject_legacy_master_write('customers');
             if (!crm360_can('legacy_draft')) {
                 crm360_redirect($tab, 'err', 'مجوز ثبت پرونده قدیمی ندارید.');
             }
@@ -772,6 +848,7 @@ try {
         }
 
         case 'legacy_batch_draft': {
+            crm360_reject_legacy_master_write('customers');
             if (!crm360_can('legacy_draft')) {
                 crm360_redirect($tab, 'err', 'مجوز ورود گروهی ندارید.');
             }
@@ -805,6 +882,7 @@ try {
         }
 
         case 'legacy_batch_validate': {
+            crm360_reject_legacy_master_write('customers');
             if (!crm360_can('legacy_draft')) {
                 crm360_redirect($tab, 'err', 'مجوز اعتبارسنجی ندارید.');
             }
@@ -854,6 +932,7 @@ try {
         }
 
         case 'legacy_batch_import': {
+            crm360_reject_legacy_master_write('customers');
             if (!crm360_can('legacy_approve')) {
                 crm360_redirect($tab, 'err', 'فقط مالک/مدیر می‌تواند ورود نهایی را تأیید کند.');
             }
@@ -939,6 +1018,7 @@ try {
         }
 
         case 'vip_review': {
+            crm360_reject_legacy_master_write('customers');
             if (!crm360_can('vip_approve')) {
                 crm360_redirect($tab, 'err', 'فقط مالک/مدیر/مدیر CRM می‌تواند VIP را تأیید کند.');
             }
@@ -1001,7 +1081,17 @@ try {
         }
 
         default:
-            crm360_redirect($tab, 'err', 'عملیات نامعتبر است.');
+            if (crm360_action_wants_json()) {
+                http_response_code(410);
+                header('Content-Type: application/json; charset=UTF-8');
+                echo json_encode([
+                    'ok' => false,
+                    'code' => 'LEGACY_CRM_WRITE_ROUTE_DISABLED',
+                    'message' => 'عملیات نامعتبر یا غیرفعال است.',
+                ], JSON_UNESCAPED_UNICODE);
+                exit;
+            }
+            crm360_redirect('customers', 'err', 'عملیات نامعتبر است.');
     }
 } catch (Throwable $e) {
     crm360_redirect($tab, 'err', 'خطا در پردازش درخواست.');
