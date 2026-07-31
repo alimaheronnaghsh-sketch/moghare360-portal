@@ -91,14 +91,39 @@ function inv360_post_document($conn, int $docId, int $userId): array {
     return ['ok'=>true,'message'=>'سند با موفقیت ثبت قطعی شد.'];
 }
 function inv360_item_build_search_norm(array $p): string {
-    return inv360_normalize_search(implode(' ',[$p['workshop_code']??'',$p['item_code']??'',$p['technical_code']??'',$p['item_name_fa']??'',$p['item_name_en']??'',$p['common_name']??'',$p['part_number']??'',$p['oem_code']??'',$p['alternative_codes']??'',$p['barcode']??'']));
+    return inv360_normalize_search(implode(' ',[
+        $p['workshop_code']??'',$p['item_code']??'',$p['technical_code']??'',
+        $p['item_name_fa']??'',$p['item_name_en']??'',$p['common_name']??'',
+        $p['part_number']??'',$p['oem_code']??'',$p['alternative_codes']??'',$p['barcode']??'',
+        $p['manufacturer_part_number']??'',$p['supplier_code']??'',$p['brand']??'',
+    ]));
 }
+
+/**
+ * Canonical item save (I1R2-A extended). No supplemental post-save UPDATE.
+ *
+ * @param array<string,mixed> $data
+ * @return array{ok:bool,message:string,part_id:?int,lifecycle?:string,completeness?:array}
+ */
 function inv360_item_save($conn, array $data, int $userId, ?int $itemId=null): array {
-    $name=trim((string)($data['item_name_fa']??'')); if($name==='') return ['ok'=>false,'message'=>'نام قطعه الزامی است.','part_id'=>null];
+    $name=trim((string)($data['item_name_fa']??''));
+    if($name==='') return ['ok'=>false,'message'=>'نام قطعه الزامی است.','part_id'=>null];
+
+    $action = trim((string)($data['save_action'] ?? 'draft')); // draft | submit
+    if (!in_array($action, ['draft', 'submit'], true)) {
+        $action = 'draft';
+    }
+
+    $workshop = trim((string)($data['workshop_code']??''));
+    $technical = trim((string)($data['technical_code']??''));
+    if ($technical === '' && !($itemId && $itemId > 0)) {
+        $technical = 'SYS-' . gmdate('YmdHis') . '-' . random_int(100, 999);
+    }
+
     $payload=[
-        'workshop_code'=>trim((string)($data['workshop_code']??'')),
-        'item_code'=>trim((string)($data['item_code']??$data['workshop_code']??'')),
-        'technical_code'=>trim((string)($data['technical_code']??'')),
+        'workshop_code'=>$workshop,
+        'item_code'=>trim((string)($data['item_code']??$workshop)),
+        'technical_code'=>$technical,
         'item_name_fa'=>$name,
         'item_name_en'=>trim((string)($data['item_name_en']??'')),
         'common_name'=>trim((string)($data['common_name']??'')),
@@ -109,27 +134,139 @@ function inv360_item_save($conn, array $data, int $userId, ?int $itemId=null): a
         'brand'=>trim((string)($data['brand']??'')),
         'manufacturer'=>trim((string)($data['manufacturer']??'')),
         'country_of_origin'=>trim((string)($data['country']??'')),
-        'item_type'=>trim((string)($data['item_type']??'spare_part')),
+        'item_type'=>trim((string)($data['item_type']??'')),
         'subcategory'=>trim((string)($data['subcategory']??'')),
         'family_name'=>trim((string)($data['family']??'')),
-        'min_stock'=>(float)($data['min_stock']??0),
+        'min_stock'=>($data['min_stock']??'')===''?0.0:(float)$data['min_stock'],
         'max_stock'=>($data['max_stock']??'')!==''?(float)$data['max_stock']:null,
         'reorder_point'=>(float)($data['reorder_point']??0),
         'item_status'=>trim((string)($data['item_status']??'active')),
+        'category_id'=>(int)($data['category_id']??0) > 0 ? (int)$data['category_id'] : null,
+        'market_grade'=>trim((string)($data['market_grade']??'')),
+        'part_condition'=>trim((string)($data['part_condition']??'')),
+        'authenticity_grade'=>trim((string)($data['authenticity_grade']??'')),
+        'stock_authenticity'=>trim((string)($data['stock_authenticity']??'')),
+        'quality_grade'=>trim((string)($data['quality_grade']??'')),
+        'test_status'=>trim((string)($data['test_status']??'')),
+        'warranty_days'=>($data['warranty_days']??'')===''?null:(int)$data['warranty_days'],
+        'donor_vehicle_info'=>trim((string)($data['donor_vehicle_info']??'')),
+        'physical_condition_notes'=>trim((string)($data['physical_condition_notes']??'')),
+        'manufacturer_part_number'=>trim((string)($data['manufacturer_part_number']??'')),
+        'supplier_code'=>trim((string)($data['supplier_code']??'')),
+        'item_notes'=>trim((string)($data['item_notes']??'')),
+        'tech_specs'=>trim((string)($data['tech_specs']??$data['description']??'')),
     ];
-    $payload['search_norm']=inv360_item_build_search_norm($payload);
-    if($itemId&&$itemId>0){
-        $ok=inv360_exec($conn,'UPDATE dbo.inv360_items SET workshop_code=?,item_code=?,technical_code=?,item_name_fa=?,item_name_en=?,common_name=?,part_number=?,oem_code=?,alternative_codes=?,barcode=?,brand=?,manufacturer=?,country_of_origin=?,item_type=?,subcategory=?,family_name=?,min_stock=?,max_stock=?,reorder_point=?,item_status=?,search_norm=?,updated_at=SYSUTCDATETIME() WHERE item_id=?',
-            [$payload['workshop_code'],$payload['item_code'],$payload['technical_code'],$payload['item_name_fa'],$payload['item_name_en'],$payload['common_name'],$payload['part_number'],$payload['oem_code'],$payload['alternative_codes'],$payload['barcode'],$payload['brand'],$payload['manufacturer'],$payload['country_of_origin'],$payload['item_type'],$payload['subcategory'],$payload['family_name'],$payload['min_stock'],$payload['max_stock'],$payload['reorder_point'],$payload['item_status'],$payload['search_norm'],$itemId]);
-        if($ok===false) return ['ok'=>false,'message'=>'به‌روزرسانی کالا ناموفق بود.','part_id'=>$itemId];
-        inv360_audit($conn,'ITEM',(string)$itemId,'UPDATED',$payload['item_name_fa'],$userId);
-        return ['ok'=>true,'message'=>'کالا به‌روز شد.','part_id'=>$itemId];
+
+    if ($payload['item_type'] === '') {
+        return ['ok'=>false,'message'=>'نوع کالا الزامی است.','part_id'=>$itemId];
     }
-    $ok=inv360_exec($conn,'INSERT INTO dbo.inv360_items (workshop_code,item_code,technical_code,item_name_fa,item_name_en,common_name,part_number,oem_code,alternative_codes,barcode,brand,manufacturer,country_of_origin,item_type,subcategory,family_name,min_stock,max_stock,reorder_point,item_status,search_norm,quantity,created_by)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0.001,?)',
-        [$payload['workshop_code'],$payload['item_code'],$payload['technical_code'],$payload['item_name_fa'],$payload['item_name_en'],$payload['common_name'],$payload['part_number'],$payload['oem_code'],$payload['alternative_codes'],$payload['barcode'],$payload['brand'],$payload['manufacturer'],$payload['country_of_origin'],$payload['item_type'],$payload['subcategory'],$payload['family_name'],$payload['min_stock'],$payload['max_stock'],$payload['reorder_point'],$payload['item_status'],$payload['search_norm'],$userId]);
+    if ($payload['min_stock'] < 0) {
+        return ['ok'=>false,'message'=>'حداقل موجودی هشدار نمی‌تواند منفی باشد.','part_id'=>$itemId];
+    }
+
+    inv360_i1r2a_apply_market_defaults($payload);
+
+    $categoryName = null;
+    if ($payload['category_id']) {
+        $cat = inv360_one($conn, 'SELECT category_name_fa FROM dbo.inv360_item_categories WHERE category_id=? AND is_active=1', [$payload['category_id']]);
+        if (!$cat) {
+            return ['ok'=>false,'message'=>'گروه اصلی معتبر نیست.','part_id'=>$itemId];
+        }
+        $categoryName = trim((string)($cat['category_name_fa'] ?? ''));
+    }
+
+    $comp = inv360_i1r2a_completeness_result(inv360_i1r2a_missing_fields($payload));
+    $lifecycle = trim((string)($data['lifecycle_status'] ?? ''));
+    if ($action === 'submit') {
+        if ($comp['status'] !== 'COMPLETE') {
+            return [
+                'ok'=>false,
+                'message'=>'برای ارسال به تأیید مدیریتی، اطلاعات الزامی باید کامل باشد.',
+                'part_id'=>$itemId,
+                'completeness'=>$comp,
+            ];
+        }
+        $lifecycle = 'PENDING_MANAGER_APPROVAL';
+        // Do not activate here — manager approval is a separate queue (I1R2-D).
+        $payload['item_status'] = 'inactive';
+    } else {
+        if ($lifecycle === '' || $lifecycle === 'ACTIVE' || $lifecycle === 'PENDING_MANAGER_APPROVAL') {
+            $lifecycle = ($comp['status'] === 'COMPLETE') ? 'DRAFT' : 'NEEDS_COMPLETION';
+        }
+        if ($comp['status'] === 'NEEDS_COMPLETION' || $comp['status'] === 'FATAL_MISSING_IDENTITY') {
+            $lifecycle = 'NEEDS_COMPLETION';
+        } elseif ($lifecycle !== 'REJECTED' && $lifecycle !== 'INACTIVE') {
+            $lifecycle = 'DRAFT';
+        }
+        // Draft must not activate
+        if (in_array($lifecycle, ['DRAFT', 'NEEDS_COMPLETION', 'REJECTED'], true)) {
+            if (($payload['item_status'] ?? '') === 'active') {
+                $payload['item_status'] = 'inactive';
+            }
+        }
+    }
+
+    $payload['search_norm']=inv360_item_build_search_norm($payload);
+    $hasExt = inv360_column_exists($conn, 'inv360_items', 'lifecycle_status');
+
+    if($itemId&&$itemId>0){
+        if ($hasExt) {
+            $ok=inv360_exec($conn,
+                'UPDATE dbo.inv360_items SET workshop_code=?,item_code=?,technical_code=?,item_name_fa=?,item_name_en=?,common_name=?,part_number=?,oem_code=?,alternative_codes=?,barcode=?,brand=?,manufacturer=?,country_of_origin=?,item_type=?,subcategory=?,family_name=?,min_stock=?,max_stock=?,reorder_point=?,item_status=?,search_norm=?,category_id=?,category_name=?,market_grade=?,part_condition=?,authenticity_grade=?,stock_authenticity=?,quality_grade=?,test_status=?,warranty_days=?,donor_vehicle_info=?,physical_condition_notes=?,manufacturer_part_number=?,supplier_code=?,item_notes=?,tech_specs=?,lifecycle_status=?,completeness_status=?,completeness_score=?,missing_field_count=?,last_completeness_check_at=SYSUTCDATETIME(),updated_at=SYSUTCDATETIME() WHERE item_id=?',
+                [
+                    $payload['workshop_code'],$payload['item_code'],$payload['technical_code'],$payload['item_name_fa'],$payload['item_name_en'],$payload['common_name'],
+                    $payload['part_number'],$payload['oem_code'],$payload['alternative_codes'],$payload['barcode'],$payload['brand'],$payload['manufacturer'],$payload['country_of_origin'],
+                    $payload['item_type'],$payload['subcategory'],$payload['family_name'],$payload['min_stock'],$payload['max_stock'],$payload['reorder_point'],$payload['item_status'],$payload['search_norm'],
+                    $payload['category_id'],$categoryName,$payload['market_grade']!==''?$payload['market_grade']:null,$payload['part_condition']!==''?$payload['part_condition']:null,
+                    $payload['authenticity_grade']!==''?$payload['authenticity_grade']:null,$payload['stock_authenticity']!==''?$payload['stock_authenticity']:null,
+                    $payload['quality_grade']!==''?$payload['quality_grade']:null,$payload['test_status']!==''?$payload['test_status']:null,$payload['warranty_days'],
+                    $payload['donor_vehicle_info']!==''?$payload['donor_vehicle_info']:null,$payload['physical_condition_notes']!==''?$payload['physical_condition_notes']:null,
+                    $payload['manufacturer_part_number']!==''?$payload['manufacturer_part_number']:null,$payload['supplier_code']!==''?$payload['supplier_code']:null,
+                    $payload['item_notes']!==''?$payload['item_notes']:null,$payload['tech_specs']!==''?$payload['tech_specs']:null,
+                    $lifecycle,$comp['status'],$comp['score'],$comp['missing_count'],$itemId
+                ]
+            );
+        } else {
+            $ok=inv360_exec($conn,'UPDATE dbo.inv360_items SET workshop_code=?,item_code=?,technical_code=?,item_name_fa=?,item_name_en=?,common_name=?,part_number=?,oem_code=?,alternative_codes=?,barcode=?,brand=?,manufacturer=?,country_of_origin=?,item_type=?,subcategory=?,family_name=?,min_stock=?,max_stock=?,reorder_point=?,item_status=?,search_norm=?,updated_at=SYSUTCDATETIME() WHERE item_id=?',
+                [$payload['workshop_code'],$payload['item_code'],$payload['technical_code'],$payload['item_name_fa'],$payload['item_name_en'],$payload['common_name'],$payload['part_number'],$payload['oem_code'],$payload['alternative_codes'],$payload['barcode'],$payload['brand'],$payload['manufacturer'],$payload['country_of_origin'],$payload['item_type'],$payload['subcategory'],$payload['family_name'],$payload['min_stock'],$payload['max_stock'],$payload['reorder_point'],$payload['item_status'],$payload['search_norm'],$itemId]);
+        }
+        if($ok===false) return ['ok'=>false,'message'=>'به‌روزرسانی کالا ناموفق بود.','part_id'=>$itemId];
+        if ($hasExt) {
+            inv360_i1r2a_sync_missing_fields($conn, $itemId, $comp['missing'], $userId, 'manual');
+        }
+        $evt = $action === 'submit' ? 'SUBMITTED_FOR_APPROVAL' : 'UPDATED';
+        inv360_audit($conn,'ITEM',(string)$itemId,$evt,$payload['item_name_fa'].' | '.$lifecycle,$userId);
+        return ['ok'=>true,'message'=>$action==='submit'?'برای تأیید مدیریتی ارسال شد.':'پیش‌نویس ذخیره شد.','part_id'=>$itemId,'lifecycle'=>$lifecycle,'completeness'=>$comp];
+    }
+
+    if ($hasExt) {
+        $ok=inv360_exec($conn,
+            'INSERT INTO dbo.inv360_items (workshop_code,item_code,technical_code,item_name_fa,item_name_en,common_name,part_number,oem_code,alternative_codes,barcode,brand,manufacturer,country_of_origin,item_type,subcategory,family_name,min_stock,max_stock,reorder_point,item_status,search_norm,quantity,created_by,category_id,category_name,market_grade,part_condition,authenticity_grade,stock_authenticity,quality_grade,test_status,warranty_days,donor_vehicle_info,physical_condition_notes,manufacturer_part_number,supplier_code,item_notes,tech_specs,lifecycle_status,completeness_status,completeness_score,missing_field_count,last_completeness_check_at)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0.001,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,SYSUTCDATETIME())',
+            [
+                $payload['workshop_code'],$payload['item_code'],$payload['technical_code'],$payload['item_name_fa'],$payload['item_name_en'],$payload['common_name'],
+                $payload['part_number'],$payload['oem_code'],$payload['alternative_codes'],$payload['barcode'],$payload['brand'],$payload['manufacturer'],$payload['country_of_origin'],
+                $payload['item_type'],$payload['subcategory'],$payload['family_name'],$payload['min_stock'],$payload['max_stock'],$payload['reorder_point'],$payload['item_status'],$payload['search_norm'],$userId,
+                $payload['category_id'],$categoryName,$payload['market_grade']!==''?$payload['market_grade']:null,$payload['part_condition']!==''?$payload['part_condition']:null,
+                $payload['authenticity_grade']!==''?$payload['authenticity_grade']:null,$payload['stock_authenticity']!==''?$payload['stock_authenticity']:null,
+                $payload['quality_grade']!==''?$payload['quality_grade']:null,$payload['test_status']!==''?$payload['test_status']:null,$payload['warranty_days'],
+                $payload['donor_vehicle_info']!==''?$payload['donor_vehicle_info']:null,$payload['physical_condition_notes']!==''?$payload['physical_condition_notes']:null,
+                $payload['manufacturer_part_number']!==''?$payload['manufacturer_part_number']:null,$payload['supplier_code']!==''?$payload['supplier_code']:null,
+                $payload['item_notes']!==''?$payload['item_notes']:null,$payload['tech_specs']!==''?$payload['tech_specs']:null,
+                $lifecycle,$comp['status'],$comp['score'],$comp['missing_count']
+            ]
+        );
+    } else {
+        $ok=inv360_exec($conn,'INSERT INTO dbo.inv360_items (workshop_code,item_code,technical_code,item_name_fa,item_name_en,common_name,part_number,oem_code,alternative_codes,barcode,brand,manufacturer,country_of_origin,item_type,subcategory,family_name,min_stock,max_stock,reorder_point,item_status,search_norm,quantity,created_by)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0.001,?)',
+            [$payload['workshop_code'],$payload['item_code'],$payload['technical_code'],$payload['item_name_fa'],$payload['item_name_en'],$payload['common_name'],$payload['part_number'],$payload['oem_code'],$payload['alternative_codes'],$payload['barcode'],$payload['brand'],$payload['manufacturer'],$payload['country_of_origin'],$payload['item_type'],$payload['subcategory'],$payload['family_name'],$payload['min_stock'],$payload['max_stock'],$payload['reorder_point'],$payload['item_status'],$payload['search_norm'],$userId]);
+    }
     if($ok===false) return ['ok'=>false,'message'=>'ثبت کالا ناموفق بود.','part_id'=>null];
     $id=(int)(inv360_scalar($conn,'SELECT TOP 1 item_id FROM dbo.inv360_items WHERE technical_code=? AND workshop_code=? ORDER BY item_id DESC',[$payload['technical_code'],$payload['workshop_code']])??0);
-    inv360_audit($conn,'ITEM',(string)$id,'CREATED',$payload['item_name_fa'],$userId);
-    return ['ok'=>true,'message'=>'کالا ثبت شد.','part_id'=>$id];
+    if ($hasExt && $id > 0) {
+        inv360_i1r2a_sync_missing_fields($conn, $id, $comp['missing'], $userId, 'manual');
+    }
+    $evt = $action === 'submit' ? 'SUBMITTED_FOR_APPROVAL' : 'CREATED';
+    inv360_audit($conn,'ITEM',(string)$id,$evt,$payload['item_name_fa'].' | '.$lifecycle,$userId);
+    return ['ok'=>true,'message'=>$action==='submit'?'برای تأیید مدیریتی ارسال شد.':'پیش‌نویس ذخیره شد.','part_id'=>$id,'lifecycle'=>$lifecycle,'completeness'=>$comp];
 }

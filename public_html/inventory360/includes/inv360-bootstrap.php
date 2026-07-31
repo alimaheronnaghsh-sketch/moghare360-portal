@@ -7,6 +7,7 @@ require_once __DIR__ . '/inv360-money.php';
 require_once __DIR__ . '/inv360-audit.php';
 require_once __DIR__ . '/inv360-search.php';
 require_once __DIR__ . '/inv360-ui.php';
+require_once __DIR__ . '/inv360-completeness.php';
 require_once __DIR__ . '/inv360-workflow.php';
 require_once __DIR__ . '/inv360-items-repository.php';
 require_once __DIR__ . '/inv360-warehouse-repository.php';
