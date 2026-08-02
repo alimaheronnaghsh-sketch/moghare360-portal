@@ -6,6 +6,7 @@ header('X-Robots-Tag: noindex, nofollow');
 
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-qc-helper.php';
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-operational-shell-helper.php';
+require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'mirror-layout.php';
 
 m360_qc_require_staff();
 
@@ -18,7 +19,7 @@ $rows = $conn !== false ? m360_qc_board_list($conn, $filter === 'ALL' ? null : $
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>برد QC و بازبینی نهایی</title>
+    <title>برد کنترل کیفیت و بازبینی نهایی</title>
     <link rel="stylesheet" href="assets/moghare360-ui/moghare360-soft-run-release.css">
     <link rel="stylesheet" href="assets/css/m360-qc.css">
     <link rel="stylesheet" href="<?= m360_operational_shell_h(m360_operational_shell_css_href()) ?>">
@@ -28,12 +29,13 @@ $rows = $conn !== false ? m360_qc_board_list($conn, $filter === 'ALL' ? null : $
 <body class="m360-qc-page">
 <div class="w1c-wrap m360-qc-wrap">
     <?php m360_operational_shell_render_board('qc_board'); ?>
+    <?php m360_hall_render_return_nav('کنترل کیفیت'); ?>
     <header class="w1c-banner">
-        <h1>برد QC و بازبینی نهایی</h1>
-        <p>QC فقط پس از تکمیل اجرای کار مجاز است. هیچ QC Pass قبل از تکمیل کار معتبر نیست.</p>
+        <h1>برد کنترل کیفیت و بازبینی نهایی</h1>
+        <p>کنترل کیفیت فقط پس از تکمیل اجرای کار مجاز است. هیچ تأیید کنترل کیفیت قبل از تکمیل کار معتبر نیست.</p>
     </header>
     <section class="w1c-card m360-lux-warn">
-        <strong>گیت QC:</strong> اگر اجرای کار کامل نشده باشد، QC مسدود است. در صورت Fail یا Rework، پرونده به اجرای کار برمی‌گردد.
+        <strong>گیت کنترل کیفیت:</strong> اگر اجرای کار کامل نشده باشد، کنترل کیفیت مسدود است. در صورت رد یا بازکاری، پرونده به اجرای کار برمی‌گردد.
     </section>
     <?php if ($conn === false): ?>
         <section class="w1c-card"><p>اتصال به پایگاه داده برقرار نشد.</p></section>

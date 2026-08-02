@@ -19,6 +19,7 @@ $jobcard = is_resource($conn) ? m360_fulljob_fetch_jobcard($conn, $jobcardId) : 
 mirror_render_head('مرکز درخواست فنی', 'staff');
 ?>
 <section class="m360-card">
+  <?php m360_hall_render_return_nav('درخواست‌ها و قطعه'); ?>
   <h1 class="m360-step-title">مرکز درخواست فنی</h1>
   <?php if ($message !== ''): ?><p class="m360-alert m360-alert-success"><?= m360_fulljob_h($message) ?></p><?php endif; ?>
   <p>کارت کار: <?= m360_fulljob_h((string)($jobcard['jobcard_number'] ?? $jobcardId)) ?></p>

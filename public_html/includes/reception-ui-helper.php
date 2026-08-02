@@ -36,21 +36,90 @@ function m360_rui_gregorian_to_jalali(int $gy, int $gm, int $gd): array
     return ['jy' => $jy, 'jm' => $jm, 'jd' => $jd];
 }
 
+/**
+ * Convert ASCII digits to Persian digits (display only).
+ */
+function m360_rui_to_persian_digits(string $value): string
+{
+    return strtr($value, [
+        '0' => '۰', '1' => '۱', '2' => '۲', '3' => '۳', '4' => '۴',
+        '5' => '۵', '6' => '۶', '7' => '۷', '8' => '۸', '9' => '۹',
+    ]);
+}
+
+/**
+ * Canonical Jalali display for operational timestamps.
+ * Stored DB values remain Gregorian/UTC clock as written (no offset invention).
+ * Empty / unparsable → ثبت نشده
+ *
+ * Format: ۱۴۰۵/۰۵/۱۰ or ۱۴۰۵/۰۵/۱۰، ساعت ۱۳:۳۶
+ */
 function m360_rui_jalali_date(?string $raw, bool $withTime = true): string
 {
+    return m360_rui_jalali_datetime($raw, $withTime, false);
+}
+
+/**
+ * @param bool $withSeconds include seconds when time is shown
+ */
+function m360_rui_jalali_datetime(?string $raw, bool $withTime = true, bool $withSeconds = false): string
+{
     $raw = trim((string)$raw);
-    if ($raw === '' || $raw === '—') {
-        return '—';
+    if ($raw === '' || $raw === '—' || strcasecmp($raw, 'null') === 0) {
+        return 'ثبت نشده';
     }
-    if (!preg_match('/^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?/', $raw, $m)) {
-        return $raw;
+    // Reject clearly invalid sentinel dates
+    if (preg_match('/^(0000|1900|1970)-0?1-0?1/', $raw)) {
+        return 'ثبت نشده';
+    }
+    if (!preg_match('/^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?(?:\.\d+)?)?/', $raw, $m)) {
+        // Already Jalali-looking or non-datetime text: do not invent; mark unknown
+        if (preg_match('/^\d{4}\/\d{2}\/\d{2}/', $raw)) {
+            return m360_rui_to_persian_digits($raw);
+        }
+
+        return 'ثبت نشده';
     }
     $j = m360_rui_gregorian_to_jalali((int)$m[1], (int)$m[2], (int)$m[3]);
     $date = sprintf('%04d/%02d/%02d', $j['jy'], $j['jm'], $j['jd']);
-    if ($withTime && isset($m[4], $m[5]) && $m[4] !== '') {
-        return $date . ' - ' . $m[4] . ':' . $m[5];
+    if (!$withTime || !isset($m[4], $m[5]) || $m[4] === '') {
+        return m360_rui_to_persian_digits($date);
     }
-    return $date;
+    $time = $m[4] . ':' . $m[5];
+    if ($withSeconds && isset($m[6]) && $m[6] !== '') {
+        $time .= ':' . $m[6];
+    }
+
+    return m360_rui_to_persian_digits($date . '، ساعت ' . $time);
+}
+
+/**
+ * Human duration in Persian (display only). Null/negative → ثبت نشده.
+ */
+function m360_rui_duration_fa(?int $seconds): string
+{
+    if ($seconds === null || $seconds < 0) {
+        return 'ثبت نشده';
+    }
+    if ($seconds < 60) {
+        return m360_rui_to_persian_digits((string)$seconds) . ' ثانیه';
+    }
+    $minutes = intdiv($seconds, 60);
+    if ($minutes < 60) {
+        return m360_rui_to_persian_digits((string)$minutes) . ' دقیقه';
+    }
+    $hours = intdiv($minutes, 60);
+    $remMin = $minutes % 60;
+    if ($hours < 48) {
+        if ($remMin === 0) {
+            return m360_rui_to_persian_digits((string)$hours) . ' ساعت';
+        }
+
+        return m360_rui_to_persian_digits((string)$hours) . ' ساعت و ' . m360_rui_to_persian_digits((string)$remMin) . ' دقیقه';
+    }
+    $days = intdiv($hours, 24);
+
+    return m360_rui_to_persian_digits((string)$days) . ' روز';
 }
 
 function m360_rui_label(?string $code): string
