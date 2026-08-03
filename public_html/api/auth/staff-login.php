@@ -30,7 +30,7 @@ try {
     }
 
     $sql = "SELECT u.user_id, u.username, u.password_hash, u.full_name, u.is_login_enabled, u.lifecycle_state, u.is_system_owner,
-                   cu.company_id AS membership_company_id
+                   u.must_change_password, cu.company_id AS membership_company_id
             FROM dbo.core_users u
             INNER JOIN dbo.erp_company_users cu ON cu.user_id = u.user_id AND cu.company_id = ? AND cu.is_active = 1
             WHERE u.username = ?";
@@ -74,7 +74,12 @@ try {
     mogh_saas_require_file('erp-csrf.php');
     $csrf = erp_csrf_create_token('staff_login');
 
-    $redirectUrl = !empty($row['is_system_owner']) ? 'erp-product-home.php' : 'erp-staff-home.php';
+    $mustChange = !empty($row['must_change_password']);
+    if ($mustChange) {
+        $redirectUrl = 'peopleos360/my-password.php?forced=1';
+    } else {
+        $redirectUrl = !empty($row['is_system_owner']) ? 'erp-product-home.php' : 'erp-staff-home.php';
+    }
 
     mogh_api_log_request($conn, $verifiedCompanyId, $endpoint, 'POST', 200, 'staff_login_ok');
     mogh_api_ok('ورود پرسنل موفق بود.', [
@@ -84,6 +89,7 @@ try {
         'company_id' => $verifiedCompanyId,
         'session_token' => session_id(),
         'csrf_token' => $csrf,
+        'must_change_password' => $mustChange ? 1 : 0,
         'redirect_url' => $redirectUrl,
     ]);
 } catch (Throwable) {

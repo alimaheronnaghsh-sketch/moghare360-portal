@@ -1,0 +1,13 @@
+.p360-jdate{margin:.4rem 0 .8rem}
+.p360-jdate-label{display:block;font-weight:600;margin-bottom:.25rem}
+.p360-jdate-row{display:flex;flex-wrap:wrap;gap:.4rem;align-items:center}
+.p360-jdate-display{min-width:160px;padding:.45rem .6rem;border:1px solid #2f5d50;border-radius:8px;background:#f7fbf9;direction:ltr;text-align:center}
+.p360-jdate-pop{position:absolute;z-index:9999;background:#fff;border:1px solid #2f5d50;border-radius:12px;padding:.75rem;box-shadow:0 8px 24px rgba(0,0,0,.12);min-width:280px}
+.p360-jdate-head{display:flex;justify-content:space-between;align-items:center;gap:.4rem;margin-bottom:.5rem}
+.p360-jdate-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;text-align:center}
+.p360-jdate-grid button{border:0;background:#f3faf6;border-radius:6px;padding:.35rem 0;cursor:pointer}
+.p360-jdate-grid button:hover{background:#1f6b57;color:#fff}
+.p360-jdate-grid .dow{font-size:.75rem;color:#4a6b60;background:transparent;cursor:default}
+.p360-jdate-grid .empty{background:transparent;cursor:default}
+.p360-jdate-grid .sel{background:#1f6b57;color:#fff}
+.p360-jdate-years,.p360-jdate-months{display:flex;gap:.35rem;flex-wrap:wrap}

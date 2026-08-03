@@ -1,6 +1,10 @@
 <?php
-require_once __DIR__ . '/includes/p360-bootstrap.php';
-p360_require_login();
-p360_layout_start('خودخدمت', 'self-service.php');
-echo '<div class="steps"><a href="leave-requests.php">مرخصی</a><a href="mission-requests.php">مأموریت</a><a href="overtime-requests.php">اضافه‌کار</a></div>';
-p360_layout_end();
+require_once __DIR__ . '/includes/p360-hr-central-bridge.php';
+// Legacy PeopleOS self-service entry now bridges to Central ERP cartable.
+p360hr_require_central_login();
+if (p360hr_must_change_password()) {
+    header('Location: my-password.php?forced=1');
+    exit;
+}
+header('Location: my-cartable.php');
+exit;
