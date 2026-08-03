@@ -1,0 +1,36 @@
+# IIS request filtering — block tools / migrations / private paths from HTTP
+
+Place under the site root (or merge into existing `web.config`). Adjust paths to the deployed application.
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+  <system.webServer>
+    <directoryBrowse enabled="false" />
+    <httpProtocol>
+      <customHeaders>
+        <add name="X-Content-Type-Options" value="nosniff" />
+      </customHeaders>
+    </httpProtocol>
+    <security>
+      <requestFiltering>
+        <hiddenSegments>
+          <add segment="tools" />
+          <add segment="private" />
+          <add segment="storage" />
+          <add segment="backups" />
+          <add segment="vendor" />
+          <add segment="_generated" />
+        </hiddenSegments>
+        <fileExtensions>
+          <add fileExtension=".sql" allowed="false" />
+          <add fileExtension=".bak" allowed="false" />
+          <add fileExtension=".env" allowed="false" />
+        </fileExtensions>
+      </requestFiltering>
+    </security>
+  </system.webServer>
+</configuration>
+```
+
+Private configuration must live **outside** the IIS site physical path (see `PRODUCTION_PREREQUISITES_FA.md`).
