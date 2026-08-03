@@ -326,6 +326,8 @@ function m360_access_mgmt_render_head(string $title): void
     echo '<!DOCTYPE html><html lang="fa" dir="rtl"><head>';
     echo '<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">';
     echo '<title>' . m360_access_mgmt_h($title) . '</title>';
+    require_once __DIR__ . DIRECTORY_SEPARATOR . 'm360-design-system-helper.php';
+    echo '<link rel="stylesheet" href="' . m360_ds_h(m360_ds_canonical_tokens_href()) . '?v=' . m360_ds_h(m360_ds_asset_version(m360_ds_canonical_tokens_href())) . '">';
     echo '<link rel="stylesheet" href="assets/css/mirror.css">';
     echo '<link rel="stylesheet" href="assets/css/moghare360-v1-luxury-ui.css">';
     echo '<link rel="stylesheet" href="assets/css/m360-access-management.css">';

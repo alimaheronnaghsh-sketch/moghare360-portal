@@ -62,7 +62,7 @@ function p3_tech_form(string $action, int $jobcardId, string $label, string $cla
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>جزئیات فنی — کارت کار</title>
     <link rel="stylesheet" href="assets/moghare360-ui/moghare360-soft-run-release.css">
-    <link rel="stylesheet" href="<?= m360_operational_shell_h(m360_operational_shell_css_href()) ?>">
+    <?php m360_operational_shell_render_stylesheets(); ?>
     <style>
         .p3-detail { max-width: 1000px; margin: 0 auto; }
         .p3-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
@@ -281,3 +281,4 @@ function p3_tech_form(string $action, int $jobcardId, string $label, string $cla
 </div>
 </body>
 </html>
+

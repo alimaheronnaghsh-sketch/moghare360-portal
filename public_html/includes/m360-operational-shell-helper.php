@@ -57,6 +57,16 @@ function m360_operational_shell_css_href(): string
 }
 
 /**
+ * Phase 4: emit canonical design-system stack + operational shell CSS.
+ * Prefer this over a single shell link so tokens/components load first.
+ */
+function m360_operational_shell_render_stylesheets(): void
+{
+    require_once __DIR__ . DIRECTORY_SEPARATOR . 'm360-design-system-helper.php';
+    m360_ds_render_stylesheets('ops');
+}
+
+/**
  * @param mixed $conn
  */
 function m360_operational_shell_resolve_user_name($conn, mixed $userId): string

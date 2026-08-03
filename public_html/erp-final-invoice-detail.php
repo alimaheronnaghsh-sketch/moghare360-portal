@@ -123,7 +123,7 @@ if ($varianceStatus === 'BLOCKED' || $varianceStatus === 'OVERRIDE_REQUIRED') {
     <title>جزئیات فاکتور نهایی</title>
     <link rel="stylesheet" href="assets/moghare360-ui/moghare360-soft-run-release.css">
     <link rel="stylesheet" href="assets/css/m360-final-delivery.css">
-    <link rel="stylesheet" href="<?= m360_operational_shell_h(m360_operational_shell_css_href()) ?>">
+    <?php m360_operational_shell_render_stylesheets(); ?>
 </head>
 <body class="m360-fi-page">
 <div class="w1c-wrap m360-fi-wrap">
@@ -301,3 +301,4 @@ if ($varianceStatus === 'BLOCKED' || $varianceStatus === 'OVERRIDE_REQUIRED') {
 </div>
 </body>
 </html>
+

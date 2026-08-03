@@ -57,7 +57,7 @@ function p2_jc_action_form(string $action, int $jobcardId, string $label, string
     <meta name="robots" content="noindex, nofollow">
     <title>جزئیات کارت کار — پذیرش</title>
     <link rel="stylesheet" href="assets/moghare360-ui/moghare360-soft-run-release.css">
-    <link rel="stylesheet" href="<?= m360_operational_shell_h(m360_operational_shell_css_href()) ?>">
+    <?php m360_operational_shell_render_stylesheets(); ?>
     <style>
         .p2-jc-detail { max-width: 960px; margin: 0 auto; }
         .p2-jc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
@@ -244,3 +244,4 @@ function p2_jc_action_form(string $action, int $jobcardId, string $label, string
 </div>
 </body>
 </html>
+

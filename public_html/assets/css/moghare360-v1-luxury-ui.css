@@ -1,21 +1,22 @@
 /**
  * MOGHARE360 Mirror — Luxury Industrial Persian ERP UI
  * RTL · No CDN · No external fonts
+ * Phase 4: skin aliases only — canonical tokens live in moghare360-design-tokens.css
  */
 :root {
-  --m360-bg: #0f1714;
-  --m360-surface: #16221d;
-  --m360-card: #1c2b24;
-  --m360-border: #2d4036;
-  --m360-text: #f3f4f6;
-  --m360-muted: #9ca3af;
-  --m360-accent: #22c55e;
-  --m360-accent-dark: #15803d;
-  --m360-gold: #d4af37;
-  --m360-danger: #ef4444;
-  --m360-radius: 14px;
-  --m360-shadow: 0 18px 40px rgba(0, 0, 0, 0.35);
-  --m360-font: Vazirmatn, Tahoma, "Segoe UI", Arial, sans-serif;
+  --m360-bg: var(--m360-public-bg, #0f1714);
+  --m360-surface: var(--m360-public-surface, #16221d);
+  --m360-card: var(--m360-public-card, #1c2b24);
+  --m360-border: var(--m360-public-border, #2d4036);
+  --m360-text: var(--m360-public-text, #f3f4f6);
+  --m360-muted: var(--m360-public-muted, #9ca3af);
+  --m360-accent: var(--m360-public-accent, #22c55e);
+  --m360-accent-dark: var(--m360-public-accent-dark, #15803d);
+  --m360-gold: var(--m360-public-gold, #d4af37);
+  --m360-danger: var(--m360-public-danger, #ef4444);
+  --m360-radius: var(--m360-public-radius, var(--m360-radius-lg, 14px));
+  --m360-shadow: var(--m360-public-shadow, 0 18px 40px rgba(0, 0, 0, 0.35));
+  --m360-font: var(--m360-font-family-persian, var(--m360-font-family-sans, Vazirmatn, Tahoma, "Segoe UI", Arial, sans-serif));
 }
 
 * { box-sizing: border-box; }

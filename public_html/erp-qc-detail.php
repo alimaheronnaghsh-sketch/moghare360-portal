@@ -75,7 +75,7 @@ function m360_qc_form(string $action, int $jobcardId, int $qcCheckId, string $la
     <title>جزئیات QC</title>
     <link rel="stylesheet" href="assets/moghare360-ui/moghare360-soft-run-release.css">
     <link rel="stylesheet" href="assets/css/m360-qc.css">
-    <link rel="stylesheet" href="<?= m360_operational_shell_h(m360_operational_shell_css_href()) ?>">
+    <?php m360_operational_shell_render_stylesheets(); ?>
 </head>
 <body class="m360-qc-page">
 <div class="w1c-wrap m360-qc-wrap">
@@ -253,3 +253,4 @@ function m360_qc_form(string $action, int $jobcardId, int $qcCheckId, string $la
 </div>
 </body>
 </html>
+

@@ -1,7 +1,13 @@
 /*
- * MOGHARE360 ERP — Design Tokens
- * Mission 31 — Industrial repair shop UI DNA
- * Scope: Soft Run Internal ERP design foundation only
+ * MOGHARE360 ERP — CANONICAL Design Tokens (single Owner source)
+ * Phase 4 — Central UI/UX Design System
+ *
+ * Owner may change globally from this file only:
+ *   Persian font family, base font size, headings, colors, radius, spacing,
+ *   control heights, table density, drawer width, status badges, shadows.
+ *
+ * Do not create competing :root theme systems. Skins must alias these tokens.
+ * PDF/print may use a document-specific font only when technically required.
  */
 
 :root {
@@ -99,18 +105,25 @@
   --m360-radius-pill: 999px;
 
   /* -------------------------------------------------------------------------
-     Typography scale
+     Typography scale (Owner-global)
      ------------------------------------------------------------------------- */
   --m360-font-family-sans: "Vazirmatn", "IRANSans", "Segoe UI", Tahoma, Arial, sans-serif;
   --m360-font-family-mono: "Cascadia Code", "Consolas", "Courier New", monospace;
+  --m360-font-family-persian: var(--m360-font-family-sans);
 
+  --m360-font-size-base: 1rem;
   --m360-font-size-xs: 0.75rem;
   --m360-font-size-sm: 0.875rem;
-  --m360-font-size-md: 1rem;
+  --m360-font-size-md: var(--m360-font-size-base);
   --m360-font-size-lg: 1.125rem;
   --m360-font-size-xl: 1.25rem;
   --m360-font-size-2xl: 1.5rem;
   --m360-font-size-3xl: 1.875rem;
+
+  --m360-font-size-h1: var(--m360-font-size-3xl);
+  --m360-font-size-h2: var(--m360-font-size-2xl);
+  --m360-font-size-h3: var(--m360-font-size-xl);
+  --m360-font-size-h4: var(--m360-font-size-lg);
 
   --m360-font-weight-regular: 400;
   --m360-font-weight-medium: 500;
@@ -146,6 +159,47 @@
   --m360-content-max-width: 1280px;
   --m360-sidebar-width: 260px;
   --m360-toolbar-height: 56px;
+  --m360-drawer-width: 360px;
+  --m360-drawer-width-sm: 300px;
+  --m360-drawer-width-lg: 420px;
+
+  /* -------------------------------------------------------------------------
+     Controls / table density
+     ------------------------------------------------------------------------- */
+  --m360-control-height-sm: 2rem;
+  --m360-control-height-md: 2.5rem;
+  --m360-control-height-lg: 3rem;
+  --m360-control-height: var(--m360-control-height-md);
+
+  --m360-table-cell-pad-y: var(--m360-space-3);
+  --m360-table-cell-pad-x: var(--m360-space-4);
+  --m360-table-density-compact-pad-y: var(--m360-space-2);
+  --m360-table-density-compact-pad-x: var(--m360-space-3);
+  --m360-table-font-size: var(--m360-font-size-sm);
+
+  /* -------------------------------------------------------------------------
+     Status badge tokens
+     ------------------------------------------------------------------------- */
+  --m360-badge-pad-y: 0.2em;
+  --m360-badge-pad-x: 0.65em;
+  --m360-badge-radius: var(--m360-radius-pill);
+  --m360-badge-font-size: var(--m360-font-size-xs);
+
+  /* -------------------------------------------------------------------------
+     Public / mirror shell skin (aliases — do not fork a second token file)
+     ------------------------------------------------------------------------- */
+  --m360-public-bg: #0f1714;
+  --m360-public-surface: #16221d;
+  --m360-public-card: #1c2b24;
+  --m360-public-border: #2d4036;
+  --m360-public-text: #f3f4f6;
+  --m360-public-muted: #9ca3af;
+  --m360-public-accent: var(--m360-color-success-500);
+  --m360-public-accent-dark: var(--m360-color-success-700);
+  --m360-public-gold: #d4af37;
+  --m360-public-danger: var(--m360-color-danger-500);
+  --m360-public-radius: var(--m360-radius-lg);
+  --m360-public-shadow: 0 18px 40px rgba(0, 0, 0, 0.35);
 
   /* -------------------------------------------------------------------------
      Z-index
@@ -155,6 +209,7 @@
   --m360-z-sticky: 200;
   --m360-z-toolbar: 300;
   --m360-z-sidebar: 350;
+  --m360-z-drawer: 400;
   --m360-z-modal: 500;
   --m360-z-toast: 600;
   --m360-z-diagnostic: 50;

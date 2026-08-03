@@ -21,7 +21,7 @@ $rows = $conn !== false ? m360_work_board_list($conn, $filter === 'ALL' ? null :
     <title>برد اجرای کار</title>
     <link rel="stylesheet" href="assets/moghare360-ui/moghare360-soft-run-release.css">
     <link rel="stylesheet" href="assets/css/m360-work-execution.css">
-    <link rel="stylesheet" href="<?= m360_operational_shell_h(m360_operational_shell_css_href()) ?>">
+    <?php m360_operational_shell_render_stylesheets(); ?>
     <link rel="stylesheet" href="assets/css/mirror.css">
     <link rel="stylesheet" href="assets/css/moghare360-v1-luxury-ui.css">
 </head>
@@ -78,3 +78,4 @@ $rows = $conn !== false ? m360_work_board_list($conn, $filter === 'ALL' ? null :
 </div>
 </body>
 </html>
+

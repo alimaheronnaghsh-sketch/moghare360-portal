@@ -1,10 +1,15 @@
+/*
+ * MOGHARE360 P11.8-B-A / Phase 4 — Operational shell (token-bound)
+ * Class names preserved for existing selectors.
+ */
+
 .m360-ops-topnav {
-    background: linear-gradient(135deg, #1e293b, #334155);
-    border: 1px solid #475569;
-    border-radius: 10px;
-    padding: 0.75rem 1rem;
-    margin-bottom: 0.75rem;
-    color: #e2e8f0;
+    background: linear-gradient(135deg, var(--m360-color-primary-800), var(--m360-color-primary-700));
+    border: var(--m360-border-width) solid var(--m360-color-neutral-600);
+    border-radius: var(--m360-radius-md);
+    padding: var(--m360-space-3) var(--m360-space-4);
+    margin-bottom: var(--m360-space-3);
+    color: var(--m360-color-neutral-100);
 }
 .m360-ops-topnav-links {
     display: flex;
@@ -16,30 +21,31 @@
 .m360-ops-nav-link {
     display: inline-block;
     padding: 0.35rem 0.7rem;
-    border-radius: 8px;
-    background: #2563eb;
-    color: #fff;
+    min-height: var(--m360-control-height-sm);
+    border-radius: var(--m360-radius-sm);
+    background: var(--m360-color-info-600);
+    color: var(--m360-color-white);
     text-decoration: none;
-    font-size: 0.84rem;
+    font-size: var(--m360-font-size-sm);
     white-space: nowrap;
 }
-.m360-ops-nav-link:hover { background: #1d4ed8; color: #fff; }
-.m360-ops-nav-back { background: #475569; }
-.m360-ops-nav-back:hover { background: #334155; }
+.m360-ops-nav-link:hover { background: var(--m360-color-primary-600); color: var(--m360-color-white); }
+.m360-ops-nav-back { background: var(--m360-color-neutral-600); }
+.m360-ops-nav-back:hover { background: var(--m360-color-neutral-700); }
 .m360-ops-nav-secondary { background: #0f766e; }
 .m360-ops-nav-secondary:hover { background: #0d9488; }
 .m360-ops-topnav-kicker {
     display: block;
-    font-size: 0.72rem;
+    font-size: var(--m360-font-size-xs);
     opacity: 0.85;
-    color: #94a3b8;
+    color: var(--m360-color-neutral-400);
     margin-bottom: 0.15rem;
 }
 .m360-ops-topnav-heading {
     margin: 0;
-    font-size: 1.05rem;
-    font-weight: 700;
-    color: #f8fafc;
+    font-size: var(--m360-font-size-lg);
+    font-weight: var(--m360-font-weight-bold);
+    color: var(--m360-color-neutral-50);
 }
 .m360-ops-breadcrumb {
     list-style: none;
@@ -48,25 +54,26 @@
     gap: 0.35rem;
     padding: 0.45rem 0.65rem;
     margin: 0 0 0.85rem;
-    background: #f1f5f9;
-    border-radius: 8px;
-    font-size: 0.8rem;
-    color: #475569;
+    background: var(--m360-color-neutral-100);
+    border-radius: var(--m360-radius-sm);
+    font-size: var(--m360-font-size-sm);
+    color: var(--m360-color-neutral-600);
 }
 .m360-ops-breadcrumb-item:not(:last-child)::after {
     content: '›';
     margin-inline-start: 0.35rem;
-    color: #94a3b8;
+    color: var(--m360-color-neutral-400);
 }
-.m360-ops-breadcrumb a { color: #1d4ed8; text-decoration: none; }
+.m360-ops-breadcrumb a { color: var(--m360-color-info-600); text-decoration: none; }
 .m360-ops-breadcrumb a:hover { text-decoration: underline; }
 .m360-ops-strip {
-    background: #fff;
-    border: 1px solid #cbd5e1;
-    border-right: 4px solid #2563eb;
-    border-radius: 10px;
+    background: var(--m360-bg-surface);
+    border: var(--m360-border-width) solid var(--m360-border-color-strong);
+    border-right: 4px solid var(--m360-color-info-600);
+    border-radius: var(--m360-radius-md);
     padding: 0.85rem 1rem;
-    margin-bottom: 1rem;
+    margin-bottom: var(--m360-space-4);
+    box-shadow: var(--m360-shadow-xs);
 }
 .m360-ops-strip-head {
     display: flex;
@@ -76,16 +83,16 @@
     justify-content: space-between;
     margin-bottom: 0.65rem;
     padding-bottom: 0.5rem;
-    border-bottom: 1px dashed #e2e8f0;
+    border-bottom: 1px dashed var(--m360-border-color);
 }
-.m360-ops-strip-title { margin: 0; font-size: 1rem; color: #0f172a; }
-.m360-ops-strip-record { margin: 0; font-size: 0.82rem; color: #64748b; }
+.m360-ops-strip-title { margin: 0; font-size: var(--m360-font-size-md); color: var(--m360-color-primary-900); }
+.m360-ops-strip-record { margin: 0; font-size: var(--m360-font-size-sm); color: var(--m360-color-neutral-500); }
 .m360-ops-strip-status {
-    font-size: 0.75rem;
-    padding: 0.2rem 0.55rem;
-    border-radius: 999px;
-    background: #dbeafe;
-    color: #1e40af;
+    font-size: var(--m360-badge-font-size);
+    padding: var(--m360-badge-pad-y) var(--m360-badge-pad-x);
+    border-radius: var(--m360-badge-radius);
+    background: var(--m360-color-info-100);
+    color: var(--m360-color-primary-700);
     white-space: nowrap;
 }
 .m360-ops-strip-grid {
@@ -93,23 +100,27 @@
     grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
     gap: 0.55rem 0.75rem;
 }
-.m360-ops-strip-field { font-size: 0.84rem; }
+.m360-ops-strip-field { font-size: var(--m360-font-size-sm); }
 .m360-ops-strip-lbl {
     display: block;
-    font-size: 0.72rem;
-    color: #64748b;
+    font-size: var(--m360-font-size-xs);
+    color: var(--m360-color-neutral-500);
     margin-bottom: 0.1rem;
 }
-.m360-ops-strip-val { color: #0f172a; font-weight: 600; }
+.m360-ops-strip-val { color: var(--m360-color-primary-900); font-weight: var(--m360-font-weight-semibold); }
 .m360-ops-strip-next {
     margin-top: 0.65rem;
     padding: 0.55rem 0.65rem;
-    background: #fffbeb;
-    border: 1px solid #fde68a;
-    border-radius: 8px;
-    font-size: 0.86rem;
-    color: #92400e;
+    background: var(--m360-bg-diagnostic);
+    border: var(--m360-border-width) solid var(--m360-color-accent-100);
+    border-radius: var(--m360-radius-sm);
+    font-size: var(--m360-font-size-sm);
+    color: var(--m360-color-warning-700);
 }
-.m360-ops-strip-links { margin-top: 0.5rem; font-size: 0.84rem; }
-.m360-ops-strip-links a { color: #1d4ed8; text-decoration: none; }
+.m360-ops-strip-links { margin-top: 0.5rem; font-size: var(--m360-font-size-sm); }
+.m360-ops-strip-links a { color: var(--m360-color-info-600); text-decoration: none; }
 .m360-ops-strip-links a:hover { text-decoration: underline; }
+
+@media (max-width: 768px) {
+    .m360-ops-strip-grid { grid-template-columns: 1fr; }
+}

@@ -89,6 +89,9 @@ function mirror_render_head(string $title, string $activeNav = ''): void
     echo '<link rel="manifest" href="manifest.webmanifest">';
     echo '<title>' . mirror_h($title) . '</title>';
     $assetV = mirror_public_asset_version();
+    $tokensPath = __DIR__ . DIRECTORY_SEPARATOR . '..' . DIRECTORY_SEPARATOR . 'assets' . DIRECTORY_SEPARATOR . 'moghare360-ui' . DIRECTORY_SEPARATOR . 'moghare360-design-tokens.css';
+    $tokensV = is_file($tokensPath) ? (string)filemtime($tokensPath) : $assetV;
+    echo '<link rel="stylesheet" href="assets/moghare360-ui/moghare360-design-tokens.css?v=' . mirror_h($tokensV) . '">';
     echo '<link rel="stylesheet" href="assets/css/mirror.css?v=' . mirror_h($assetV) . '">';
     echo '<link rel="stylesheet" href="assets/css/moghare360-v1-luxury-ui.css?v=' . mirror_h($assetV) . '">';
     echo '</head><body class="m360-public-shell"><div class="m360-wrap">';

@@ -40,7 +40,7 @@ if ($dbOk) {
     <meta name="robots" content="noindex, nofollow">
     <title>برد عملیات فنی</title>
     <link rel="stylesheet" href="assets/moghare360-ui/moghare360-soft-run-release.css">
-    <link rel="stylesheet" href="<?= m360_operational_shell_h(m360_operational_shell_css_href()) ?>">
+    <?php m360_operational_shell_render_stylesheets(); ?>
     <link rel="stylesheet" href="assets/css/mirror.css">
     <link rel="stylesheet" href="assets/css/moghare360-v1-luxury-ui.css">
     <style>
@@ -133,3 +133,4 @@ if ($dbOk) {
 </div>
 </body>
 </html>
+

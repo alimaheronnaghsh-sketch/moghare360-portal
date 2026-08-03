@@ -135,6 +135,8 @@ function m360_reception_render_action_error_page(string $type, int $requestId = 
     echo '<!DOCTYPE html><html lang="fa" dir="rtl"><head>';
     echo '<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">';
     echo '<title>' . m360_reception_h($content['title']) . '</title>';
+    require_once __DIR__ . DIRECTORY_SEPARATOR . 'm360-design-system-helper.php';
+    echo '<link rel="stylesheet" href="' . m360_ds_h(m360_ds_canonical_tokens_href()) . '?v=' . m360_ds_h(m360_ds_asset_version(m360_ds_canonical_tokens_href())) . '">';
     echo '<link rel="stylesheet" href="assets/css/moghare360-v1-luxury-ui.css">';
     echo '<style>.p1-gate-wrap{max-width:480px;margin:2rem auto;padding:0 1rem;}';
     echo '.p1-gate-card{background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:1.5rem;text-align:center;}';

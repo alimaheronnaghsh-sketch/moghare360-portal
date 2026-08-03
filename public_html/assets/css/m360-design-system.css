@@ -1,0 +1,137 @@
+/*
+ * MOGHARE360 — Design System entry (Phase 4)
+ * Load AFTER moghare360-design-tokens.css.
+ * Provides shared operational primitives bound to canonical tokens.
+ * Preserve existing class names used by JS/selectors.
+ */
+
+html {
+  font-size: 100%;
+}
+
+body.m360-ds-ops,
+.m360-rc-page,
+.m360-ops-page {
+  margin: 0;
+  font-family: var(--m360-font-family-persian);
+  font-size: var(--m360-font-size-base);
+  line-height: var(--m360-line-height-normal);
+  color: var(--m360-color-neutral-800);
+  background: var(--m360-bg-app);
+}
+
+.m360-ds-ops h1,
+.m360-rc-page h1 { font-size: var(--m360-font-size-h1); font-weight: var(--m360-font-weight-bold); }
+.m360-ds-ops h2,
+.m360-rc-page h2 { font-size: var(--m360-font-size-h2); font-weight: var(--m360-font-weight-semibold); }
+.m360-ds-ops h3,
+.m360-rc-page h3 { font-size: var(--m360-font-size-h3); font-weight: var(--m360-font-weight-semibold); }
+
+/* Control heights */
+.m360-btn,
+.m360-form-input,
+.m360-form-select,
+button.m360-btn,
+input.m360-form-input,
+select.m360-form-select {
+  min-height: var(--m360-control-height);
+}
+
+.m360-btn-sm { min-height: var(--m360-control-height-sm); }
+.m360-control-lg,
+.m360-btn-lg { min-height: var(--m360-control-height-lg); }
+
+/* Table density */
+.m360-table th,
+.m360-table td {
+  padding: var(--m360-table-cell-pad-y) var(--m360-table-cell-pad-x);
+  font-size: var(--m360-table-font-size);
+}
+
+.m360-table--compact th,
+.m360-table--compact td {
+  padding: var(--m360-table-density-compact-pad-y) var(--m360-table-density-compact-pad-x);
+}
+
+/* Status badges use token paddings */
+.m360-badge {
+  padding: var(--m360-badge-pad-y) var(--m360-badge-pad-x);
+  border-radius: var(--m360-badge-radius);
+  font-size: var(--m360-badge-font-size);
+}
+
+/* Drawer */
+.m360-drawer {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  inset-inline-end: 0;
+  width: min(100vw, var(--m360-drawer-width));
+  max-width: 100%;
+  background: var(--m360-bg-surface);
+  border-inline-start: var(--m360-border-width) solid var(--m360-border-color);
+  box-shadow: var(--m360-shadow-lg);
+  z-index: var(--m360-z-drawer);
+  overflow: auto;
+  padding: var(--m360-space-4);
+}
+
+.m360-drawer--sm { width: min(100vw, var(--m360-drawer-width-sm)); }
+.m360-drawer--lg { width: min(100vw, var(--m360-drawer-width-lg)); }
+
+.m360-drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  z-index: calc(var(--m360-z-drawer) - 1);
+}
+
+/* Focused operational layout — avoid long “tomari” pages */
+.m360-ops-focus {
+  max-width: var(--m360-content-max-width);
+  margin: 0 auto;
+  padding: var(--m360-space-4);
+}
+
+.m360-ops-focus__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--m360-space-2);
+  margin-bottom: var(--m360-space-4);
+}
+
+.m360-ops-focus__panel {
+  background: var(--m360-bg-surface);
+  border: var(--m360-border-width) solid var(--m360-border-color);
+  border-radius: var(--m360-radius-md);
+  box-shadow: var(--m360-shadow-card);
+  padding: var(--m360-space-4);
+}
+
+/* Responsive widths: 1600 / 1366 / 1024 / 768 / 390 */
+@media (max-width: 1600px) {
+  .m360-ops-focus { padding: var(--m360-space-4); }
+}
+@media (max-width: 1366px) {
+  :root { --m360-sidebar-width: 240px; }
+}
+@media (max-width: 1024px) {
+  :root {
+    --m360-drawer-width: var(--m360-drawer-width-sm);
+    --m360-content-max-width: 100%;
+  }
+  .m360-ops-focus { padding: var(--m360-space-3); }
+}
+@media (max-width: 768px) {
+  :root {
+    --m360-control-height: var(--m360-control-height-md);
+    --m360-font-size-base: 0.9375rem;
+  }
+  .m360-ops-focus__actions { flex-direction: column; align-items: stretch; }
+}
+@media (max-width: 390px) {
+  :root {
+    --m360-space-4: 0.75rem;
+    --m360-table-cell-pad-x: var(--m360-space-2);
+  }
+}

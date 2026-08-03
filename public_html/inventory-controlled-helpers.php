@@ -78,8 +78,9 @@ if (!function_exists('renderHeader')) {
         echo '<link rel="stylesheet" href="assets/moghare360-ui/moghare360-design-tokens.css">';
         echo '<link rel="stylesheet" href="assets/moghare360-ui/moghare360-rtl.css">';
         echo '<link rel="stylesheet" href="assets/moghare360-ui/moghare360-customer-core.css">';
+        require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-design-system-helper.php';
+        m360_ds_render_stylesheets('ops');
         echo '<link rel="stylesheet" href="assets/css/moghare360-v1-luxury-ui.css">';
-        echo '<link rel="stylesheet" href="assets/css/m360-operational-shell.css">';
         echo '<link rel="stylesheet" href="assets/style.css">';
         echo '</head><body class="m360-rtl inventory-page"><div class="m360-wrap inventory-wrap">';
         echo '<header class="inventory-page-header"><a href="erp-staff-home.php">داشبورد پرسنل</a><h1>' . e($title) . '</h1>';

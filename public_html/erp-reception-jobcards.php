@@ -50,7 +50,7 @@ $jobcardRows = $pageInfo['rows'];
     <link rel="stylesheet" href="assets/moghare360-ui/moghare360-soft-run-release.css">
     <link rel="stylesheet" href="assets/css/mirror.css">
     <link rel="stylesheet" href="assets/css/moghare360-v1-luxury-ui.css">
-    <link rel="stylesheet" href="<?= m360_operational_shell_h(m360_operational_shell_css_href()) ?>">
+    <?php m360_operational_shell_render_stylesheets(); ?>
     <style>
         .p2-jc-wrap { max-width: 1120px; margin: 0 auto; box-sizing: border-box; overflow-x: hidden; }
         .p2-jc-top { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:.5rem; margin:0 0 .85rem; }
@@ -180,3 +180,4 @@ $jobcardRows = $pageInfo['rows'];
 </div>
 </body>
 </html>
+

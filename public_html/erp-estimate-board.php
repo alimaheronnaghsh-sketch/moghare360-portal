@@ -37,7 +37,7 @@ $gateLabelFa = static function (string $raw): string {
     <link rel="stylesheet" href="assets/moghare360-ui/moghare360-soft-run-release.css">
     <link rel="stylesheet" href="assets/css/mirror.css">
     <link rel="stylesheet" href="assets/css/moghare360-v1-luxury-ui.css">
-    <link rel="stylesheet" href="<?= m360_operational_shell_h(m360_operational_shell_css_href()) ?>">
+    <?php m360_operational_shell_render_stylesheets(); ?>
     <style>
         .m360-est-page.m360-rc-page { background: transparent; padding: 0; color: #e5e7eb; }
         .m360-est-wrap { max-width: 1120px; margin: 0 auto; overflow-x: hidden; box-sizing: border-box; }
@@ -109,3 +109,4 @@ $gateLabelFa = static function (string $raw): string {
 </div>
 </body>
 </html>
+

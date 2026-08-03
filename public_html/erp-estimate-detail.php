@@ -68,7 +68,7 @@ $m360StageTree = m360_case_stage_tree_resolve($conn, [
     <!-- ESTIMATE_DETAIL_VISUAL_RECONCILE_20260721_1755 -->
     <link rel="stylesheet" href="assets/moghare360-ui/moghare360-soft-run-release.css?v=<?= (int)@filemtime(__DIR__ . '/assets/moghare360-ui/moghare360-soft-run-release.css') ?>">
     <link rel="stylesheet" href="assets/css/m360-estimate.css?v=<?= (int)@filemtime(__DIR__ . '/assets/css/m360-estimate.css') ?>">
-    <link rel="stylesheet" href="<?= m360_operational_shell_h(m360_operational_shell_css_href()) ?>?v=<?= (int)@filemtime(__DIR__ . '/assets/css/m360-operational-shell.css') ?>">
+    <?php m360_operational_shell_render_stylesheets(); ?>
     <style>
         /* Page-scoped Luxury Dark Green — estimate detail only */
         .m360-est-page {
@@ -454,3 +454,4 @@ $m360StageTree = m360_case_stage_tree_resolve($conn, [
 </div>
 </body>
 </html>
+
