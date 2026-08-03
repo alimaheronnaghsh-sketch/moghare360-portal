@@ -36,6 +36,16 @@ uploads/
 logs/
 backups/
 
+# Access-matrix / workshop scanner evidence (must stay out of Git)
+tools/_generated/
+tools/_tmp_*.php
+tools/_tmp_*.txt
+tools/access-matrix-route-discovery.json
+tools/access-matrix-uat-snapshot.tsv
+tools/access-matrix-*.tsv
+tools/workshop-*.tsv
+tools/workshop-*.txt
+
 # OS / IDE
 .DS_Store
 Thumbs.db

@@ -121,7 +121,7 @@ function erp_m17_list_guard_eval($connection, int $userId, string $actionKey): a
         ];
     }
 
-    if ($userId === ERP_M17_PLATFORM_OWNER_ID) {
+    if (function_exists('m360_am_is_owner') && m360_am_is_owner($connection, $userId)) {
         return [
             'allowed' => true,
             'label' => 'PLACEHOLDER_OWNER_ALLOWED',
@@ -150,7 +150,7 @@ try {
 $phpVersion = PHP_VERSION;
 $odbcAvailable = extension_loaded('odbc');
 
-$userId = ERP_M17_PLATFORM_OWNER_ID;
+$userId = 0;
 $username = '—';
 $rolesText = '—';
 $permissionCount = 0;
@@ -169,11 +169,16 @@ try {
     $connectionStatus = 'OK';
     $connectionDetail = 'ODBC Trusted Connection connected';
 
-    $resolvedUserId = erp_auth_current_user_id();
+    require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-access-matrix-guard.php';
+    require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-workshop-access-enforcement.php';
+    m360_ws_require('workshop.jobcard.view');
+    $wsCtx = m360_ws_require_actor_context();
 
-    if ($resolvedUserId !== $userId) {
+    $resolvedUserId = erp_auth_current_user_id();
+    if ($resolvedUserId === null || (int)$resolvedUserId < 1) {
         throw new RuntimeException('Access denied.');
     }
+    $userId = (int)$resolvedUserId;
 
     $user = erp_auth_load_current_user($connection);
 
@@ -193,9 +198,16 @@ try {
 
     $guardList = erp_m17_list_guard_eval($connection, $userId, ERP_M17_LIST_ACTION);
     $guardListLabel = (string)($guardList['label'] ?? 'FAIL');
+    // Matrix guard already enforced workshop.jobcard.view above.
 
-    if (empty($guardList['allowed'])) {
-        throw new RuntimeException('Access denied.');
+    $companyWhere = '1=1';
+    $listParams = [];
+    if (customer_core_column_exists($connection, 'erp_jobcards', 'company_id')) {
+        $cs = m360_ws_jobcard_company_sql('j', (int)$wsCtx['company_id'], (bool)$wsCtx['is_owner']);
+        $companyWhere = $cs['sql'];
+        $listParams = $cs['params'];
+    } elseif (!(bool)$wsCtx['is_owner']) {
+        $companyWhere = '1=0';
     }
 
     $listRows = erp_m17_list_fetch_rows(
@@ -221,7 +233,9 @@ try {
         FROM dbo.erp_jobcards j
         JOIN dbo.erp_customers c ON c.customer_id = j.customer_id
         JOIN dbo.erp_vehicles v ON v.vehicle_id = j.vehicle_id
-        ORDER BY j.jobcard_id DESC'
+        WHERE (' . $companyWhere . ')
+        ORDER BY j.jobcard_id DESC',
+        $listParams
     );
 
     $overallOk = $connectionStatus === 'OK'

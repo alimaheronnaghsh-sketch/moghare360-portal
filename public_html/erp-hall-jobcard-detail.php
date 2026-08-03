@@ -5,10 +5,13 @@ require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-fulljob-lifecycle-helper.php';
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-case-stage-tree-helper.php';
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-case-stage-header.php';
+require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-access-matrix-guard.php';
+require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-workshop-access-enforcement.php';
 
 $conn = customer_core_db();
 $actor = m360_fulljob_require_role($conn, ['OWNER', 'SYSTEM_ADMIN', 'SERVICE_MANAGER']);
 $jobcardId = (int)($_GET['jobcard_id'] ?? $_POST['jobcard_id'] ?? 0);
+m360_ws_require('workshop.jobcard.view', $jobcardId > 0 ? $jobcardId : null);
 
 $allowedTabs = ['overview', 'assignments', 'requests', 'external', 'timeline', 'quality'];
 $tabRaw = strtolower(trim((string)($_GET['tab'] ?? $_POST['tab'] ?? 'overview')));
@@ -17,24 +20,50 @@ $tab = in_array($tabRaw, $allowedTabs, true) ? $tabRaw : 'overview';
 if (is_resource($conn) && ($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     $action = trim((string)($_POST['action'] ?? ''));
     $result = ['ok' => false, 'message' => 'اقدام نامعتبر است.'];
+    $wsCtx = m360_ws_require_actor_context();
     if ($action === 'assign_team') {
+        $teamCode = strtoupper(trim((string)($_POST['team_code'] ?? '')));
+        $assignKey = m360_ws_assign_permission_for_team($teamCode);
+        if ($assignKey === null) {
+            m360_am_forbidden('واحد تخصیص نامعتبر است.');
+        }
+        m360_ws_require($assignKey, $jobcardId);
         $result = m360_fulljob_assign_team(
             $conn,
             $jobcardId,
-            (string)($_POST['team_code'] ?? ''),
+            $teamCode,
             (int)$actor['user_id'],
             (string)($_POST['assignment_description'] ?? '')
         );
     } elseif ($action === 'assign_technician') {
-        $result = m360_fulljob_assign_technician(
+        // Technician assignment must be scoped to an active team work-item (not whole JobCard alone).
+        $teamCode = strtoupper(trim((string)($_POST['team_code'] ?? '')));
+        $assignKey = m360_ws_assign_permission_for_team($teamCode);
+        if ($assignKey === null) {
+            m360_am_forbidden('برای تخصیص تکنسین، واحد کاری (مکانیک/برق/آپشن) الزامی است.');
+        }
+        m360_ws_require($assignKey, $jobcardId);
+        $techId = (int)($_POST['technician_user_id'] ?? 0);
+        m360_ws_assert_technician_eligible($conn, $techId, (int)$wsCtx['company_id']);
+        $activeTeam = customer_core_scalar(
             $conn,
-            $jobcardId,
-            (int)($_POST['technician_user_id'] ?? 0),
-            (int)($_POST['assistant_user_id'] ?? 0) ?: null,
-            (int)$actor['user_id'],
-            (string)($_POST['priority'] ?? 'NORMAL'),
-            (string)($_POST['assignment_description'] ?? '')
+            "SELECT TOP 1 assignment_id FROM dbo.erp_jobcard_assignments
+             WHERE jobcard_id=? AND assignment_type=N'TEAM_ASSIGNMENT' AND team_code=? AND status=N'ACTIVE'",
+            [$jobcardId, $teamCode]
         );
+        if ((int)($activeTeam ?? 0) < 1) {
+            $result = ['ok' => false, 'message' => 'ابتدا واحد کاری مربوط را تخصیص دهید؛ تخصیص تکنسین بدون آیتم کاری واحد مجاز نیست.'];
+        } else {
+            $result = m360_fulljob_assign_technician(
+                $conn,
+                $jobcardId,
+                $techId,
+                (int)($_POST['assistant_user_id'] ?? 0) ?: null,
+                (int)$actor['user_id'],
+                (string)($_POST['priority'] ?? 'NORMAL'),
+                (string)($_POST['assignment_description'] ?? '')
+            );
+        }
     }
 
     $flashType = 'error';
@@ -548,7 +577,10 @@ mirror_render_head('جزئیات سالن کارت کار', 'staff');
         <a class="m360-btn" href="<?= m360_fulljob_h(m360_hall_append_return_context('erp-unit-work-board.php?unit=MECHANICAL', $jobcardId, 'assignments')) ?>">کارتابل مکانیک</a>
         <a class="m360-btn" href="<?= m360_fulljob_h(m360_hall_append_return_context('erp-unit-work-board.php?unit=ELECTRICAL', $jobcardId, 'assignments')) ?>">کارتابل برق</a>
         <a class="m360-btn" href="<?= m360_fulljob_h(m360_hall_append_return_context('erp-unit-work-board.php?unit=OPTIONS', $jobcardId, 'assignments')) ?>">کارتابل آپشن</a>
+        <a class="m360-btn" href="erp-workshop-work-item-assign.php?jobcard_id=<?= $jobcardId ?>">تخصیص سرویس دوره‌ای / کارشناسی</a>
         <a class="m360-btn" href="erp-technician-work-board.php">تابلوی تکنسین</a>
+        <a class="m360-btn" href="erp-workshop-diagnosis-report.php?jobcard_id=<?= $jobcardId ?>">گزارش تشخیص</a>
+        <a class="m360-btn" href="erp-workshop-work-report.php?jobcard_id=<?= $jobcardId ?>">گزارش انجام کار</a>
       </div>
 
       <h2 class="m360-section-title">تخصیص تکنسین</h2>
@@ -575,6 +607,12 @@ mirror_render_head('جزئیات سالن کارت کار', 'staff');
           <input type="hidden" name="jobcard_id" value="<?= $jobcardId ?>">
           <input type="hidden" name="tab" value="assignments">
           <input type="hidden" name="action" value="assign_technician">
+          <select name="team_code" required>
+            <option value="">واحد کاری</option>
+            <?php foreach (m360_fulljob_team_codes() as $code): ?>
+              <option value="<?= m360_fulljob_h($code) ?>"><?= m360_fulljob_h(m360_fulljob_team_label_fa($code)) ?></option>
+            <?php endforeach; ?>
+          </select>
           <input name="technician_user_id" placeholder="شناسه کاربر تکنسین" inputmode="numeric" required>
           <input name="assistant_user_id" placeholder="دستیار اختیاری">
           <select name="priority">

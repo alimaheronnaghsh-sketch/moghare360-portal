@@ -6,6 +6,8 @@ header('X-Robots-Tag: noindex, nofollow');
 
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-qc-helper.php';
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-staff-home-helper.php';
+require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-access-matrix-guard.php';
+require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-workshop-access-enforcement.php';
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
     header('Location: erp-qc-board.php');
@@ -26,6 +28,20 @@ if ($qcCheckId > 0) {
 if ($jobcardId < 1 || $action === '') {
     header('Location: erp-qc-board.php?msg=' . rawurlencode('درخواست نامعتبر است.') . '&ok=0');
     exit;
+}
+
+$qcPerm = m360_ws_qc_permission_for_action($action);
+if ($qcPerm === null) {
+    // delivery_ready / hold / cancel remain gated by queue view (no silent elevate to approve)
+    m360_ws_require('workshop.qc.queue.view', $jobcardId);
+} else {
+    m360_ws_require($qcPerm, $jobcardId);
+}
+if (in_array($action, ['qc_failed', 'rework_required'], true)) {
+    $reason = trim((string)($_POST['failure_reason'] ?? $_POST['return_reason'] ?? ''));
+    if ($reason === '') {
+        m360_am_forbidden('برای برگشت از کنترل کیفیت، ذکر دلیل به فارسی الزامی است.');
+    }
 }
 
 $conn = customer_core_db();

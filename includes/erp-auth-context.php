@@ -878,6 +878,26 @@ if (!function_exists('erp_auth_can')) {
             return false;
         }
 
+        // Prefer access-matrix effective resolver when available (base + overrides + roles).
+        $matrixHelper = dirname(__DIR__) . '/public_html/includes/m360-access-matrix-helper.php';
+        if (is_file($matrixHelper)) {
+            require_once $matrixHelper;
+            if (function_exists('m360_am_effective_can')) {
+                $companyId = 1;
+                if (function_exists('erp_auth_verified_company_id')) {
+                    $cid = erp_auth_verified_company_id();
+                    if (is_int($cid) && $cid > 0) {
+                        $companyId = $cid;
+                    }
+                }
+                return m360_am_effective_can($db, $userId, $companyId, $permissionKey);
+            }
+        }
+
+        if (function_exists('erp_auth_is_system_owner') && erp_auth_is_system_owner($db, $userId)) {
+            return true;
+        }
+
         $permissions = erp_auth_current_permissions($db, $userId);
         $permissionKeys = erp_auth_context_permission_keys($permissions);
 

@@ -6,6 +6,8 @@ declare(strict_types=1);
  */
 
 require_once __DIR__ . '/includes/erp-operation-engine-helper.php';
+require_once __DIR__ . '/includes/m360-access-matrix-guard.php';
+require_once __DIR__ . '/includes/m360-workshop-access-enforcement.php';
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
     http_response_code(405);
@@ -24,6 +26,11 @@ if ($operationCaseId === null || $operationCaseId < 1) {
 
 if (!operation_engine_validate_qc_decision($decisionStatus)) {
     operation_engine_render_error_page('خطای اعتبارسنجی', 'وضعیت تصمیم QC نامعتبر است.');
+}
+
+m360_ws_require('workshop.qc.approve_return');
+if (trim((string)$decisionNote) === '' && in_array($decisionStatus, ['FAILED', 'REWORK', 'RETURN'], true)) {
+    m360_am_forbidden('برای برگشت از کنترل کیفیت، ذکر دلیل الزامی است.');
 }
 
 $connection = false;

@@ -12,6 +12,9 @@ header('X-Robots-Tag: noindex, nofollow');
 require_once __DIR__ . '/includes/m360-access-management-helper.php';
 require_once __DIR__ . '/includes/m360-access-audit-helper.php';
 require_once __DIR__ . '/includes/reception-ui-helper.php';
+require_once __DIR__ . '/includes/m360-access-matrix-guard.php';
+
+m360_am_guard('access.audit.view');
 
 $actorId = m360_access_mgmt_require_admin();
 $conn = m360_access_mgmt_db();

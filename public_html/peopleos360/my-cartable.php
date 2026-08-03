@@ -3,7 +3,9 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/includes/p360-hr-central-bridge.php';
 require_once __DIR__ . '/includes/p360-hr-occ-med-manager.php';
+require_once dirname(__DIR__) . '/includes/m360-access-matrix-guard.php';
 
+m360_am_guard('hr.self.cartable.VIEW');
 p360hr_require_password_changed_for_cartable();
 $emp = p360hr_employee_for_current_user();
 $user = p360hr_current_core_user_row();

@@ -288,7 +288,7 @@ function m360_qc_update_jobcard($conn, int $jobcardId, array $sets, array $param
 /**
  * @return list<array<string, mixed>>
  */
-function m360_qc_board_list($conn, ?string $filter = null, int $limit = 150): array
+function m360_qc_board_list($conn, ?string $filter = null, int $limit = 150, ?int $companyId = null, bool $isOwner = false): array
 {
     if (!is_resource($conn)) {
         return [];
@@ -304,6 +304,17 @@ function m360_qc_board_list($conn, ?string $filter = null, int $limit = 150): ar
             $where .= ' AND j.qc_status = ?';
             $params[] = $f;
         }
+    }
+    $hasCompany = customer_core_column_exists($conn, 'erp_jobcards', 'company_id');
+    if ($hasCompany) {
+        require_once __DIR__ . '/m360-workshop-access-enforcement.php';
+        $cs = m360_ws_jobcard_company_sql('j', (int)($companyId ?? 0), $isOwner);
+        $where .= ' AND (' . $cs['sql'] . ')';
+        foreach ($cs['params'] as $p) {
+            $params[] = $p;
+        }
+    } elseif (!$isOwner) {
+        return [];
     }
     $sql = 'SELECT TOP ' . $limit . ' j.jobcard_id, j.qc_status, j.work_execution_status, j.jobcard_status,
             j.estimate_status, j.ready_for_qc_at, j.delivery_readiness_status, j.delivery_ready_at,

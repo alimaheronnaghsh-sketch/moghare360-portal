@@ -35,9 +35,20 @@ if (!m360_fulljob_is_valid_team_code($unitRaw)) {
     exit;
 }
 
+require_once __DIR__ . '/includes/m360-access-matrix-guard.php';
+require_once __DIR__ . '/includes/m360-workshop-access-enforcement.php';
+$viewKey = m360_ws_view_permission_for_unit($unitRaw);
+if ($viewKey === null) {
+    m360_am_forbidden('واحد عملیاتی نامعتبر است.');
+}
+m360_ws_require($viewKey);
+$wsCtx = m360_ws_require_actor_context();
+
 $unit = $unitRaw;
 $title = 'کارتابل ' . m360_fulljob_team_label_fa($unit);
-$rows = is_resource($conn) ? m360_fulljob_unit_work_board($conn, $unit) : [];
+$rows = is_resource($conn)
+    ? m360_fulljob_unit_work_board($conn, $unit, (int)$wsCtx['company_id'], (bool)$wsCtx['is_owner'])
+    : [];
 
 // Technicians only see JobCards where they have an active technician assignment.
 if ((string)($actor['role_code'] ?? '') === 'TECHNICIAN' && is_resource($conn) && $rows !== []) {

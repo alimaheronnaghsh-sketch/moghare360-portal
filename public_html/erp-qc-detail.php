@@ -6,10 +6,16 @@ header('X-Robots-Tag: noindex, nofollow');
 
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-qc-helper.php';
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-operational-shell-helper.php';
+require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-access-matrix-guard.php';
+require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-workshop-access-enforcement.php';
 
 m360_qc_require_staff();
 
 $jobcardId = isset($_GET['jobcard_id']) ? (int)$_GET['jobcard_id'] : 0;
+m360_ws_require_any(
+    ['workshop.qc.queue.view', 'workshop.qc.result.create', 'workshop.qc.approve_return'],
+    $jobcardId > 0 ? $jobcardId : null
+);
 $qcCheckId = isset($_GET['qc_check_id']) ? (int)$_GET['qc_check_id'] : 0;
 $flash = isset($_GET['msg']) ? trim((string)$_GET['msg']) : '';
 $flashOk = isset($_GET['ok']) && $_GET['ok'] === '1';

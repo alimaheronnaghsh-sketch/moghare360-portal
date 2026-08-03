@@ -136,7 +136,7 @@ function erp_m17_detail_guard_eval($connection, int $userId, string $actionKey):
         ];
     }
 
-    if ($userId === ERP_M17_PLATFORM_OWNER_ID) {
+    if (function_exists('m360_am_is_owner') && m360_am_is_owner($connection, $userId)) {
         return [
             'allowed' => true,
             'label' => 'PLACEHOLDER_OWNER_ALLOWED',
@@ -165,7 +165,7 @@ try {
 $phpVersion = PHP_VERSION;
 $odbcAvailable = extension_loaded('odbc');
 
-$userId = ERP_M17_PLATFORM_OWNER_ID;
+$userId = 0;
 $username = '—';
 $rolesText = '—';
 $permissionCount = 0;
@@ -186,11 +186,16 @@ try {
     $connectionStatus = 'OK';
     $connectionDetail = 'ODBC Trusted Connection connected';
 
-    $resolvedUserId = erp_auth_current_user_id();
+    require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-access-matrix-guard.php';
+    require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-workshop-access-enforcement.php';
+    $selectedJobcardId = erp_m17_detail_parse_jobcard_id();
+    m360_ws_require('workshop.jobcard.view', $selectedJobcardId > 0 ? $selectedJobcardId : null);
 
-    if ($resolvedUserId !== $userId) {
+    $resolvedUserId = erp_auth_current_user_id();
+    if ($resolvedUserId === null || (int)$resolvedUserId < 1) {
         throw new RuntimeException('Access denied.');
     }
+    $userId = (int)$resolvedUserId;
 
     $user = erp_auth_load_current_user($connection);
 
@@ -210,12 +215,7 @@ try {
 
     $guardView = erp_m17_detail_guard_eval($connection, $userId, ERP_M17_VIEW_ACTION);
     $guardViewLabel = (string)($guardView['label'] ?? 'FAIL');
-
-    if (empty($guardView['allowed'])) {
-        throw new RuntimeException('Access denied.');
-    }
-
-    $selectedJobcardId = erp_m17_detail_parse_jobcard_id();
+    // Matrix guard already enforced workshop.jobcard.view above.
 
     if ($selectedJobcardId <= 0) {
         $latestRows = erp_m17_detail_fetch_rows(

@@ -6,6 +6,10 @@ declare(strict_types=1);
  */
 
 require_once __DIR__ . '/includes/erp-operation-engine-helper.php';
+require_once __DIR__ . '/includes/m360-access-matrix-guard.php';
+require_once __DIR__ . '/includes/m360-workshop-access-enforcement.php';
+m360_am_guard_any(['workshop.mechanical.view', 'workshop.periodic_service.view']);
+$wsCtx = m360_ws_require_actor_context();
 
 erp_auth_context_start();
 if (erp_auth_context_session_user_id() === null) {
@@ -47,12 +51,25 @@ try {
                     s.completed_at,
                     c.operation_code,
                     c.current_stage,
-                    c.current_status
+                    c.current_status,
+                    c.jobcard_id
                 FROM dbo.erp_operation_service_steps s
                 INNER JOIN dbo.erp_operation_cases c ON c.operation_case_id = s.operation_case_id
+                INNER JOIN dbo.erp_jobcards j ON j.jobcard_id = c.jobcard_id
                 WHERE s.step_status <> ?';
 
         $params = ['CANCELLED'];
+
+        if (function_exists('customer_core_column_exists')
+            && customer_core_column_exists($connection, 'erp_jobcards', 'company_id')
+            && !(bool)$wsCtx['is_owner']) {
+            $sql .= ' AND j.company_id = ?';
+            $params[] = (int)$wsCtx['company_id'];
+        } elseif ((!function_exists('customer_core_column_exists')
+                || !customer_core_column_exists($connection, 'erp_jobcards', 'company_id'))
+            && !(bool)$wsCtx['is_owner']) {
+            $sql .= ' AND 1=0';
+        }
 
         if ($filterStatus !== '') {
             $sql .= ' AND s.step_status = ?';

@@ -3,10 +3,16 @@ declare(strict_types=1);
 
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'mirror-layout.php';
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-fulljob-lifecycle-helper.php';
+require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-access-matrix-guard.php';
+require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-workshop-access-enforcement.php';
 
 $conn = customer_core_db();
 $actor = m360_fulljob_require_role($conn, ['OWNER', 'SYSTEM_ADMIN', 'SERVICE_MANAGER', 'TECHNICIAN']);
 $jobcardId = (int)($_GET['jobcard_id'] ?? $_POST['jobcard_id'] ?? 0);
+m360_ws_require_any(
+    ['workshop.part_request.create', 'workshop.part_request.view_status'],
+    $jobcardId > 0 ? $jobcardId : null
+);
 if (is_resource($conn) && !m360_fulljob_technician_can_open($conn, $jobcardId, $actor)) {
     http_response_code(403);
     echo 'این کارت کار به شما تخصیص ندارد.';

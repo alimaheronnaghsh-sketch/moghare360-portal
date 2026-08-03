@@ -2,7 +2,9 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/includes/p360-hr-central-bridge.php';
+require_once dirname(__DIR__) . '/includes/m360-access-matrix-guard.php';
 
+m360_am_guard('hr.admin.personnel.VIEW');
 p360hr_require_password_changed_for_cartable();
 if (!p360hr_can_manage_personnel()) {
     http_response_code(403);

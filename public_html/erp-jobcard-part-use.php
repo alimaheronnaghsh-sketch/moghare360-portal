@@ -563,7 +563,7 @@ try {
     exit(1);
 }
 
-$userId = ERP_M24_PLATFORM_OWNER_ID;
+$userId = 0;
 $guardUseLabel = 'FAIL';
 $guardIssueLabel = 'FAIL';
 $connectionStatus = 'FAIL';
@@ -609,19 +609,30 @@ try {
     $connection = erp_auth_create_local_odbc_connection();
     $connectionStatus = 'OK';
 
-    if (erp_auth_current_user_id() !== $userId || erp_auth_load_current_user($connection) === null) {
+    require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-access-matrix-guard.php';
+    require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-workshop-access-enforcement.php';
+    $resolvedUid = (int)(erp_auth_current_user_id() ?? 0);
+    if ($resolvedUid < 1 || erp_auth_load_current_user($connection) === null) {
         throw new RuntimeException('Access denied.');
+    }
+    $userId = $resolvedUid;
+
+    $jcForGuard = (int)($_POST['jobcard_id'] ?? $_GET['jobcard_id'] ?? 0);
+    if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
+        m360_ws_reject_injected_prices($_POST);
+        m360_ws_require('workshop.part_issue.allocate', $jcForGuard > 0 ? $jcForGuard : null);
+    } else {
+        m360_ws_require_any(
+            ['workshop.part_issue.allocate', 'workshop.billable_parts.view'],
+            $jcForGuard > 0 ? $jcForGuard : null
+        );
     }
 
     $guardUse = erp_m24_guard_eval($connection, $userId, ERP_M24_USE_ACTION);
     $guardIssue = erp_m24_guard_eval($connection, $userId, ERP_M24_ISSUE_ACTION);
     $guardUseLabel = (string)($guardUse['label'] ?? 'FAIL');
     $guardIssueLabel = (string)($guardIssue['label'] ?? 'FAIL');
-
-    if (empty($guardUse['allowed']) || empty($guardIssue['allowed'])) {
-        $accessDenied = true;
-        throw new RuntimeException('Access denied.');
-    }
+    // Matrix R0B keys supersede placeholder action map for authorization.
 
     $jobcardOptions = m24_fetch_rows(
         $connection,

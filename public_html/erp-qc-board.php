@@ -7,12 +7,19 @@ header('X-Robots-Tag: noindex, nofollow');
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-qc-helper.php';
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-operational-shell-helper.php';
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'mirror-layout.php';
+require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-access-matrix-guard.php';
 
+m360_am_guard('workshop.qc.queue.view');
 m360_qc_require_staff();
+
+require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-workshop-access-enforcement.php';
+$wsCtx = m360_ws_require_actor_context();
 
 $filter = isset($_GET['status']) ? strtoupper(trim((string)$_GET['status'])) : 'ALL';
 $conn = customer_core_db();
-$rows = $conn !== false ? m360_qc_board_list($conn, $filter === 'ALL' ? null : $filter, 150) : [];
+$rows = $conn !== false
+    ? m360_qc_board_list($conn, $filter === 'ALL' ? null : $filter, 150, (int)$wsCtx['company_id'], (bool)$wsCtx['is_owner'])
+    : [];
 ?>
 <!DOCTYPE html>
 <html lang="fa" dir="rtl">

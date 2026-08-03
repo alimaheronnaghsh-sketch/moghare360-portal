@@ -8,10 +8,16 @@ require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-operational-shell-helper.php';
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-staff-home-helper.php';
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-fulljob-lifecycle-helper.php';
+require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-access-matrix-guard.php';
+require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-workshop-access-enforcement.php';
 
 m360_work_require_staff();
 
 $jobcardId = isset($_GET['jobcard_id']) ? (int)$_GET['jobcard_id'] : 0;
+m360_ws_require_any(
+    ['workshop.work_report.create', 'workshop.diagnosis_report.create', 'workshop.mechanical.view', 'workshop.electrical_options.view'],
+    $jobcardId > 0 ? $jobcardId : null
+);
 $flash = isset($_GET['msg']) ? trim((string)$_GET['msg']) : '';
 $flashOk = isset($_GET['ok']) && $_GET['ok'] === '1';
 $unitRaw = strtoupper(trim((string)($_GET['unit'] ?? $_GET['team_code'] ?? '')));

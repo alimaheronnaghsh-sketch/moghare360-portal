@@ -7,6 +7,8 @@ header('X-Robots-Tag: noindex, nofollow');
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-work-execution-helper.php';
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-staff-home-helper.php';
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-fulljob-lifecycle-helper.php';
+require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-access-matrix-guard.php';
+require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-workshop-access-enforcement.php';
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
     header('Location: erp-work-execution-board.php');
@@ -25,6 +27,25 @@ $redirect = 'erp-work-execution-detail.php?jobcard_id=' . $jobcardId . $redirect
 if ($jobcardId < 1 || $action === '') {
     header('Location: erp-work-execution-board.php?msg=' . rawurlencode('درخواست نامعتبر است.') . '&ok=0');
     exit;
+}
+
+$wrPerm = m360_ws_work_report_permission_for_action($action);
+$diagPerm = m360_ws_diagnosis_permission_for_action($action);
+if ($action === 'approve_work_report' || $action === 'return_work_report') {
+    m360_am_forbidden('تأیید/برگشت گزارش انجام کار فقط از صفحه گزارش انجام کار مجاز است.');
+} elseif ($action === 'complete_service_operation' || $action === 'start_service_operation') {
+    m360_ws_reject_injected_prices($_POST);
+    m360_ws_require('workshop.service_line.create_no_price', $jobcardId);
+} elseif ($wrPerm !== null) {
+    m360_ws_require($wrPerm, $jobcardId);
+} elseif ($diagPerm !== null) {
+    m360_ws_require($diagPerm, $jobcardId);
+} elseif ($action === 'consume_approved_part') {
+    m360_ws_require('workshop.part_issue.receive_confirm', $jobcardId);
+} elseif ($action === 'waiting_for_parts') {
+    m360_ws_require('workshop.part_request.view_status', $jobcardId);
+} else {
+    m360_ws_require('workshop.work_report.create', $jobcardId);
 }
 
 $conn = customer_core_db();

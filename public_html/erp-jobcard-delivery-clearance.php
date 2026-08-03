@@ -10,6 +10,8 @@ header('Content-Type: text/html; charset=UTF-8');
 header('X-Robots-Tag: noindex, nofollow');
 
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'moghare360-delivery-clearance-helper.php';
+require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-access-matrix-guard.php';
+require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-workshop-access-enforcement.php';
 
 function wave4c_form_h(string $value): string
 {
@@ -22,10 +24,14 @@ $statusLabels = moghare360_delivery_clearance_status_labels();
 $decisionLabels = moghare360_delivery_clearance_decision_labels();
 $schema = moghare360_delivery_clearance_schema_status();
 
-$jobcardIdRaw = trim((string)($_GET['jobcard_id'] ?? ''));
+$jobcardIdRaw = trim((string)($_GET['jobcard_id'] ?? $_POST['jobcard_id'] ?? ''));
 $prefillJobcardId = ($jobcardIdRaw !== '' && ctype_digit($jobcardIdRaw) && (int)$jobcardIdRaw >= 1)
     ? (int)$jobcardIdRaw
     : null;
+m360_ws_require(
+    ($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' ? 'workshop.delivery.final_confirm' : 'workshop.delivery.queue.view',
+    $prefillJobcardId
+);
 $eligibility = $prefillJobcardId !== null
     ? moghare360_delivery_clearance_fetch_eligibility($prefillJobcardId)
     : null;

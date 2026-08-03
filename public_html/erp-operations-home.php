@@ -16,6 +16,12 @@ require_once __DIR__ . '/includes/m360-release-hardening-helper.php';
 
 m360_release_hardening_require_staff();
 
+require_once __DIR__ . '/includes/m360-access-matrix-guard.php';
+require_once __DIR__ . '/includes/m360-workshop-access-enforcement.php';
+m360_am_guard('workshop.operations.home.view');
+m360_ws_require_actor_context();
+// m360_ws_object_scope_not_applicable — navigation shell only; no JobCard entity.
+
 erp_auth_context_start();
 $displayName = trim((string)($_SESSION['erp_username'] ?? ''));
 if ($displayName === '') {
@@ -113,7 +119,35 @@ $opsEntries = [
         'secondary_href' => 'erp-delivery-control.php',
         'secondary_action' => 'کنترل تحویل',
     ],
+    [
+        'key' => 'internal_consumable',
+        'title' => 'مواد و ملزومات مصرفی داخلی',
+        'desc' => 'ثبت، تأیید و سوابق مصرف داخلی غیرقابل‌صورتحساب مشتری.',
+        'href' => 'erp-workshop-internal-consumable-create.php',
+        'action' => 'ثبت مصرف داخلی',
+        'available' => true,
+        'secondary_href' => 'erp-workshop-internal-consumable-queue.php',
+        'secondary_action' => 'صف تأیید',
+    ],
 ];
+
+// Menu visibility uses the same resolver as page guards (family keys independent of home.view).
+$opsVisibility = [
+    'mechanical' => ['workshop.mechanical.view'],
+    'electrical' => ['workshop.electrical_options.view'],
+    'options' => ['workshop.electrical_options.view'],
+    'qc' => ['workshop.qc.queue.view'],
+    'finance_delivery' => ['workshop.delivery.queue.view'],
+    'tech_parts' => ['workshop.part_request.view_status', 'workshop.part_request.create'],
+    'internal_consumable' => ['workshop.internal_consumable.create', 'workshop.internal_consumable.approve'],
+];
+$opsEntries = array_values(array_filter($opsEntries, static function (array $entry) use ($opsVisibility): bool {
+    $key = (string)($entry['key'] ?? '');
+    if (!isset($opsVisibility[$key])) {
+        return true;
+    }
+    return m360_ws_can_any($opsVisibility[$key]);
+}));
 ?>
 <!DOCTYPE html>
 <html lang="fa" dir="rtl">

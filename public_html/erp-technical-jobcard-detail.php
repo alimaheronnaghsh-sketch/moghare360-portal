@@ -10,10 +10,13 @@ header('X-Robots-Tag: noindex, nofollow');
 
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-technical-operation-helper.php';
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-operational-shell-helper.php';
+require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-access-matrix-guard.php';
+require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-workshop-access-enforcement.php';
 
 m360_technical_require_staff();
 
 $jobcardId = isset($_GET['jobcard_id']) ? (int)$_GET['jobcard_id'] : 0;
+m360_ws_require_any(['workshop.electrical_options.view', 'workshop.inspection.view'], $jobcardId > 0 ? $jobcardId : null);
 $flashMsg = isset($_GET['msg']) ? trim((string)$_GET['msg']) : '';
 $flashOk = isset($_GET['ok']) && (string)$_GET['ok'] === '1';
 $p15Missing = !m360_technical_p15_gate_available();

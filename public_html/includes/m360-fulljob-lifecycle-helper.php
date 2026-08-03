@@ -781,14 +781,27 @@ function m360_fulljob_active_team_assignments($conn, int $jobcardId): array
 }
 
 /**
- * Unit work board rows filtered by exact team_code (parameterized).
+ * Unit work board rows filtered by exact team_code (parameterized) + company scope.
  *
  * @return list<array<string, mixed>>
  */
-function m360_fulljob_unit_work_board($conn, string $teamCode): array
+function m360_fulljob_unit_work_board($conn, string $teamCode, ?int $companyId = null, bool $isOwner = false): array
 {
     $teamCode = strtoupper(trim($teamCode));
     if (!m360_fulljob_is_valid_team_code($teamCode)) {
+        return [];
+    }
+
+    $params = [$teamCode];
+    $companySql = '1=1';
+    if (customer_core_column_exists($conn, 'erp_jobcards', 'company_id')) {
+        require_once __DIR__ . '/m360-workshop-access-enforcement.php';
+        $cs = m360_ws_jobcard_company_sql('j', (int)($companyId ?? 0), $isOwner);
+        $companySql = $cs['sql'];
+        foreach ($cs['params'] as $p) {
+            $params[] = $p;
+        }
+    } elseif (!$isOwner) {
         return [];
     }
 
@@ -808,10 +821,11 @@ function m360_fulljob_unit_work_board($conn, string $teamCode): array
          LEFT JOIN dbo.core_users tu ON tu.user_id = a.assigned_to_user_id
          WHERE a.assignment_type = N'TEAM_ASSIGNMENT'
            AND a.team_code = ?
+           AND ({$companySql})
          ORDER BY
            CASE WHEN a.status = N'ACTIVE' THEN 0 ELSE 1 END,
            a.assignment_id DESC",
-        [$teamCode]
+        $params
     );
 }
 
@@ -1342,9 +1356,20 @@ function m360_fulljob_assign_technician(
     }
 }
 
-function m360_fulljob_assigned_technician_jobs($conn, array $actor): array
+function m360_fulljob_assigned_technician_jobs($conn, array $actor, ?int $companyId = null, bool $isOwner = false): array
 {
     $roleCode = (string)($actor['role_code'] ?? '');
+    $companySql = '1=1';
+    $companyParams = [];
+    if (customer_core_column_exists($conn, 'erp_jobcards', 'company_id')) {
+        require_once __DIR__ . '/m360-workshop-access-enforcement.php';
+        $cs = m360_ws_jobcard_company_sql('j', (int)($companyId ?? 0), $isOwner);
+        $companySql = $cs['sql'];
+        $companyParams = $cs['params'];
+    } elseif (!$isOwner) {
+        return [];
+    }
+
     if (m360_fulljob_role_can_hall($roleCode)) {
         return customer_core_fetch_rows(
             $conn,
@@ -1355,10 +1380,13 @@ function m360_fulljob_assigned_technician_jobs($conn, array $actor): array
              LEFT JOIN dbo.erp_customers c ON c.customer_id = j.customer_id
              LEFT JOIN dbo.erp_vehicles v ON v.vehicle_id = j.vehicle_id
              WHERE a.assignment_type = N'TECHNICIAN_ASSIGNMENT' AND a.status = N'ACTIVE'
-             ORDER BY a.assignment_id DESC"
+               AND ({$companySql})
+             ORDER BY a.assignment_id DESC",
+            $companyParams
         );
     }
 
+    $params = [(int)$actor['user_id'], (int)$actor['user_id'], ...$companyParams];
     return customer_core_fetch_rows(
         $conn,
         "SELECT a.*, j.jobcard_number, j.customer_id, j.vehicle_id, j.technical_status, j.work_execution_status,
@@ -1370,8 +1398,9 @@ function m360_fulljob_assigned_technician_jobs($conn, array $actor): array
          WHERE a.assignment_type = N'TECHNICIAN_ASSIGNMENT'
            AND a.status = N'ACTIVE'
            AND (a.assigned_to_user_id = ? OR a.assistant_user_id = ?)
+           AND ({$companySql})
          ORDER BY a.assignment_id DESC",
-        [(int)$actor['user_id'], (int)$actor['user_id']]
+        $params
     );
 }
 
