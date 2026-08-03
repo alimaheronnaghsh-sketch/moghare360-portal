@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Template Digital Asset Links statement for TWA.
+  Publish the production JSON at https://PLACEHOLDER_HTTPS_ORIGIN/.well-known/assetlinks.json
+  Replace PLACEHOLDER_RELEASE_CERT_SHA256 with the release signing cert fingerprint.
+-->
+<resources>
+  <string name="asset_statements">
+    [{
+      \"relation\": [\"delegate_permission/common.handle_all_urls\"],
+      \"target\": {
+        \"namespace\": \"android_app\",
+        \"package_name\": \"ir.moghare360.app\",
+        \"sha256_cert_fingerprints\": [\"PLACEHOLDER_RELEASE_CERT_SHA256\"]
+      }
+    }]
+  </string>
+  <string name="app_name">MOGHAREH360</string>
+  <string name="launcher_name">مقاره۳۶۰</string>
+  <string name="host_placeholder">PLACEHOLDER_HTTPS_ORIGIN</string>
+</resources>

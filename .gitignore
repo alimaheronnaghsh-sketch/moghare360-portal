@@ -46,6 +46,22 @@ tools/access-matrix-*.tsv
 tools/workshop-*.tsv
 tools/workshop-*.txt
 
+# Android / TWA build outputs and secrets (never commit)
+*.apk
+*.aab
+*.ap_
+*.keystore
+*.jks
+**/local.properties
+**/signing.properties
+**/*.keystore
+**/*.jks
+android-twa/.gradle/
+android-twa/**/build/
+android-twa/**/release/
+release-artifacts/
+release/_artifacts/
+
 # OS / IDE
 .DS_Store
 Thumbs.db

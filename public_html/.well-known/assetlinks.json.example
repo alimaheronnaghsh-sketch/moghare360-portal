@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "ir.moghare360.app",
+      "sha256_cert_fingerprints": [
+        "PLACEHOLDER_RELEASE_CERT_SHA256"
+      ]
+    }
+  }
+]

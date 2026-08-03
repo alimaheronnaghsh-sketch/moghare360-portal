@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Minimal TWA AndroidManifest template.
+  Prefer generating the full project via Bubblewrap from twa-manifest.example.json.
+  No ERP business logic lives in this package.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="ir.moghare360.app">
+  <uses-permission android:name="android.permission.INTERNET" />
+  <application
+      android:allowBackup="false"
+      android:icon="@mipmap/ic_launcher"
+      android:label="@string/app_name"
+      android:usesCleartextTraffic="false">
+    <activity
+        android:name="com.google.androidbrowserhelper.trusted.LauncherActivity"
+        android:exported="true"
+        android:label="@string/launcher_name"
+        android:theme="@android:style/Theme.Translucent.NoTitleBar">
+      <meta-data
+          android:name="android.support.customtabs.trusted.DEFAULT_URL"
+          android:value="https://PLACEHOLDER_HTTPS_ORIGIN/" />
+      <meta-data
+          android:name="android.support.customtabs.trusted.STATUS_BAR_COLOR"
+          android:resource="@android:color/black" />
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN" />
+        <category android:name="android.intent.category.LAUNCHER" />
+      </intent-filter>
+      <intent-filter android:autoVerify="true">
+        <action android:name="android.intent.action.VIEW" />
+        <category android:name="android.intent.category.DEFAULT" />
+        <category android:name="android.intent.category.BROWSABLE" />
+        <data android:scheme="https" android:host="PLACEHOLDER_HOSTNAME" />
+      </intent-filter>
+    </activity>
+  </application>
+</manifest>
