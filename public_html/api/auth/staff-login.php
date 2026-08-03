@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 require_once dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'moghare360-v1-api-bootstrap.php';
 
+mogh_saas_require_file('erp-auth-context.php');
+
 mogh_api_json_headers();
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
@@ -22,17 +24,23 @@ if ($username === '' || $password === '') {
 $conn = mogh_tenant_db_connect();
 
 try {
-    $sql = "SELECT u.user_id, u.username, u.password_hash, u.full_name, u.is_login_enabled, u.lifecycle_state, u.is_system_owner
+    $requestedCompanyId = (int)($tenant['company_id'] ?? 0);
+    if ($requestedCompanyId <= 0) {
+        mogh_api_fail('شناسه شرکت معتبر نیست.', 422);
+    }
+
+    $sql = "SELECT u.user_id, u.username, u.password_hash, u.full_name, u.is_login_enabled, u.lifecycle_state, u.is_system_owner,
+                   u.must_change_password, cu.company_id AS membership_company_id
             FROM dbo.core_users u
             INNER JOIN dbo.erp_company_users cu ON cu.user_id = u.user_id AND cu.company_id = ? AND cu.is_active = 1
             WHERE u.username = ?";
     $stmt = odbc_prepare($conn, $sql);
-    if ($stmt === false || !@odbc_execute($stmt, [$tenant['company_id'], $username])) {
+    if ($stmt === false || !@odbc_execute($stmt, [$requestedCompanyId, $username])) {
         throw new RuntimeException('auth_query_failed');
     }
     $row = odbc_fetch_array($stmt);
     if ($row === false) {
-        mogh_api_log_request($conn, $tenant['company_id'], $endpoint, 'POST', 401, 'user_not_found');
+        mogh_api_log_request($conn, $requestedCompanyId, $endpoint, 'POST', 401, 'user_not_found');
         mogh_api_fail('نام کاربری یا رمز عبور نادرست است.', 401);
     }
 
@@ -42,31 +50,46 @@ try {
 
     $hash = (string)($row['password_hash'] ?? '');
     if ($hash === '' || !password_verify($password, $hash)) {
-        mogh_api_log_request($conn, $tenant['company_id'], $endpoint, 'POST', 401, 'bad_password');
+        mogh_api_log_request($conn, $requestedCompanyId, $endpoint, 'POST', 401, 'bad_password');
         mogh_api_fail('نام کاربری یا رمز عبور نادرست است.', 401);
     }
 
-    if (session_status() === PHP_SESSION_NONE) {
-        session_start();
+    $verifiedCompanyId = (int)($row['membership_company_id'] ?? 0);
+    if ($verifiedCompanyId <= 0 || $verifiedCompanyId !== $requestedCompanyId) {
+        mogh_api_fail('نام کاربری یا رمز عبور نادرست است.', 401);
     }
+
+    erp_auth_context_start(false);
     session_regenerate_id(true);
     $_SESSION['erp_user_id'] = (int)$row['user_id'];
     $_SESSION['erp_username'] = (string)$row['username'];
-    $_SESSION['erp_company_id'] = $tenant['company_id'];
+    $_SESSION['erp_company_id'] = $verifiedCompanyId;
+    if (!empty($row['is_system_owner'])) {
+        $_SESSION['erp_is_owner'] = 1;
+    } else {
+        unset($_SESSION['erp_is_owner']);
+    }
+    erp_auth_establish_login_timestamps();
 
     mogh_saas_require_file('erp-csrf.php');
     $csrf = erp_csrf_create_token('staff_login');
 
-    $redirectUrl = !empty($row['is_system_owner']) ? 'erp-product-home.php' : 'erp-staff-home.php';
+    $mustChange = !empty($row['must_change_password']);
+    if ($mustChange) {
+        $redirectUrl = 'peopleos360/my-password.php?forced=1';
+    } else {
+        $redirectUrl = !empty($row['is_system_owner']) ? 'erp-product-home.php' : 'erp-staff-home.php';
+    }
 
-    mogh_api_log_request($conn, $tenant['company_id'], $endpoint, 'POST', 200, 'staff_login_ok');
+    mogh_api_log_request($conn, $verifiedCompanyId, $endpoint, 'POST', 200, 'staff_login_ok');
     mogh_api_ok('ورود پرسنل موفق بود.', [
         'user_id' => (int)$row['user_id'],
         'username' => (string)$row['username'],
         'full_name' => (string)$row['full_name'],
-        'company_id' => $tenant['company_id'],
+        'company_id' => $verifiedCompanyId,
         'session_token' => session_id(),
         'csrf_token' => $csrf,
+        'must_change_password' => $mustChange ? 1 : 0,
         'redirect_url' => $redirectUrl,
     ]);
 } catch (Throwable) {

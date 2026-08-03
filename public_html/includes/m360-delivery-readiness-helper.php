@@ -53,6 +53,41 @@ function m360_delivery_readiness_mark($conn, int $jobcardId, int $qcCheckId, int
         return ['ok' => false, 'message' => 'اطلاعات نامعتبر است.'];
     }
 
+    $jobcardRow = customer_core_fetch_rows(
+        $conn,
+        'SELECT TOP 1 * FROM dbo.erp_jobcards WHERE jobcard_id = ?',
+        [$jobcardId]
+    );
+    $jobcardRow = $jobcardRow[0] ?? null;
+    if ($jobcardRow === null) {
+        return ['ok' => false, 'message' => 'کارت کار یافت نشد.'];
+    }
+
+    $qcCheckRow = null;
+    if ($qcCheckId > 0 && function_exists('m360_final_inspection_has_active_fail')) {
+        $qcRows = customer_core_fetch_rows(
+            $conn,
+            'SELECT TOP 1 * FROM dbo.erp_qc_checks WHERE qc_check_id = ?',
+            [$qcCheckId]
+        );
+        $qcCheckRow = $qcRows[0] ?? null;
+    }
+
+    $validated = m360_delivery_readiness_validate($conn, $jobcardId, $jobcardRow, $qcCheckRow);
+    if (empty($validated['ok'])) {
+        return ['ok' => false, 'message' => (string)($validated['message'] ?? 'شرایط آمادگی تحویل برقرار نیست.')];
+    }
+
+    // Settlement / finance placeholder gate: unpaid or unknown balance blocks readiness.
+    $settlement = strtoupper(trim((string)($jobcardRow['settlement_status'] ?? '')));
+    $financeGate = strtoupper(trim((string)($jobcardRow['finance_gate_status'] ?? '')));
+    $remaining = (float)($jobcardRow['settlement_remaining_amount'] ?? 0);
+    $financeCleared = in_array($settlement, ['PAID', 'SETTLED', 'CLEARED', 'CLOSED'], true)
+        || in_array($financeGate, ['PAID', 'CLEARED', 'PASSED', 'OK', 'SETTLED'], true);
+    if ($remaining > 0 || !$financeCleared) {
+        return ['ok' => false, 'message' => 'گیت مالی/تسویه هنوز باز است؛ تحویل مسدود است.'];
+    }
+
     if (customer_core_table_exists($conn, M360_DEL_READINESS_TABLE)) {
         $existing = (int)(customer_core_scalar(
             $conn,

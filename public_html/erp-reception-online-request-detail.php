@@ -54,7 +54,7 @@ $customerRequestType = trim((string)($row['request_type'] ?? ($payload['request_
     <header class="m360-rw-header">
         <div class="m360-rw-header__top">
             <a class="m360-rw-back" href="erp-reception-online-requests.php">← درخواست‌های آنلاین</a>
-            <a class="m360-rw-back" href="erp-reception-workbench.php">میز کار پذیرش</a>
+            <a class="m360-rw-back" href="erp-reception-board.php">بازگشت به مرکز ارتباط با مشتریان</a>
         </div>
         <h1 class="m360-rw-title">جزئیات درخواست آنلاین</h1>
         <p class="m360-rw-subtitle">شناسه <?= m360_reception_h((string)$requestId) ?></p>
@@ -147,7 +147,7 @@ $customerRequestType = trim((string)($row['request_type'] ?? ($payload['request_
     <?php endif; ?>
 
     <nav class="m360-rw-footer">
-        <a href="erp-reception-workbench.php">میز کار پذیرش</a>
+        <a href="erp-reception-board.php">بازگشت به مرکز ارتباط با مشتریان</a>
         <a href="erp-reception-intake-file.php?online_request_id=<?= $requestId ?>">تکمیل پرونده پذیرش</a>
         <a href="erp-reception-online-requests.php">بازگشت به فهرست</a>
     </nav>

@@ -8,6 +8,7 @@ declare(strict_types=1);
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'erp-customer-core-helper.php';
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'm360-contract-template-render.php';
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'm360-online-request-helper.php';
+require_once __DIR__ . DIRECTORY_SEPARATOR . 'm360-document-vault-helper.php';
 
 const M360_CONTRACT_TABLE = 'erp_intake_contracts';
 const M360_CONTRACT_SIG_TABLE = 'erp_intake_contract_signatures';
@@ -75,24 +76,73 @@ function m360_intake_contract_generate_token(): array
     ];
 }
 
+/**
+ * Absolute public base for rare external/SMS links only.
+ * Prefer relative routes in-app. Canonical local UAT host is 127.0.0.1:8080 (not localhost).
+ */
 function m360_intake_contract_public_base_url(): string
 {
-    $https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off');
-    $host = trim((string)($_SERVER['HTTP_HOST'] ?? 'localhost'));
-    if ($host === '' && PHP_SAPI === 'cli') {
-        return 'http://localhost/moghare360';
+    $https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+        || ((string)($_SERVER['SERVER_PORT'] ?? '') === '443');
+    $host = trim((string)($_SERVER['HTTP_HOST'] ?? ''));
+    if ($host === '') {
+        $host = trim((string)($_SERVER['SERVER_NAME'] ?? ''));
     }
-    return ($https ? 'https' : 'http') . '://' . $host;
+    $m = [];
+    // Normalize localhost → 127.0.0.1 for absolute outbound links (canonical local UAT).
+    if ($host === '' || preg_match('/^localhost(?::(\d+))?$/i', $host, $m) === 1) {
+        $port = (isset($m[1]) && $m[1] !== '') ? $m[1] : '';
+        if ($port === '') {
+            $serverPort = trim((string)($_SERVER['SERVER_PORT'] ?? ''));
+            if ($serverPort !== '' && $serverPort !== '80' && $serverPort !== '443') {
+                $port = $serverPort;
+            } else {
+                $port = '8080';
+            }
+        }
+        $host = '127.0.0.1:' . $port;
+    }
+    $appRoot = '/moghare360';
+    if (function_exists('m360_rw_customer_portal_app_root_web_path')) {
+        $detected = trim((string)m360_rw_customer_portal_app_root_web_path());
+        if ($detected !== '' && $detected !== '/') {
+            $appRoot = rtrim($detected, '/');
+        }
+    } else {
+        $script = str_replace('\\', '/', (string)($_SERVER['SCRIPT_NAME'] ?? ''));
+        if ($script !== '') {
+            $detected = rtrim(str_replace('\\', '/', dirname($script)), '/');
+            if ($detected !== '' && $detected !== '/' && $detected !== '.') {
+                $appRoot = $detected;
+            }
+        }
+    }
+
+    return ($https ? 'https' : 'http') . '://' . $host . $appRoot;
 }
 
+/**
+ * In-app customer contract routes stay relative so localhost vs 127.0.0.1 sessions stay intact.
+ */
 function m360_intake_contract_customer_url(string $rawToken): string
 {
-    return m360_intake_contract_public_base_url() . '/customer-intake-contract.php?token=' . rawurlencode($rawToken);
+    return 'customer-intake-contract.php?token=' . rawurlencode($rawToken);
 }
 
 function m360_intake_contract_sign_url(string $rawToken): string
 {
-    return m360_intake_contract_public_base_url() . '/customer-intake-contract-sign.php?token=' . rawurlencode($rawToken);
+    return 'customer-intake-contract-sign.php?token=' . rawurlencode($rawToken);
+}
+
+/** Absolute URL only when an external channel (SMS) needs a full link. */
+function m360_intake_contract_customer_absolute_url(string $rawToken): string
+{
+    return rtrim(m360_intake_contract_public_base_url(), '/') . '/' . ltrim(m360_intake_contract_customer_url($rawToken), '/');
+}
+
+function m360_intake_contract_sign_absolute_url(string $rawToken): string
+{
+    return rtrim(m360_intake_contract_public_base_url(), '/') . '/' . ltrim(m360_intake_contract_sign_url($rawToken), '/');
 }
 
 function m360_intake_contract_service_type_fa(string $requestType, string $route = ''): string
@@ -219,27 +269,41 @@ function m360_intake_contract_build_snapshot($conn, ?int $jobcardId, ?int $onlin
 
             $brand = trim((string)($vehicle['brand'] ?? $payload['brand'] ?? $payload['vehicle_brand'] ?? ''));
             $model = trim((string)($vehicle['model'] ?? $vehicle['vehicle_class'] ?? $payload['model'] ?? $payload['vehicle_model'] ?? ''));
-            if ($brand !== '' || $model !== '') {
-                $data['vehicle'] = trim($brand . ' ' . $model);
-            }
-            if (is_resource($conn) && (int)($req['vehicle_id'] ?? 0) > 0 && ($data['vehicle'] === '-' || $data['plate'] === '-') && customer_core_table_exists($conn, 'erp_vehicles')) {
+            $vehicleType = trim((string)($vehicle['vehicle_type'] ?? $payload['vehicle_type'] ?? ''));
+            if (is_resource($conn) && (int)($req['vehicle_id'] ?? 0) > 0 && customer_core_table_exists($conn, 'erp_vehicles')) {
                 $vRows = customer_core_fetch_rows(
                     $conn,
-                    'SELECT TOP 1 brand, model, plate_number, vin FROM dbo.erp_vehicles WHERE vehicle_id = ?',
+                    'SELECT TOP 1 brand, model, plate_number, vin, mileage FROM dbo.erp_vehicles WHERE vehicle_id = ?',
                     [(int)$req['vehicle_id']]
                 );
                 if (is_array($vRows[0] ?? null)) {
-                    if ($data['vehicle'] === '-') {
-                        $data['vehicle'] = trim(trim((string)($vRows[0]['brand'] ?? '')) . ' ' . trim((string)($vRows[0]['model'] ?? ''))) ?: '-';
+                    if ($brand === '') {
+                        $brand = trim((string)($vRows[0]['brand'] ?? ''));
                     }
-                    if ($data['plate'] === '-') {
-                        $data['plate'] = trim((string)($vRows[0]['plate_number'] ?? '')) ?: '-';
+                    if ($model === '') {
+                        $model = trim((string)($vRows[0]['model'] ?? ''));
                     }
-                    if ($data['vin'] === '-') {
-                        $data['vin'] = trim((string)($vRows[0]['vin'] ?? '')) ?: '-';
+                    if ($data['plate'] === '-' || $data['plate'] === '') {
+                        $data['plate'] = trim((string)($vRows[0]['plate_number'] ?? '')) ?: $data['plate'];
+                    }
+                    if ($data['vin'] === '-' || $data['vin'] === '') {
+                        $data['vin'] = trim((string)($vRows[0]['vin'] ?? '')) ?: $data['vin'];
+                    }
+                    if (($data['odometer'] === '-' || $data['odometer'] === '') && trim((string)($vRows[0]['mileage'] ?? '')) !== '') {
+                        $data['odometer'] = trim((string)$vRows[0]['mileage']);
                     }
                 }
             }
+            if ($brand !== '' || $model !== '') {
+                $data['vehicle'] = trim($brand . ' ' . $model);
+                $data['brand'] = $brand;
+                $data['model'] = $model;
+                $data['vehicle_class'] = $model;
+            }
+            if ($vehicleType !== '') {
+                $data['vehicle_type'] = $vehicleType;
+            }
+            $data['online_request_id'] = (string)$onlineRequestId;
 
             $plate = trim((string)($vehicle['plate'] ?? $vehicle['plate_number'] ?? $vehicle['plate_display'] ?? $req['vehicle_plate'] ?? $payload['plate_display'] ?? ''));
             if ($plate !== '') {
@@ -1277,6 +1341,7 @@ function m360_contract_pdf_autoload(): bool
     $candidates = [
         dirname(__DIR__) . DIRECTORY_SEPARATOR . 'vendor' . DIRECTORY_SEPARATOR . 'autoload.php',
         dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'vendor' . DIRECTORY_SEPARATOR . 'autoload.php',
+        'C:\\xampp\\htdocs\\moghare360\\vendor\\autoload.php',
     ];
     foreach ($candidates as $path) {
         if (is_file($path)) {
@@ -1326,8 +1391,11 @@ function m360_contract_pdf_status_fa(array $contractRow, array $snapshot = []): 
         return 'برگشت برای اصلاح';
     }
     $status = strtoupper(trim((string)($contractRow['contract_status'] ?? '')));
-    if (in_array($status, [M360_CONTRACT_STATUS_SENT, M360_CONTRACT_STATUS_VIEWED, M360_CONTRACT_STATUS_OTP_SENT, M360_CONTRACT_STATUS_GENERATED], true)) {
-        return 'ارسال‌شده';
+    if ($status === M360_CONTRACT_STATUS_VIEWED) {
+        return 'مشاهده‌شده — در انتظار امضا';
+    }
+    if (in_array($status, [M360_CONTRACT_STATUS_SENT, M360_CONTRACT_STATUS_OTP_SENT, M360_CONTRACT_STATUS_GENERATED], true)) {
+        return 'ارسال‌شده — در انتظار امضا';
     }
 
     return 'پیش‌نویس';
@@ -1409,7 +1477,7 @@ function m360_intake_contract_ensure_pdf(
     $pdfType = m360_contract_pdf_type_for_row($contractRow);
     $snapshotHash = trim((string)($contractRow['contract_body_hash'] ?? $snapshot['contract_hash'] ?? ''));
     $pdfs = m360_contract_pdf_list_from_data($dataJson);
-    $pdfFormatVersion = 'COMPLETE_V1';
+    $pdfFormatVersion = 'COMPLETE_V2';
 
     $generatedAt = gmdate('c');
     $statusFa = m360_contract_pdf_status_fa($contractRow, $snapshot);
@@ -1420,13 +1488,16 @@ function m360_intake_contract_ensure_pdf(
     if ($signed) {
         $acceptance = 'تأیید شده توسط مشتری'
             . ($signedAt !== '' ? (' — ' . $signedAt) : '');
-    } elseif ($statusFa === 'ارسال‌شده') {
+    } elseif ($statusFa === 'ارسال‌شده' || $statusFa === 'مشاهده‌شده') {
         $acceptance = 'در انتظار تأیید و امضای مشتری';
     } elseif ($statusFa === 'برگشت برای اصلاح') {
         $acceptance = 'مشتری قرارداد را برای اصلاح برگرداند';
     }
 
     $pdfData = $snapshot;
+    if ((int)($pdfData['online_request_id'] ?? 0) < 1 && (int)($contractRow['online_request_id'] ?? 0) > 0) {
+        $pdfData['online_request_id'] = (string)(int)$contractRow['online_request_id'];
+    }
     $pdfData['contract_title'] = M360_CONTRACT_TITLE;
     $pdfData['contract_version'] = defined('M360_CONTRACT_VERSION') ? M360_CONTRACT_VERSION : 'MOGHARE360-INTAKE-V1';
     $pdfData['contract_hash'] = $snapshotHash !== '' ? $snapshotHash : (string)($snapshot['contract_hash'] ?? '');
@@ -1436,6 +1507,47 @@ function m360_intake_contract_ensure_pdf(
     $pdfData['pdf_customer_signed_at'] = $signedAt;
     $pdfData['pdf_acceptance_method'] = $method;
     $pdfData['documents_summary'] = (string)($snapshot['checklist_summary'] ?? '');
+
+    // Attach real signature image when present in SQL / vault; never invent.
+    $sigImage = '';
+    $sigRows = customer_core_fetch_rows(
+        $conn,
+        'SELECT TOP 1 signature_image_data FROM dbo.' . M360_CONTRACT_SIG_TABLE . ' WHERE contract_id = ? ORDER BY signature_id DESC',
+        [$contractId]
+    );
+    if (is_array($sigRows[0] ?? null)) {
+        $sigImage = trim((string)($sigRows[0]['signature_image_data'] ?? ''));
+    }
+    if ($sigImage === '' && isset($dataJson['workflow']) && is_array($dataJson['workflow'])) {
+        $sigImage = trim((string)($dataJson['workflow']['signature_image_data'] ?? ''));
+    }
+    if ($sigImage !== '' && !str_starts_with($sigImage, 'data:image/') && preg_match('/^[A-Za-z0-9+\/=]+$/', $sigImage) === 1 && strlen($sigImage) > 80) {
+        $sigImage = 'data:image/png;base64,' . $sigImage;
+    }
+    if (($sigImage === '' || !str_starts_with($sigImage, 'data:image/')) && isset($dataJson['workflow']) && is_array($dataJson['workflow'])) {
+        $sigVaultBlobId = (int)($dataJson['workflow']['signature_vault_blob_id'] ?? 0);
+        if ($sigVaultBlobId > 0 && m360_vault_table_exists($conn)) {
+            $vaultLoad = m360_vault_load_bytes($conn, $sigVaultBlobId);
+            if (!empty($vaultLoad['ok']) && (string)($vaultLoad['bytes'] ?? '') !== '') {
+                $ctype = 'image/png';
+                $metaRows = customer_core_fetch_rows(
+                    $conn,
+                    'SELECT TOP 1 content_type FROM dbo.erp_document_blobs WHERE document_blob_id = ?',
+                    [$sigVaultBlobId]
+                );
+                $metaType = trim((string)($metaRows[0]['content_type'] ?? ''));
+                if ($metaType !== '' && str_starts_with(strtolower($metaType), 'image/')) {
+                    $ctype = $metaType;
+                }
+                $sigImage = 'data:' . $ctype . ';base64,' . base64_encode((string)$vaultLoad['bytes']);
+            }
+        }
+    }
+    if ($sigImage !== '' && str_starts_with($sigImage, 'data:image/')) {
+        $pdfData['pdf_signature_image_data'] = $sigImage;
+    } elseif ($signed) {
+        $pdfData['pdf_signature_missing_note'] = 'امضای دیجیتال با OTP ثبت شده اما تصویر امضا در آرشیو موجود نیست';
+    }
 
     // Content hash must ignore generated_at so identical source reuses the same ACTIVE PDF.
     $pdfDataForHash = $pdfData;
@@ -1454,6 +1566,23 @@ function m360_intake_contract_ensure_pdf(
         }
         if ($existingContent === '' || !hash_equals($existingContent, $contentHash)) {
             continue;
+        }
+        $existingBlobId = (int)($existing['document_blob_id'] ?? 0);
+        if ($existingBlobId > 0 && m360_vault_table_exists($conn)) {
+            $vaultLoad = m360_vault_load_bytes($conn, $existingBlobId);
+            if ($vaultLoad['ok'] && str_starts_with($vaultLoad['bytes'], '%PDF')) {
+                if ($recordDownloadEvent) {
+                    m360_intake_contract_record_event(
+                        $conn,
+                        $contractId,
+                        'CONTRACT_PDF_DOWNLOADED',
+                        'pdf_id=' . (string)($existing['pdf_id'] ?? '') . ';actor=' . $actor . ';source=vault',
+                        $generatedByUserId
+                    );
+                }
+
+                return ['ok' => true, 'message' => '', 'meta' => $existing, 'bytes' => $vaultLoad['bytes'], 'created' => false];
+            }
         }
         if ($rel === '' || !str_starts_with($rel, 'storage/')) {
             continue;
@@ -1523,6 +1652,25 @@ function m360_intake_contract_ensure_pdf(
         return ['ok' => false, 'message' => 'ذخیره فایل PDF ناموفق بود.', 'meta' => null, 'bytes' => '', 'created' => false];
     }
 
+    $vaultBlobId = 0;
+    $vaultSha = '';
+    if (m360_vault_table_exists($conn)) {
+        $vaultResult = m360_vault_store_contract_pdf(
+            $conn,
+            $contractId,
+            $onlineRequestId,
+            (int)($contractRow['customer_id'] ?? 0),
+            $bytes,
+            $filename,
+            $paths['relative'],
+            $generatedByUserId
+        );
+        if ($vaultResult['ok']) {
+            $vaultBlobId = (int)$vaultResult['blob_id'];
+            $vaultSha = (string)$vaultResult['sha256'];
+        }
+    }
+
     foreach ($pdfs as $idx => $old) {
         if (!is_array($old)) {
             continue;
@@ -1551,6 +1699,11 @@ function m360_intake_contract_ensure_pdf(
         'source' => 'CONTRACT_SNAPSHOT',
         'actor' => $actor,
     ];
+    if ($vaultBlobId > 0) {
+        $meta['document_blob_id'] = (string)$vaultBlobId;
+        $meta['sha256_hash'] = $vaultSha;
+        $meta['vault_canonical'] = '1';
+    }
     $pdfs[] = $meta;
     if (count($pdfs) > 40) {
         $pdfs = array_slice($pdfs, -40);

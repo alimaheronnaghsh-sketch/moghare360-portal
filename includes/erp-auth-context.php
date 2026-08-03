@@ -13,8 +13,19 @@ require_once __DIR__ . DIRECTORY_SEPARATOR . 'erp-config-loader.php';
  * Does not perform INSERT, UPDATE, DELETE, or MERGE.
  */
 
+/** Central ERP idle timeout (seconds). */
+const ERP_AUTH_IDLE_TIMEOUT_SECONDS = 3600;
+
+/** Central ERP absolute session lifetime (seconds). */
+const ERP_AUTH_ABSOLUTE_LIFETIME_SECONDS = 43200;
+
+/** Central ERP periodic session ID regeneration interval (seconds). */
+const ERP_AUTH_REGENERATE_INTERVAL_SECONDS = 1800;
+
 if (!function_exists('erp_auth_context_session_keys')) {
     /**
+     * Canonical Central ERP session contract keys.
+     *
      * @return list<string>
      */
     function erp_auth_context_session_keys(): array
@@ -22,18 +33,343 @@ if (!function_exists('erp_auth_context_session_keys')) {
         return [
             'erp_user_id',
             'erp_username',
+            'erp_company_id',
             'erp_login_timestamp',
             'erp_last_activity_timestamp',
             'erp_session_regenerated_at',
+            'erp_is_owner',
         ];
     }
 }
 
-if (!function_exists('erp_auth_context_start')) {
-    function erp_auth_context_start(): void
+if (!function_exists('erp_auth_request_is_https')) {
+    /**
+     * Detect HTTPS without blindly trusting arbitrary X-Forwarded-Proto.
+     */
+    function erp_auth_request_is_https(): bool
+    {
+        $https = $_SERVER['HTTPS'] ?? '';
+        if (is_string($https) && $https !== '' && strtolower($https) !== 'off') {
+            return true;
+        }
+
+        $port = isset($_SERVER['SERVER_PORT']) ? (int)$_SERVER['SERVER_PORT'] : 0;
+        if ($port === 443) {
+            return true;
+        }
+
+        return false;
+    }
+}
+
+if (!function_exists('erp_auth_configure_session_cookie')) {
+    /**
+     * Configure Central ERP PHP session cookie policy before session_start().
+     */
+    function erp_auth_configure_session_cookie(): void
+    {
+        if (session_status() !== PHP_SESSION_NONE || headers_sent()) {
+            return;
+        }
+
+        ini_set('session.use_strict_mode', '1');
+
+        $secure = erp_auth_request_is_https();
+        session_set_cookie_params([
+            'lifetime' => 0,
+            'path' => '/',
+            'secure' => $secure,
+            'httponly' => true,
+            'samesite' => 'Lax',
+        ]);
+    }
+}
+
+if (!function_exists('erp_auth_expire_session_cookie')) {
+    /**
+     * Expire the active PHP session cookie using the same parameters as the live session.
+     */
+    function erp_auth_expire_session_cookie(): void
+    {
+        if (PHP_SAPI === 'cli' || headers_sent()) {
+            return;
+        }
+
+        $params = session_get_cookie_params();
+        $name = session_name();
+        $expire = time() - 42000;
+        $path = $params['path'] !== '' ? $params['path'] : '/';
+        $domain = $params['domain'] ?? '';
+        $secure = (bool)($params['secure'] ?? false);
+        $httponly = (bool)($params['httponly'] ?? true);
+        $samesite = $params['samesite'] ?? 'Lax';
+        if (!is_string($samesite) || $samesite === '') {
+            $samesite = 'Lax';
+        }
+
+        setcookie($name, '', [
+            'expires' => $expire,
+            'path' => $path,
+            'domain' => $domain,
+            'secure' => $secure,
+            'httponly' => $httponly,
+            'samesite' => $samesite,
+        ]);
+    }
+}
+
+if (!function_exists('erp_auth_destroy_central_session')) {
+    /**
+     * Clear Central ERP session state, expire cookie, destroy PHP session.
+     * Does not clear P360SESSID / INV360SESSID / WORK360SESSID (deferred to G1.4).
+     */
+    function erp_auth_destroy_central_session(): void
     {
         if (session_status() === PHP_SESSION_NONE) {
+            erp_auth_configure_session_cookie();
+            @session_start();
+        }
+
+        $_SESSION = [];
+        erp_auth_expire_session_cookie();
+
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_destroy();
+        }
+    }
+}
+
+if (!function_exists('erp_auth_deny_central_session')) {
+    /**
+     * Destroy Central ERP session and deny access (redirect or JSON for /api/).
+     *
+     * @param 'expired'|'invalid' $reason
+     */
+    function erp_auth_deny_central_session(string $reason = 'expired'): void
+    {
+        erp_auth_destroy_central_session();
+
+        if (PHP_SAPI === 'cli') {
+            throw new RuntimeException('ERP central session denied: ' . $reason);
+        }
+
+        $script = str_replace('\\', '/', (string)($_SERVER['SCRIPT_NAME'] ?? ''));
+        if (str_contains($script, '/api/')) {
+            if (!headers_sent()) {
+                header('Content-Type: application/json; charset=utf-8');
+                http_response_code(401);
+            }
+            echo json_encode([
+                'ok' => false,
+                'message' => 'نشست منقضی شده است. لطفاً دوباره وارد شوید.',
+            ], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+
+        $query = $reason === 'expired' ? '?session=expired' : '';
+        if (!headers_sent()) {
+            header('Location: staff-login.php' . $query);
+        }
+        exit;
+    }
+}
+
+if (!function_exists('erp_auth_session_int')) {
+    function erp_auth_session_int(string $key): ?int
+    {
+        if (!isset($_SESSION[$key])) {
+            return null;
+        }
+
+        $raw = $_SESSION[$key];
+        if (is_int($raw)) {
+            return $raw > 0 ? $raw : null;
+        }
+        if (is_string($raw) && ctype_digit(trim($raw))) {
+            $value = (int)trim($raw);
+
+            return $value > 0 ? $value : null;
+        }
+
+        return null;
+    }
+}
+
+if (!function_exists('erp_auth_establish_login_timestamps')) {
+    /**
+     * Write normalized Central ERP login timestamps after successful authentication.
+     * Caller must already hold a started session and call session_regenerate_id(true) first.
+     */
+    function erp_auth_establish_login_timestamps(): void
+    {
+        $now = time();
+        $_SESSION['erp_login_timestamp'] = $now;
+        $_SESSION['erp_last_activity_timestamp'] = $now;
+        $_SESSION['erp_session_regenerated_at'] = $now;
+    }
+}
+
+if (!function_exists('erp_auth_revalidate_active_membership')) {
+    /**
+     * Revalidate core_users + active erp_company_users for the session identity.
+     * Every Central ERP user — including system owners — requires active membership
+     * for the session company. SELECT-only — does not update last_login_at or any DB value.
+     *
+     * @param resource $db
+     */
+    function erp_auth_revalidate_active_membership($db, int $userId, int $companyId): bool
+    {
+        if ($userId <= 0 || $companyId <= 0) {
+            return false;
+        }
+
+        $sql = '
+            SELECT TOP 1
+                u.user_id,
+                u.is_login_enabled,
+                u.lifecycle_state,
+                u.is_system_owner,
+                cu.company_id AS membership_company_id,
+                cu.is_active AS membership_active
+            FROM dbo.core_users u
+            INNER JOIN dbo.erp_company_users cu
+                ON cu.user_id = u.user_id
+               AND cu.company_id = ?
+               AND cu.is_active = 1
+            WHERE u.user_id = ?
+        ';
+
+        $statement = erp_auth_context_odbc_execute($db, $sql, [$companyId, $userId]);
+        if ($statement === false) {
+            return false;
+        }
+
+        $row = erp_auth_context_odbc_fetch_row_assoc($statement);
+        if ($row === null) {
+            return false;
+        }
+
+        if ((int)($row['user_id'] ?? 0) !== $userId) {
+            return false;
+        }
+
+        if (!erp_auth_context_bool_value($row['is_login_enabled'] ?? false)) {
+            return false;
+        }
+
+        if (strtoupper(trim((string)($row['lifecycle_state'] ?? ''))) !== 'ACTIVE') {
+            return false;
+        }
+
+        $membershipCompanyId = (int)($row['membership_company_id'] ?? 0);
+        if ($membershipCompanyId !== $companyId) {
+            return false;
+        }
+
+        if (!erp_auth_context_bool_value($row['membership_active'] ?? false)) {
+            return false;
+        }
+
+        // erp_is_owner is a derived convenience only — not sole authorization authority.
+        $isOwner = erp_auth_context_bool_value($row['is_system_owner'] ?? false);
+        $_SESSION['erp_is_owner'] = $isOwner ? 1 : 0;
+
+        return true;
+    }
+}
+
+if (!function_exists('erp_auth_enforce_central_session')) {
+    /**
+     * Enforce idle/absolute timeouts, user+company revalidation, activity stamp,
+     * and periodic session ID regeneration for an authenticated Central ERP session.
+     */
+    function erp_auth_enforce_central_session(): void
+    {
+        static $enforcing = false;
+        if ($enforcing) {
+            return;
+        }
+
+        $userId = erp_auth_context_session_user_id();
+        if ($userId === null) {
+            return;
+        }
+
+        $enforcing = true;
+        $db = null;
+        try {
+            $now = time();
+            $loginAt = erp_auth_session_int('erp_login_timestamp');
+            $lastActivity = erp_auth_session_int('erp_last_activity_timestamp');
+            $regeneratedAt = erp_auth_session_int('erp_session_regenerated_at');
+
+            // Backfill missing stamps from presentation-page sync (no DB write).
+            if ($loginAt === null) {
+                $loginAt = $now;
+                $_SESSION['erp_login_timestamp'] = $loginAt;
+            }
+            if ($lastActivity === null) {
+                $lastActivity = $loginAt;
+                $_SESSION['erp_last_activity_timestamp'] = $lastActivity;
+            }
+            if ($regeneratedAt === null) {
+                $regeneratedAt = $loginAt;
+                $_SESSION['erp_session_regenerated_at'] = $regeneratedAt;
+            }
+
+            if (($now - $loginAt) > ERP_AUTH_ABSOLUTE_LIFETIME_SECONDS) {
+                erp_auth_deny_central_session('expired');
+            }
+
+            if (($now - $lastActivity) > ERP_AUTH_IDLE_TIMEOUT_SECONDS) {
+                erp_auth_deny_central_session('expired');
+            }
+
+            $companyId = erp_auth_session_int('erp_company_id');
+            if ($companyId === null) {
+                erp_auth_deny_central_session('invalid');
+            }
+
+            try {
+                $db = erp_auth_create_local_odbc_connection();
+            } catch (Throwable) {
+                erp_auth_deny_central_session('invalid');
+            }
+
+            $valid = erp_auth_revalidate_active_membership($db, $userId, $companyId);
+
+            if (!$valid) {
+                erp_auth_deny_central_session('invalid');
+            }
+
+            $_SESSION['erp_last_activity_timestamp'] = $now;
+
+            if (($now - $regeneratedAt) >= ERP_AUTH_REGENERATE_INTERVAL_SECONDS) {
+                session_regenerate_id(true);
+                $_SESSION['erp_session_regenerated_at'] = $now;
+            }
+        } finally {
+            if (is_resource($db)) {
+                @odbc_close($db);
+            }
+            $enforcing = false;
+        }
+    }
+}
+
+if (!function_exists('erp_auth_context_start')) {
+    /**
+     * @param bool $enforce When false, only bootstrap the session (login endpoints).
+     */
+    function erp_auth_context_start(bool $enforce = true): void
+    {
+        if (session_status() === PHP_SESSION_NONE) {
+            erp_auth_configure_session_cookie();
             session_start();
+        }
+
+        if ($enforce && PHP_SAPI !== 'cli' && erp_auth_context_session_user_id() !== null) {
+            erp_auth_enforce_central_session();
         }
     }
 }
@@ -41,23 +377,7 @@ if (!function_exists('erp_auth_context_start')) {
 if (!function_exists('erp_auth_context_session_user_id')) {
     function erp_auth_context_session_user_id(): ?int
     {
-        if (!isset($_SESSION['erp_user_id'])) {
-            return null;
-        }
-
-        $raw = $_SESSION['erp_user_id'];
-
-        if (is_int($raw)) {
-            return $raw > 0 ? $raw : null;
-        }
-
-        if (is_string($raw) && ctype_digit(trim($raw))) {
-            $userId = (int)trim($raw);
-
-            return $userId > 0 ? $userId : null;
-        }
-
-        return null;
+        return erp_auth_session_int('erp_user_id');
     }
 }
 
@@ -66,15 +386,13 @@ if (!function_exists('erp_auth_current_user_id')) {
     {
         erp_auth_context_start();
 
-        $sessionUserId = erp_auth_context_session_user_id();
-
-        if ($sessionUserId !== null) {
-            return $sessionUserId;
-        }
-
-        // CLI fixtures may use the platform owner; web requests always require a real session.
-        return PHP_SAPI === 'cli' ? 10001 : null;
+        return erp_auth_context_session_user_id();
     }
+}
+
+// Apply cookie policy as early as this helper is loaded (before other session_start calls).
+if (PHP_SAPI !== 'cli' && session_status() === PHP_SESSION_NONE) {
+    erp_auth_configure_session_cookie();
 }
 
 if (!function_exists('erp_auth_create_local_odbc_connection')) {
@@ -560,6 +878,26 @@ if (!function_exists('erp_auth_can')) {
             return false;
         }
 
+        // Prefer access-matrix effective resolver when available (base + overrides + roles).
+        $matrixHelper = dirname(__DIR__) . '/public_html/includes/m360-access-matrix-helper.php';
+        if (is_file($matrixHelper)) {
+            require_once $matrixHelper;
+            if (function_exists('m360_am_effective_can')) {
+                $companyId = 1;
+                if (function_exists('erp_auth_verified_company_id')) {
+                    $cid = erp_auth_verified_company_id();
+                    if (is_int($cid) && $cid > 0) {
+                        $companyId = $cid;
+                    }
+                }
+                return m360_am_effective_can($db, $userId, $companyId, $permissionKey);
+            }
+        }
+
+        if (function_exists('erp_auth_is_system_owner') && erp_auth_is_system_owner($db, $userId)) {
+            return true;
+        }
+
         $permissions = erp_auth_current_permissions($db, $userId);
         $permissionKeys = erp_auth_context_permission_keys($permissions);
 
@@ -572,10 +910,13 @@ if (!function_exists('erp_auth_require_login')) {
     {
         erp_auth_context_start();
 
-        $userId = erp_auth_current_user_id();
+        $userId = erp_auth_context_session_user_id();
 
         if ($userId === null || $userId <= 0) {
-            throw new RuntimeException('ERP auth login is required.');
+            if (PHP_SAPI === 'cli') {
+                throw new RuntimeException('ERP auth login is required.');
+            }
+            erp_auth_deny_central_session('invalid');
         }
     }
 }

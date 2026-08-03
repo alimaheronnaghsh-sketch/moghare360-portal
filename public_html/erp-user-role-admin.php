@@ -127,6 +127,8 @@ m360_access_mgmt_render_flash();
         </div>
     </div>
     <p class="m360-rc-note">نمایش فقط‌خواندنی نقش‌ها و کاربران فعال — بدون تغییر مجوز.</p>
+    <p><a class="m360-op-button-secondary" href="erp-personnel-access-matrix.php">ماتریس دسترسی پرسنل</a>
+       <a class="m360-op-button-secondary" href="erp-access-change-history.php">تاریخچه دسترسی</a></p>
 </section>
 
 <?php if ($conn === false): ?>

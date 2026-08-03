@@ -6,8 +6,13 @@ header('X-Robots-Tag: noindex, nofollow');
 
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-technical-operation-helper.php';
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-operational-shell-helper.php';
+require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-access-matrix-guard.php';
 
+m360_am_guard_any(['workshop.electrical_options.view', 'workshop.inspection.view']);
 m360_technical_require_staff();
+
+require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-workshop-access-enforcement.php';
+$wsCtx = m360_ws_require_actor_context();
 
 $p15Missing = !m360_technical_p15_gate_available();
 $statusFilter = isset($_GET['status']) ? strtoupper(trim((string)$_GET['status'])) : 'ALL';
@@ -21,7 +26,9 @@ if ($dbOk) {
         $conn,
         $statusFilter === 'ALL' ? null : $statusFilter,
         $contractFilter === 'ALL' ? null : $contractFilter,
-        150
+        150,
+        (int)$wsCtx['company_id'],
+        (bool)$wsCtx['is_owner']
     );
 }
 ?>

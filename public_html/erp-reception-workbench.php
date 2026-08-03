@@ -51,8 +51,14 @@ $isLanding = ($section === '' || $section === 'home');
             <span class="m360-rw-badge">پذیرش</span>
         </div>
         <h1 class="m360-rw-title">میز کار پذیرش</h1>
-        <p class="m360-rw-subtitle">درخواست‌های آنلاین مشتریان، شروع درخواست حضوری توسط پذیرش، تکمیل پرونده پذیرش</p>
+        <p class="m360-rw-subtitle">صفحه پشتیبان — مرکز اصلی ارتباط با مشتریان را از کارت زیر باز کنید</p>
     </header>
+
+    <section class="m360-rw-panel" style="margin-bottom:1rem">
+        <h2 style="margin:0 0 .4rem">مرکز ارتباط با مشتریان</h2>
+        <p class="m360-rw-muted" style="margin:0 0 .75rem">مسیر اصلی پذیرش، پرونده‌ها، جستجو و پیگیری مشتری</p>
+        <a class="m360-op-button" href="erp-reception-board.php">ورود به مرکز ارتباط با مشتریان</a>
+    </section>
 
     <?php if (!$dbOk): ?>
         <section class="m360-rw-alert">اتصال به پایگاه داده برقرار نشد. لطفاً بعداً تلاش کنید.</section>

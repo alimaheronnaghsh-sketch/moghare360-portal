@@ -2,6 +2,8 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/includes/m360-otp-helper.php';
+require_once __DIR__ . '/includes/m360-canonical-host-helper.php';
+m360_canonical_local_host_enforce();
 require_once __DIR__ . '/includes/mirror-layout.php';
 require_once __DIR__ . '/includes/m360-reception-workbench-helper.php';
 
@@ -102,23 +104,57 @@ body.m360-public-shell { overflow-x: hidden; }
         <?php if ($inbox === []): ?>
             <p class="m360-dash-empty">در حال حاضر اقدامی از سوی شما موردنیاز نیست.</p>
         <?php else: ?>
+            <?php
+            $inboxContracts = [];
+            $inboxEstimates = [];
+            $inboxOther = [];
+            foreach ($inbox as $task) {
+                $group = (string)($task['group'] ?? '');
+                if ($group === '') {
+                    $url = strtolower((string)($task['action_url'] ?? ''));
+                    if (str_contains($url, 'intake-contract-review')) {
+                        $group = 'contract';
+                    } elseif (str_contains($url, 'estimate-approval')) {
+                        $group = 'estimate';
+                    } else {
+                        $group = 'other';
+                    }
+                }
+                if ($group === 'contract') {
+                    $inboxContracts[] = $task;
+                } elseif ($group === 'estimate') {
+                    $inboxEstimates[] = $task;
+                } else {
+                    $inboxOther[] = $task;
+                }
+            }
+            $inboxGroups = [
+                'قراردادهای نیازمند امضا' => $inboxContracts,
+                'برآوردهای نیازمند تأیید' => $inboxEstimates,
+                'سایر اقدامات' => $inboxOther,
+            ];
+            ?>
             <p class="m360-dash-meta"><span class="m360-dash-chip"><?= mirror_h((string)count($inbox)) ?> مورد فعال</span></p>
-            <?php foreach ($inbox as $task): ?>
-                <article class="m360-dash-card">
-                    <h4 class="m360-dash-card__title"><?= mirror_h((string)($task['title'] ?? '')) ?></h4>
-                    <p class="m360-dash-meta"><?= mirror_h((string)($task['message'] ?? '')) ?></p>
-                    <?php if (trim((string)($task['context'] ?? '')) !== ''): ?>
-                        <p class="m360-dash-meta">پرونده: <?= mirror_h((string)$task['context']) ?></p>
-                    <?php endif; ?>
-                    <p class="m360-dash-meta">وضعیت: <span class="m360-dash-chip"><?= mirror_h((string)($task['status_label'] ?? '')) ?></span></p>
-                    <?php if (trim((string)($task['action_url'] ?? '')) !== ''): ?>
-                        <div class="m360-dash-actions">
-                            <a class="m360-dash-btn m360-dash-btn--primary" href="<?= mirror_h((string)$task['action_url']) ?>">
-                                <?= mirror_h((string)($task['action_label'] ?? 'اقدام')) ?>
-                            </a>
-                        </div>
-                    <?php endif; ?>
-                </article>
+            <?php foreach ($inboxGroups as $groupTitle => $groupTasks): ?>
+                <?php if ($groupTasks === []) { continue; } ?>
+                <h4 class="m360-dash-card__title" style="margin-top:0.75rem"><?= mirror_h($groupTitle) ?></h4>
+                <?php foreach ($groupTasks as $task): ?>
+                    <article class="m360-dash-card">
+                        <h4 class="m360-dash-card__title"><?= mirror_h((string)($task['title'] ?? '')) ?></h4>
+                        <p class="m360-dash-meta"><?= mirror_h((string)($task['message'] ?? '')) ?></p>
+                        <?php if (trim((string)($task['context'] ?? '')) !== ''): ?>
+                            <p class="m360-dash-meta">پرونده: <?= mirror_h((string)$task['context']) ?></p>
+                        <?php endif; ?>
+                        <p class="m360-dash-meta">وضعیت: <span class="m360-dash-chip"><?= mirror_h((string)($task['status_label'] ?? '')) ?></span></p>
+                        <?php if (trim((string)($task['action_url'] ?? '')) !== ''): ?>
+                            <div class="m360-dash-actions">
+                                <a class="m360-dash-btn m360-dash-btn--primary" href="<?= mirror_h((string)$task['action_url']) ?>">
+                                    <?= mirror_h((string)($task['action_label'] ?? 'اقدام')) ?>
+                                </a>
+                            </div>
+                        <?php endif; ?>
+                    </article>
+                <?php endforeach; ?>
             <?php endforeach; ?>
         <?php endif; ?>
     </section>
@@ -135,7 +171,19 @@ body.m360-public-shell { overflow-x: hidden; }
                         <p class="m360-dash-meta"><?= mirror_h((string)($case['vehicle_display'] ?? '')) ?><?php if (trim((string)($case['vehicle_plate'] ?? '')) !== ''): ?> — <?= mirror_h((string)$case['vehicle_plate']) ?><?php endif; ?></p>
                         <p class="m360-dash-meta">نوع خدمت: <?= mirror_h((string)($case['service_type'] ?? '')) ?></p>
                         <p class="m360-dash-meta">مرحله: <span class="m360-dash-chip"><?= mirror_h((string)($case['stage_label'] ?? '')) ?></span></p>
-                        <p class="m360-dash-meta">مسئول بعدی: <?= mirror_h((string)($case['next_actor'] ?? '')) ?></p>
+                        <?php
+                        $nextActorRaw = trim((string)($case['next_actor'] ?? ''));
+                        $nextActorFriendly = $nextActorRaw;
+                        if ($nextActorRaw !== '') {
+                            $na = mb_strtolower($nextActorRaw);
+                            if (str_contains($na, 'reception') || str_contains($na, 'پذیرش') || str_contains($na, 'staff')) {
+                                $nextActorFriendly = 'پذیرش مجموعه';
+                            } elseif (str_contains($na, 'customer') || str_contains($na, 'مشتری')) {
+                                $nextActorFriendly = 'شما (مشتری)';
+                            }
+                            echo '<p class="m360-dash-meta">ادامه پیگیری: ' . mirror_h($nextActorFriendly) . '</p>';
+                        }
+                        ?>
                         <p class="m360-dash-meta">اقدام پیشنهادی: <?= mirror_h((string)($case['next_action'] ?? '')) ?></p>
                         <p class="m360-dash-meta">آخرین به‌روزرسانی: <?= mirror_h((string)($case['last_update'] ?? '—')) ?></p>
                         <?php if (trim((string)($case['contract_legacy_label'] ?? '')) !== ''): ?>
@@ -208,6 +256,35 @@ body.m360-public-shell { overflow-x: hidden; }
                     <?php if (trim((string)($case['contract_legacy_label'] ?? '')) !== ''): ?>
                         <p class="m360-dash-legacy"><?= mirror_h((string)$case['contract_legacy_label']) ?></p>
                     <?php endif; ?>
+                    <?php
+                    $histReqId = (int)($case['online_request_id'] ?? 0);
+                    $histContract = ($histReqId > 0 && is_resource($conn))
+                        ? m360_intake_contract_find_active_for_online_request($conn, $histReqId)
+                        : null;
+                    if (is_array($histContract) && (int)($histContract['contract_id'] ?? 0) > 0
+                        && function_exists('m360_intake_contract_is_signed')
+                        && m360_intake_contract_is_signed($histContract)
+                    ) {
+                        $pdfLabel = m360_contract_pdf_download_label($histContract);
+                        $pdfHref = m360_contract_pdf_download_url((int)$histContract['contract_id'], 'customer');
+                        echo '<div class="m360-dash-actions"><a class="m360-dash-btn m360-dash-btn--secondary" href="'
+                            . mirror_h($pdfHref) . '">' . mirror_h($pdfLabel) . '</a></div>';
+                    }
+                    ?>
+                </article>
+            <?php endforeach; ?>
+            <?php
+            $cartableHistory = is_array($dashboard['cartable_history'] ?? null) ? $dashboard['cartable_history'] : [];
+            foreach ($cartableHistory as $histTask):
+            ?>
+                <article class="m360-dash-card">
+                    <h4 class="m360-dash-card__title"><?= mirror_h((string)($histTask['title'] ?? 'اقدام تکمیل‌شده')) ?></h4>
+                    <p class="m360-dash-meta"><?= mirror_h((string)($histTask['message'] ?? '')) ?></p>
+                    <p class="m360-dash-meta">وضعیت: <span class="m360-dash-chip"><?= mirror_h((string)($histTask['status_label'] ?? 'تکمیل‌شده')) ?></span></p>
+                    <?php if (trim((string)($histTask['context'] ?? '')) !== ''): ?>
+                        <p class="m360-dash-meta">پرونده: <?= mirror_h((string)$histTask['context']) ?></p>
+                    <?php endif; ?>
+                    <p class="m360-dash-meta">تاریخ: <?= mirror_h((string)($histTask['completed_at'] ?? $histTask['updated_at'] ?? '—')) ?></p>
                 </article>
             <?php endforeach; ?>
             <?php if ($historyPages > 1): ?>
@@ -243,7 +320,7 @@ body.m360-public-shell { overflow-x: hidden; }
             <div class="m360-dash-avatar" aria-hidden="true"><?= mirror_h(m360_rw_customer_profile_initial_letter($fullName !== '' ? $fullName : $mobile)) ?></div>
             <div>
                 <h4 class="m360-dash-card__title"><?= mirror_h($fullName) ?></h4>
-                <p class="m360-dash-meta mobile-field"><?= mirror_h($mobile) ?></p>
+                <p class="m360-dash-meta mobile-field"><?= mirror_h(function_exists('m360_format_masked_mobile') ? m360_format_masked_mobile($mobile) : '***') ?></p>
                 <?php if ($profileNeedsCompletion): ?>
                     <p class="m360-dash-meta">برای استفاده کامل از خدمات، اطلاعات حساب خود را تکمیل کنید.</p>
                 <?php else: ?>

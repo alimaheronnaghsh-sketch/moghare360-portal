@@ -1,0 +1,1 @@
+<?php require_once __DIR__ . '/includes/p360-bootstrap.php'; header('Location: ' . (p360_current_user() ? 'dashboard.php' : 'login.php')); exit;

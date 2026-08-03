@@ -3,10 +3,19 @@ declare(strict_types=1);
 
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'mirror-layout.php';
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-fulljob-lifecycle-helper.php';
+require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-access-matrix-guard.php';
+require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-workshop-access-enforcement.php';
 
 $conn = customer_core_db();
 $actor = m360_fulljob_require_role($conn, ['OWNER', 'SYSTEM_ADMIN', 'SERVICE_MANAGER', 'TECHNICIAN']);
 $technicalRequestId = (int)($_GET['technical_request_id'] ?? 0);
+m360_ws_require_any(
+    ['workshop.part_request.view_status', 'workshop.part_request.technical_approve', 'workshop.part_request.reject_return', 'workshop.part_request.create'],
+    null
+);
+if ($technicalRequestId > 0 && is_resource($conn)) {
+    m360_ws_assert_request_object_scope($conn, $technicalRequestId);
+}
 $request = is_resource($conn) ? m360_fulljob_fetch_request($conn, $technicalRequestId) : null;
 $events = is_resource($conn) ? m360_fulljob_request_events($conn, $technicalRequestId) : [];
 

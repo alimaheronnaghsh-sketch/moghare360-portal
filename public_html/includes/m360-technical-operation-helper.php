@@ -84,7 +84,14 @@ function m360_technical_assert_gates($conn, int $jobcardId, array $row): array
 /**
  * @return list<array<string, mixed>>
  */
-function m360_technical_list_jobcards($conn, ?string $statusFilter = null, ?string $contractFilter = null, int $limit = 150): array
+function m360_technical_list_jobcards(
+    $conn,
+    ?string $statusFilter = null,
+    ?string $contractFilter = null,
+    int $limit = 150,
+    ?int $companyId = null,
+    bool $isOwner = false
+): array
 {
     if (!is_resource($conn) || !customer_core_table_exists($conn, 'erp_jobcards')) {
         return [];
@@ -95,6 +102,7 @@ function m360_technical_list_jobcards($conn, ?string $statusFilter = null, ?stri
     $where = "(j.jobcard_status = N'READY_FOR_TECHNICAL' OR (j.technical_status IS NOT NULL AND j.technical_status <> N''))";
 
     $hasTechStatus = customer_core_column_exists($conn, 'erp_jobcards', 'technical_status');
+    $hasCompany = customer_core_column_exists($conn, 'erp_jobcards', 'company_id');
 
     if ($statusFilter !== null && $statusFilter !== '' && strtoupper($statusFilter) !== 'ALL') {
         $sf = strtoupper(trim($statusFilter));
@@ -116,6 +124,18 @@ function m360_technical_list_jobcards($conn, ?string $statusFilter = null, ?stri
             SELECT 1 FROM dbo.erp_intake_contracts ic
             WHERE ic.jobcard_id = j.jobcard_id AND ic.contract_status = N'OVERRIDDEN' AND ic.manager_override = 1
         ))";
+    }
+
+    if ($hasCompany) {
+        require_once __DIR__ . '/m360-workshop-access-enforcement.php';
+        $cs = m360_ws_jobcard_company_sql('j', (int)($companyId ?? 0), $isOwner);
+        $where .= ' AND (' . $cs['sql'] . ')';
+        foreach ($cs['params'] as $p) {
+            $params[] = $p;
+        }
+    } elseif (!$isOwner) {
+        // Without company column and non-Owner: deny list (fail closed).
+        return [];
     }
 
     $sql = 'SELECT TOP ' . $limit . '

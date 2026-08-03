@@ -311,26 +311,23 @@ try {
         throw new RuntimeException('دسترسی مجاز نیست.');
     }
 
-    $companyId = (int)($_SESSION['erp_company_id'] ?? 1);
-    $roleCode = m360_staff_home_resolve_role_code($connection, $userId, $companyId);
+    require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-access-matrix-guard.php';
+    require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-workshop-access-enforcement.php';
+
+    $companyId = (int)($_SESSION['erp_company_id'] ?? 0);
+    $roleCode = m360_staff_home_resolve_role_code($connection, $userId, $companyId > 0 ? $companyId : 1);
     $isDeliveryAdmin = in_array($roleCode, ['OWNER', 'SYSTEM_ADMIN'], true)
         || erp_auth_is_system_owner($connection, $userId);
 
-    if (!$isDeliveryAdmin) {
-        http_response_code(403);
-        throw new RuntimeException('دسترسی مجاز نیست.');
-    }
+    $selectedJobcardId = erp_m30_dc_parse_jobcard_id();
+    m360_ws_require('workshop.delivery.queue.view', $selectedJobcardId > 0 ? $selectedJobcardId : null);
 
     $guardView = erp_m30_dc_guard_eval($connection, $userId, ERP_M30_VIEW_ACTION, $isDeliveryAdmin);
     $guardRelease = erp_m30_dc_guard_eval($connection, $userId, ERP_M30_RELEASE_ACTION, $isDeliveryAdmin);
     $guardViewLabel = (string)($guardView['label'] ?? 'FAIL');
     $guardReleaseLabel = (string)($guardRelease['label'] ?? 'FAIL');
+    // Matrix R0B keys are authoritative for authorization; placeholder labels remain diagnostic only.
 
-    if (empty($guardView['allowed'])) {
-        throw new RuntimeException('دسترسی مجاز نیست.');
-    }
-
-    $selectedJobcardId = erp_m30_dc_parse_jobcard_id();
     $resolvedJobcardId = erp_m30_dc_resolve_active_jobcard($connection, $selectedJobcardId);
 
     if ($resolvedJobcardId === null) {
@@ -341,9 +338,8 @@ try {
     $csrfToken = m30_dc_csrf_get_token();
 
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && erp_m30_dc_post_string('action') === 'release') {
-        if (empty($guardRelease['allowed'])) {
-            throw new RuntimeException('دسترسی مجاز نیست.');
-        }
+        m360_ws_require('workshop.delivery.final_confirm', $selectedJobcardId);
+        // Existing delivery gates (READY + delivery_allowed) remain — permission does not bypass them.
 
         if (!m30_dc_csrf_validate(trim((string)($_POST['csrf_token'] ?? '')))) {
             throw new RuntimeException('توکن امنیتی معتبر نیست.');

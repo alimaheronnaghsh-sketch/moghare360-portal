@@ -649,6 +649,22 @@ function erp_m17_create_jobcard(
             throw new RuntimeException('JobCard create could not be completed.');
         }
 
+        // Stamp verified company_id when column exists (actor membership — no ambiguous fallback).
+        require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-workshop-access-enforcement.php';
+        if (function_exists('customer_core_column_exists')
+            && customer_core_column_exists($connection, 'erp_jobcards', 'company_id')) {
+            $stampCid = 0;
+            $mem = customer_core_fetch_rows(
+                $connection,
+                'SELECT TOP 1 company_id FROM dbo.erp_company_users WHERE user_id=? AND is_active=1 AND company_id > 0 ORDER BY company_id',
+                [$userId]
+            );
+            $stampCid = (int)($mem[0]['company_id'] ?? 0);
+            if ($stampCid > 0) {
+                m360_ws_stamp_jobcard_company($connection, $jobcardId, $stampCid);
+            }
+        }
+
         erp_m17_mark_success($diagnostic, 'JOBCARD_ID_FETCH_DONE');
 
         erp_m17_insert_jobcard_history_row(
@@ -733,6 +749,9 @@ try {
     echo '</body></html>';
     exit(1);
 }
+
+require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-access-matrix-guard.php';
+m360_am_guard('workshop.jobcard.CREATE');
 
 $phpVersion = PHP_VERSION;
 $odbcAvailable = extension_loaded('odbc');

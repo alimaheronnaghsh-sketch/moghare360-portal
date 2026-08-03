@@ -401,6 +401,12 @@ function m360_cartable_mark_opened($conn, int $taskId, string $actorType, ?strin
     if ($task === null) {
         return ['ok' => false, 'message' => 'task_not_found', 'changed' => false];
     }
+    if (strtoupper(trim($actorType)) === 'CUSTOMER') {
+        $actorMobile = m360_cartable_normalize_mobile((string)($actorId ?? ''));
+        if ($actorMobile !== '' && !m360_cartable_task_belongs_to_customer($task, null, $actorMobile)) {
+            return ['ok' => false, 'message' => 'ownership_denied', 'changed' => false];
+        }
+    }
     $status = (string)($task['status'] ?? '');
     if ($status === M360_CARTABLE_STATUS_OPENED) {
         return ['ok' => true, 'message' => '', 'changed' => false];
@@ -448,6 +454,12 @@ function m360_cartable_complete_task(
     $task = m360_cartable_fetch_task_by_id($conn, $taskId);
     if ($task === null) {
         return ['ok' => false, 'message' => 'task_not_found', 'changed' => false];
+    }
+    if (strtoupper(trim($actorType)) === 'CUSTOMER') {
+        $actorMobile = m360_cartable_normalize_mobile((string)($actorId ?? ''));
+        if ($actorMobile !== '' && !m360_cartable_task_belongs_to_customer($task, null, $actorMobile)) {
+            return ['ok' => false, 'message' => 'ownership_denied', 'changed' => false];
+        }
     }
     $status = (string)($task['status'] ?? '');
     if ($status === M360_CARTABLE_STATUS_COMPLETED) {
@@ -617,8 +629,9 @@ function m360_cartable_resolve_contract_signature_action(
         return array_merge($empty, ['message' => 'token_reference_mismatch']);
     }
 
-    $route = trim((string)($taskRow['action_route'] ?? M360_CARTABLE_CONTRACT_ACTION_ROUTE));
-    if ($route === '') {
+    $route = M360_CARTABLE_CONTRACT_ACTION_ROUTE;
+    // Hard guard: contract signature must never open estimate approval (Task 41 / AUTO-UAT).
+    if (str_contains(strtolower($route), 'estimate')) {
         $route = M360_CARTABLE_CONTRACT_ACTION_ROUTE;
     }
 
@@ -741,8 +754,9 @@ function m360_cartable_resolve_estimate_approval_action($conn, array $taskRow): 
     if ($taskId < 1) {
         return array_merge($empty, ['message' => 'missing_task']);
     }
-    $route = trim((string)($taskRow['action_route'] ?? M360_CARTABLE_ESTIMATE_ACTION_ROUTE));
-    if ($route === '') {
+    $route = M360_CARTABLE_ESTIMATE_ACTION_ROUTE;
+    // Hard guard: estimate approval must never open intake contract review.
+    if (str_contains(strtolower($route), 'intake-contract')) {
         $route = M360_CARTABLE_ESTIMATE_ACTION_ROUTE;
     }
 
@@ -1024,22 +1038,40 @@ function m360_cartable_list_dashboard_inbox($conn, int $customerId, string $mobi
             M360_CARTABLE_STATUS_PENDING => 'نیازمند اقدام',
             M360_CARTABLE_STATUS_OPENED => 'در حال انجام',
         ];
-        $taskType = (string)($taskRow['task_type'] ?? '');
+        $taskType = strtoupper(trim((string)($taskRow['task_type'] ?? '')));
         $actionLabel = '';
-        if ($action['ok']) {
-            $actionLabel = $taskType === M360_CARTABLE_TASK_TYPE_ESTIMATE_APPROVAL
-                ? 'بررسی و تصمیم‌گیری'
-                : 'بررسی و امضای قرارداد';
+        $actionUrl = $action['ok'] ? (string)$action['review_url'] : '';
+        $isContractTask = in_array($taskType, [
+            M360_CARTABLE_TASK_TYPE_CONTRACT_SIGNATURE,
+            'CONTRACT_REVIEW',
+            'CONTRACT_SIGN',
+        ], true);
+        $isEstimateTask = ($taskType === M360_CARTABLE_TASK_TYPE_ESTIMATE_APPROVAL);
+        // Never cross-wire contract ↔ estimate action URLs in the customer inbox.
+        if ($isContractTask) {
+            $actionUrl = M360_CARTABLE_CONTRACT_ACTION_ROUTE . '?task_id=' . (string)(int)($taskRow['task_id'] ?? 0);
+            if ($action['ok'] || $actionUrl !== '') {
+                $actionLabel = 'بررسی و امضای قرارداد';
+            }
+        } elseif ($isEstimateTask) {
+            $actionUrl = M360_CARTABLE_ESTIMATE_ACTION_ROUTE . '?task_id=' . (string)(int)($taskRow['task_id'] ?? 0);
+            if ($action['ok'] || $actionUrl !== '') {
+                $actionLabel = 'بررسی و تصمیم‌گیری برآورد';
+            }
+        } elseif ($action['ok']) {
+            $actionLabel = 'اقدام';
         }
         $items[] = [
             'task_id' => (int)($taskRow['task_id'] ?? 0),
-            'title' => (string)($taskRow['title'] ?? ($taskType === M360_CARTABLE_TASK_TYPE_ESTIMATE_APPROVAL ? M360_CARTABLE_ESTIMATE_TITLE_FA : M360_CARTABLE_CONTRACT_TITLE_FA)),
-            'message' => (string)($taskRow['message'] ?? ($taskType === M360_CARTABLE_TASK_TYPE_ESTIMATE_APPROVAL ? M360_CARTABLE_ESTIMATE_MESSAGE_FA : M360_CARTABLE_CONTRACT_MESSAGE_FA)),
+            'task_type' => $taskType,
+            'title' => (string)($taskRow['title'] ?? ($isEstimateTask ? M360_CARTABLE_ESTIMATE_TITLE_FA : ($isContractTask ? M360_CARTABLE_CONTRACT_TITLE_FA : 'اقدام مشتری'))),
+            'message' => (string)($taskRow['message'] ?? ($isEstimateTask ? M360_CARTABLE_ESTIMATE_MESSAGE_FA : ($isContractTask ? M360_CARTABLE_CONTRACT_MESSAGE_FA : ''))),
             'priority' => (int)($taskRow['priority'] ?? 50),
             'status_label' => $statusLabels[$status] ?? 'نیازمند اقدام',
             'context' => $requestId > 0 ? 'REQ-' . (string)$requestId : '',
             'action_label' => $actionLabel,
-            'action_url' => $action['ok'] ? (string)$action['review_url'] : '',
+            'action_url' => $actionUrl,
+            'group' => $isContractTask ? 'contract' : ($isEstimateTask ? 'estimate' : 'other'),
         ];
     }
 

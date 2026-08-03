@@ -335,9 +335,14 @@ function m360_intake_prepayment_gate_evaluate(array $payload, bool $contractSign
     );
     $status = strtoupper(trim((string)($gate['status'] ?? $gate['prepayment_status'] ?? $gate['payment_status'] ?? '')));
     $ownerDecision = m360_intake_prepayment_normalize_owner_decision($gate);
+    // Default: require prepayment only when a positive amount is known.
+    // Sticky payload flags with amount=0 must not permanently block Stage 8 / JobCard handoff.
     $prepaymentRequired = array_key_exists('prepayment_required', $gate)
         ? m360_intake_prepayment_truthy_gate_value($gate['prepayment_required'])
-        : true;
+        : ($requiredAmount > 0);
+    if ($requiredAmount <= 0) {
+        $prepaymentRequired = false;
+    }
 
     $paymentRegistered = m360_intake_prepayment_truthy_gate_value($gate['payment_registered'] ?? false)
         || m360_intake_prepayment_truthy_gate_value($gate['prepayment_registered'] ?? false)

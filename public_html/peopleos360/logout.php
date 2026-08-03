@@ -1,0 +1,1 @@
+<?php require_once __DIR__ . '/includes/p360-bootstrap.php'; p360_logout(); header('Location: login.php'); exit;

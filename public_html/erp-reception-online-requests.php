@@ -2,13 +2,14 @@
 declare(strict_types=1);
 
 /**
- * MOGHARE360 P1 — Reception online requests list (read-only GET).
+ * MOGHARE360 — Online requests list (presentation unified under Customer Relations hub).
  */
 
 header('Content-Type: text/html; charset=UTF-8');
 header('X-Robots-Tag: noindex, nofollow');
 
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-reception-helper.php';
+require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'reception-ui-helper.php';
 
 m360_reception_require_staff();
 if (session_status() === PHP_SESSION_ACTIVE) {
@@ -20,7 +21,11 @@ $filterLabels = m360_reception_list_filter_labels();
 if ($statusFilter !== 'ALL' && !isset($filterLabels[$statusFilter])) {
     $statusFilter = 'ALL';
 }
-$activeFilterLabel = $filterLabels[$statusFilter] ?? 'همه';
+$typeFilter = trim((string)($_GET['type'] ?? ''));
+$q = trim((string)($_GET['q'] ?? ''));
+$sort = preg_replace('/[^a-z0-9_]/', '', strtolower((string)($_GET['sort'] ?? 'id'))) ?: 'id';
+$dir = strtolower((string)($_GET['dir'] ?? 'desc')) === 'asc' ? 'asc' : 'desc';
+$page = max(1, (int)($_GET['page'] ?? 1));
 
 $conn = customer_core_db();
 $requests = [];
@@ -28,115 +33,150 @@ $statusCounts = [];
 $dbOk = $conn !== false;
 
 if ($dbOk) {
-    $requests = m360_reception_list_requests($conn, $statusFilter === 'ALL' ? null : $statusFilter, 150);
+    $requests = m360_reception_list_requests($conn, $statusFilter === 'ALL' ? null : $statusFilter, 500);
     $statusCounts = m360_reception_status_counts($conn);
 }
 
+if ($typeFilter !== '') {
+    $requests = array_values(array_filter($requests, static function (array $row) use ($typeFilter): bool {
+        return strcasecmp((string)($row['request_type'] ?? ''), $typeFilter) === 0;
+    }));
+}
+if ($q !== '') {
+    $requests = array_values(array_filter($requests, static function (array $row) use ($q): bool {
+        $hay = strtolower(implode(' ', [
+            (string)($row['online_request_id'] ?? ''),
+            (string)($row['mobile'] ?? ''),
+            (string)($row['erp_customer_name'] ?? ''),
+            (string)($row['customer_name'] ?? ''),
+            (string)($row['vehicle_plate'] ?? ''),
+            (string)($row['vehicle_brand'] ?? ''),
+            (string)($row['vehicle_model'] ?? ''),
+        ]));
+        return str_contains($hay, strtolower($q));
+    }));
+}
+
+$sortMap = [
+    'id' => 'online_request_id',
+    'date' => 'created_at',
+    'created_at' => 'created_at',
+    'online_request_id' => 'online_request_id',
+];
+$sortKey = $sortMap[$sort] ?? 'online_request_id';
+$requests = m360_rui_sort_rows($requests, $sortKey, $dir);
+$pageInfo = m360_rui_paginate($requests, $page, 10);
+$rows = $pageInfo['rows'];
+
+$typeOptions = [];
+foreach ($requests as $r) {
+    $t = trim((string)($r['request_type'] ?? ''));
+    if ($t !== '') {
+        $typeOptions[$t] = m360_rui_label($t);
+    }
+}
+ksort($typeOptions);
+
+$keep = m360_rui_query_keep(['page' => null], ['page']);
 ?>
 <!DOCTYPE html>
 <html lang="fa" dir="rtl">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="robots" content="noindex, nofollow">
-    <title>درخواست‌های آنلاین — پذیرش</title>
-    <link rel="stylesheet" href="assets/css/moghare360-v1-luxury-ui.css">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>درخواست‌های آنلاین — MOGHARE360</title>
+<?php m360_rui_css_links(); ?>
 </head>
-<body class="m360-public-shell m360-rw-page">
-<div class="m360-wrap m360-rw-wrap">
-    <header class="m360-rw-header">
-        <div class="m360-rw-header__top">
-            <a class="m360-rw-back" href="erp-reception-workbench.php">← میز کار پذیرش</a>
-            <span class="m360-rw-badge">پذیرش آنلاین</span>
-        </div>
-        <h1 class="m360-rw-title">درخواست‌های آنلاین مشتری</h1>
-        <p class="m360-rw-subtitle">فهرست درخواست‌های تأیید OTP شده — تکمیل پرونده پذیرش از ستون اقدامات</p>
-    </header>
+<body class="c360-body">
+<div class="c360-wrap">
+<?php m360_rui_render_head('درخواست‌های آنلاین', 'درخواست‌های آنلاین', 'پیگیری و تکمیل درخواست‌های آنلاین پذیرش'); ?>
 
-    <?php if (!$dbOk): ?>
-        <section class="m360-rw-alert">اتصال به پایگاه داده برقرار نشد. لطفاً بعداً تلاش کنید.</section>
+<?php if (!$dbOk): ?>
+  <div class="c360-flash err">اتصال به پایگاه داده برقرار نشد.</div>
+<?php else: ?>
+  <section class="c360-panel">
+    <form class="c360-filter-bar" method="get">
+      <input type="hidden" name="sort" value="<?= m360_rui_h($sort) ?>">
+      <input type="hidden" name="dir" value="<?= m360_rui_h($dir) ?>">
+      <label>وضعیت
+        <select name="status">
+          <?php foreach ($filterLabels as $code => $label): ?>
+            <option value="<?= m360_rui_h($code) ?>" <?= $statusFilter === $code ? 'selected' : '' ?>><?= m360_rui_h($label) ?> (<?= (int)($statusCounts[$code] ?? 0) ?>)</option>
+          <?php endforeach; ?>
+        </select>
+      </label>
+      <label>نوع
+        <select name="type">
+          <option value="">همه</option>
+          <?php foreach ($typeOptions as $code => $label): ?>
+            <option value="<?= m360_rui_h($code) ?>" <?= $typeFilter === $code ? 'selected' : '' ?>><?= m360_rui_h($label) ?></option>
+          <?php endforeach; ?>
+        </select>
+      </label>
+      <label>جستجو
+        <input type="text" name="q" value="<?= m360_rui_h($q) ?>" placeholder="موبایل، نام، پلاک، شناسه">
+      </label>
+      <label>&nbsp;<button class="c360-btn primary" type="submit">اعمال</button></label>
+    </form>
+
+    <div class="c360-sort-links">
+      <a class="c360-btn" href="?<?= m360_rui_h(m360_rui_query_keep(['sort' => 'id', 'dir' => $sort === 'id' && $dir === 'desc' ? 'asc' : 'desc', 'page' => 1])) ?>">مرتب‌سازی شناسه</a>
+      <a class="c360-btn" href="?<?= m360_rui_h(m360_rui_query_keep(['sort' => 'date', 'dir' => $sort === 'date' && $dir === 'desc' ? 'asc' : 'desc', 'page' => 1])) ?>">مرتب‌سازی تاریخ</a>
+    </div>
+
+    <?php if ($rows === []): ?>
+      <p class="c360-muted">موردی یافت نشد.</p>
     <?php else: ?>
-        <section class="m360-rw-panel">
-            <p class="m360-rw-muted">فیلتر فعال: <strong><?= m360_reception_h($activeFilterLabel) ?></strong>
-                — <?= count($requests) ?> مورد<?php if ($statusFilter !== 'ALL' && ($statusCounts['ALL'] ?? 0) > 0): ?>
-                    (از <?= (int)($statusCounts['ALL'] ?? 0) ?> درخواست)<?php endif; ?></p>
-            <nav class="m360-rw-filters" aria-label="فیلتر وضعیت">
-                <?php foreach ($filterLabels as $code => $label):
-                    $active = ($statusFilter === $code);
-                    $count = (int)($statusCounts[$code] ?? 0);
-                ?>
-                    <a href="?status=<?= m360_reception_h($code) ?>" class="m360-rw-filter-pill<?= $active ? ' is-active' : '' ?>"<?= $active ? ' aria-current="page"' : '' ?>>
-                        <?php if ($dbOk): ?><span class="m360-rw-count"><?= $count ?></span><?php endif; ?>
-                        <?= m360_reception_h($label) ?>
-                    </a>
-                <?php endforeach; ?>
-            </nav>
-
-            <?php if ($requests === []): ?>
-                <p class="m360-rw-muted m360-rw-empty">درخواستی برای فیلتر «<?= m360_reception_h($activeFilterLabel) ?>» وجود ندارد.</p>
-            <?php else: ?>
-                <div class="m360-rw-table-wrap">
-                    <table class="m360-rw-table">
-                        <thead>
-                        <tr>
-                            <th>شناسه</th>
-                            <th>تاریخ</th>
-                            <th>موبایل</th>
-                            <th>مشتری</th>
-                            <th>خودرو / پلاک</th>
-                            <th>مراجعه</th>
-                            <th>نوع</th>
-                            <th>وضعیت</th>
-                            <th>اقدام</th>
-                        </tr>
-                        </thead>
-                        <tbody>
-                        <?php foreach ($requests as $row):
-                            $status = strtoupper((string)($row['request_status'] ?? ''));
-                            $badgeClass = 'is-new';
-                            if ($status === M360_ONLINE_REQ_STATUS_UNDER_REVIEW) {
-                                $badgeClass = 'is-review';
-                            } elseif ($status === M360_ONLINE_REQ_STATUS_ACCEPTED) {
-                                $badgeClass = 'is-accepted';
-                            } elseif ($status === M360_ONLINE_REQ_STATUS_CONVERTED) {
-                                $badgeClass = 'is-converted';
-                            } elseif ($status === M360_ONLINE_REQ_STATUS_REJECTED) {
-                                $badgeClass = 'is-rejected';
-                            }
-                            $customerLabel = trim((string)($row['erp_customer_name'] ?? ''));
-                            if ($customerLabel === '') {
-                                $customerLabel = (string)($row['customer_name'] ?? '');
-                            }
-                            $vehicleLabel = trim((string)($row['vehicle_brand'] ?? '') . ' ' . (string)($row['vehicle_model'] ?? ''));
-                            $plate = (string)($row['vehicle_plate'] ?? '');
-                            $rid = (int)($row['online_request_id'] ?? 0);
-                        ?>
-                            <tr>
-                                <td><?= m360_reception_h((string)$rid) ?></td>
-                                <td><?= m360_reception_h(substr((string)($row['created_at'] ?? ''), 0, 16)) ?></td>
-                                <td><?= m360_reception_h((string)($row['mobile'] ?? '')) ?></td>
-                                <td><?= m360_reception_h($customerLabel) ?></td>
-                                <td><?= m360_reception_h(trim($vehicleLabel . ($plate !== '' ? ' — ' . $plate : ''))) ?></td>
-                                <td><?= m360_reception_h((string)($row['visit_date'] ?? '—')) ?></td>
-                                <td><?= m360_reception_h((string)($row['request_type'] ?? '—')) ?></td>
-                                <td><span class="m360-rw-status-badge <?= m360_reception_h($badgeClass) ?>"><?= m360_reception_h(m360_online_req_status_label_fa($status)) ?></span></td>
-                                <td class="m360-rw-table-actions">
-                                    <a class="m360-rw-btn m360-rw-btn-sm" href="erp-reception-intake-file.php?online_request_id=<?= $rid ?>">تکمیل پرونده</a>
-                                    <a class="m360-rw-btn m360-rw-btn-secondary m360-rw-btn-sm" href="erp-reception-online-request-detail.php?request_id=<?= $rid ?>">مشاهده</a>
-                                </td>
-                            </tr>
-                        <?php endforeach; ?>
-                        </tbody>
-                    </table>
-                </div>
-            <?php endif; ?>
-        </section>
+      <div class="c360-table-wrap">
+        <table class="c360-table">
+          <thead>
+            <tr>
+              <th style="width:70px">شناسه</th>
+              <th style="width:130px">تاریخ</th>
+              <th style="width:110px">موبایل</th>
+              <th>مشتری</th>
+              <th>خودرو / پلاک</th>
+              <th style="width:110px">مراجعه</th>
+              <th style="width:140px">نوع</th>
+              <th style="width:120px">وضعیت</th>
+              <th class="c360-action-cell">اقدام</th>
+            </tr>
+          </thead>
+          <tbody>
+          <?php foreach ($rows as $row):
+              $rid = (int)($row['online_request_id'] ?? 0);
+              $customerLabel = trim((string)($row['erp_customer_name'] ?? ''));
+              if ($customerLabel === '') {
+                  $customerLabel = (string)($row['customer_name'] ?? '');
+              }
+              $vehicleLabel = trim((string)($row['vehicle_brand'] ?? '') . ' ' . (string)($row['vehicle_model'] ?? ''));
+              $plate = (string)($row['vehicle_plate'] ?? '');
+              $vehicleCell = trim($vehicleLabel . ($plate !== '' ? ' — ' . $plate : ''));
+              $status = strtoupper((string)($row['request_status'] ?? ''));
+              $typeRaw = (string)($row['request_type'] ?? '');
+          ?>
+            <tr>
+              <td title="<?= m360_rui_h((string)$rid) ?>"><?= $rid ?></td>
+              <td title="<?= m360_rui_h(m360_rui_jalali_date((string)($row['created_at'] ?? ''))) ?>"><?= m360_rui_h(m360_rui_jalali_date((string)($row['created_at'] ?? ''))) ?></td>
+              <td title="<?= m360_rui_h((string)($row['mobile'] ?? '')) ?>"><?= m360_rui_h((string)($row['mobile'] ?? '')) ?></td>
+              <td title="<?= m360_rui_h($customerLabel) ?>"><?= m360_rui_h($customerLabel !== '' ? $customerLabel : '—') ?></td>
+              <td title="<?= m360_rui_h($vehicleCell) ?>"><?= m360_rui_h($vehicleCell !== '' ? $vehicleCell : '—') ?></td>
+              <td title="<?= m360_rui_h(m360_rui_jalali_date((string)($row['visit_date'] ?? ''), false)) ?>"><?= m360_rui_h(m360_rui_jalali_date((string)($row['visit_date'] ?? ''), false)) ?></td>
+              <td title="<?= m360_rui_h(m360_rui_label($typeRaw)) ?>"><?= m360_rui_h(m360_rui_label($typeRaw)) ?></td>
+              <td><span class="c360-status"><?= m360_rui_h(m360_rui_label($status)) ?></span></td>
+              <td class="c360-action-cell">
+                <a class="c360-btn" href="erp-reception-intake-file.php?online_request_id=<?= $rid ?>">ورود</a>
+              </td>
+            </tr>
+          <?php endforeach; ?>
+          </tbody>
+        </table>
+      </div>
+      <?php m360_rui_render_pagination($pageInfo, $keep); ?>
     <?php endif; ?>
-
-    <nav class="m360-rw-footer">
-        <a href="erp-reception-workbench.php">میز کار پذیرش</a>
-        <a href="erp-staff-home.php">داشبورد پرسنل</a>
-    </nav>
+  </section>
+<?php endif; ?>
 </div>
 </body>
 </html>

@@ -313,6 +313,7 @@ function m360_access_mgmt_nav(): array
     return [
         ['href' => 'erp-product-home.php', 'label' => 'خانه محصول'],
         ['href' => 'erp-user-role-admin.php', 'label' => 'کاربران و نقش‌ها'],
+        ['href' => 'erp-personnel-access-matrix.php', 'label' => 'ماتریس دسترسی پرسنل'],
         ['href' => 'erp-access-management.php', 'label' => 'مدیریت دسترسی'],
         ['href' => 'erp-access-user-create.php', 'label' => 'ایجاد پرسنل'],
         ['href' => 'erp-access-change-history.php', 'label' => 'تاریخچه دسترسی'],

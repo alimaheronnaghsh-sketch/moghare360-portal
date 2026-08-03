@@ -1,0 +1,263 @@
+/**
+ * MOGHARE360 Suite — Shared Theme
+ * Source of truth: Reception luxury-ui (moghare360-v1-luxury-ui.css)
+ * Used by: Inventory360, PeopleOS360
+ * Does NOT replace or break Reception's own CSS.
+ */
+:root {
+  --m360-bg: #0f1714;
+  --m360-bg-soft: #16221d;
+  --m360-panel: #1c2b24;
+  --m360-panel-2: #122019;
+  --m360-text: #f3f4f6;
+  --m360-muted: #9ca3af;
+  --m360-primary: #22c55e;
+  --m360-primary-2: #15803d;
+  --m360-accent: #d4af37;
+  --m360-border: #2d4036;
+  --m360-danger: #ef4444;
+  --m360-warning: #d4af37;
+  --m360-success: #22c55e;
+  --m360-radius-sm: 8px;
+  --m360-radius-md: 14px;
+  --m360-radius-lg: 18px;
+  --m360-shadow: 0 18px 40px rgba(0,0,0,0.35);
+  --m360-font: Vazirmatn, Tahoma, "Segoe UI", Arial, sans-serif;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { font-size: 15px; }
+body {
+  font-family: var(--m360-font);
+  background: radial-gradient(ellipse at top, #1a2e26 0%, var(--m360-bg) 55%);
+  color: var(--m360-text);
+  line-height: 1.65;
+  min-height: 100vh;
+  direction: rtl;
+}
+
+/* ── App Shell ── */
+.m360-app-shell { display: grid; grid-template-columns: 260px 1fr; min-height: 100vh; }
+
+/* ── Sidebar ── */
+.m360-sidebar {
+  background: linear-gradient(180deg, #122019 0%, var(--m360-panel) 100%);
+  border-left: 1px solid var(--m360-border);
+  padding: 1.25rem 0.85rem;
+  display: flex; flex-direction: column; gap: 0.25rem;
+  overflow-y: auto; max-height: 100vh; position: sticky; top: 0;
+}
+.m360-sidebar-brand {
+  padding: 0.75rem 0.75rem 1rem;
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+  margin-bottom: 0.75rem;
+  text-align: center;
+}
+.m360-sidebar-brand h2 {
+  font-size: 1.15rem; font-weight: 800; margin: 0;
+  color: var(--m360-primary);
+}
+.m360-sidebar-brand small {
+  font-size: 0.72rem; color: var(--m360-muted); display: block; margin-top: 0.15rem;
+}
+.m360-sidebar-section {
+  font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
+  color: var(--m360-accent); padding: 0.85rem 0.75rem 0.3rem; margin-top: 0.35rem;
+}
+.m360-sidebar-link {
+  display: block; color: var(--m360-text); text-decoration: none;
+  padding: 0.45rem 0.85rem; border-radius: var(--m360-radius-sm);
+  font-size: 0.88rem; transition: background 0.15s, color 0.15s;
+}
+.m360-sidebar-link:hover { background: rgba(255,255,255,0.07); }
+.m360-sidebar-link.active { background: rgba(34,197,94,0.14); color: var(--m360-primary); font-weight: 600; }
+.m360-sidebar-foot {
+  margin-top: auto; padding-top: 0.85rem; border-top: 1px solid rgba(255,255,255,0.1);
+  font-size: 0.82rem; color: var(--m360-muted);
+  display: flex; justify-content: space-between; align-items: center; padding-right: 0.75rem; padding-left: 0.75rem;
+}
+.m360-sidebar-foot a { color: var(--m360-accent); text-decoration: none; }
+
+/* ── Main ── */
+.m360-main { padding: 1.5rem 2rem; min-width: 0; }
+
+/* ── Topbar / Page Header ── */
+.m360-page-header {
+  margin-bottom: 1.75rem; padding-bottom: 1rem;
+  border-bottom: 1px solid var(--m360-border);
+}
+.m360-page-title { font-size: 1.4rem; font-weight: 800; margin: 0 0 0.25rem; }
+.m360-page-subtitle { font-size: 0.88rem; color: var(--m360-muted); margin: 0; }
+.m360-page-badges { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.5rem; }
+
+/* ── Cards ── */
+.m360-card {
+  background: var(--m360-panel);
+  border: 1px solid var(--m360-border);
+  border-radius: var(--m360-radius-md);
+  padding: 1.15rem 1.25rem;
+  box-shadow: var(--m360-shadow);
+  margin-bottom: 1.25rem;
+}
+.m360-card h3 { margin: 0 0 0.6rem; font-size: 1.05rem; font-weight: 700; }
+.m360-card p { margin: 0.25rem 0; color: var(--m360-muted); font-size: 0.88rem; }
+
+/* ── KPI ── */
+.m360-kpi-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(165px, 1fr));
+  gap: 1rem; margin-bottom: 1.5rem;
+}
+.m360-kpi-card {
+  background: linear-gradient(135deg, rgba(34,197,94,0.06), var(--m360-panel));
+  border: 1px solid var(--m360-border); border-radius: var(--m360-radius-md);
+  padding: 1rem 1.1rem; text-align: center;
+}
+.m360-kpi-card span { display: block; font-size: 0.78rem; color: var(--m360-muted); margin-bottom: 0.3rem; }
+.m360-kpi-card strong { font-size: 1.6rem; font-weight: 800; color: var(--m360-primary); }
+
+/* ── Module Cards Grid ── */
+.m360-module-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 1rem; margin-bottom: 1.5rem;
+}
+.m360-module-card {
+  background: linear-gradient(165deg, #1f3229 0%, var(--m360-panel) 45%, #132019 100%);
+  border: 1px solid rgba(34,197,94,0.15); border-radius: var(--m360-radius-md);
+  padding: 1.25rem 1.15rem;
+  transition: border-color 0.2s, transform 0.2s;
+  text-decoration: none; color: var(--m360-text); display: block;
+}
+.m360-module-card:hover { border-color: rgba(34,197,94,0.4); transform: translateY(-2px); }
+.m360-module-card h3 { margin: 0 0 0.4rem; font-size: 0.95rem; font-weight: 700; }
+.m360-module-card p { margin: 0; font-size: 0.82rem; color: var(--m360-muted); }
+
+/* ── Buttons ── */
+.m360-btn {
+  display: inline-block; padding: 0.6rem 1.2rem; border: none; border-radius: 10px;
+  font-family: inherit; font-size: 0.9rem; font-weight: 700; cursor: pointer;
+  text-decoration: none; transition: transform 0.12s, filter 0.12s;
+}
+.m360-btn:hover { transform: translateY(-1px); filter: brightness(1.06); }
+.m360-btn-primary { background: linear-gradient(135deg, var(--m360-primary), var(--m360-primary-2)); color: #041008; }
+.m360-btn-secondary { background: transparent; color: var(--m360-text); border: 1px solid var(--m360-border); }
+.m360-btn-danger { background: var(--m360-danger); color: #fff; }
+
+/* ── Forms ── */
+.m360-form { max-width: 680px; }
+.m360-form label {
+  display: block; margin: 0.8rem 0 0.3rem; font-size: 0.88rem; color: var(--m360-muted);
+}
+.m360-input, .m360-select, .m360-textarea,
+.m360-form input, .m360-form select, .m360-form textarea {
+  width: 100%; padding: 0.6rem 0.8rem;
+  border-radius: 10px; border: 1px solid var(--m360-border);
+  background: #0f1613; color: var(--m360-text);
+  font-family: inherit; font-size: 0.9rem;
+}
+.m360-form select option { background: #fff; color: #111; }
+.m360-form textarea { min-height: 100px; resize: vertical; }
+.m360-form button { margin-top: 0.9rem; }
+
+/* ── Tables ── */
+.m360-table {
+  width: 100%; border-collapse: collapse; font-size: 0.88rem;
+}
+.m360-table th, .m360-table td {
+  text-align: right; padding: 0.6rem 0.65rem;
+  border-bottom: 1px solid var(--m360-border);
+}
+.m360-table th { background: rgba(34,197,94,0.06); font-weight: 700; font-size: 0.82rem; color: var(--m360-muted); }
+.m360-table tr:hover td { background: rgba(255,255,255,0.02); }
+
+/* ── Badges ── */
+.m360-badge {
+  display: inline-block; padding: 0.2rem 0.6rem; border-radius: 999px;
+  font-size: 0.73rem; border: 1px solid var(--m360-border); white-space: nowrap;
+}
+.m360-badge-ok { border-color: var(--m360-primary); color: var(--m360-primary); }
+.m360-badge-warn { border-color: var(--m360-accent); color: var(--m360-accent); }
+.m360-badge-danger { border-color: var(--m360-danger); color: var(--m360-danger); }
+.m360-badge-info { border-color: #3b82f6; color: #60a5fa; }
+
+/* ── Alerts ── */
+.m360-alert {
+  padding: 0.85rem 1rem; border-radius: 10px; margin-bottom: 1rem;
+  border: 1px solid var(--m360-border); font-size: 0.88rem; line-height: 1.7;
+}
+.m360-alert-ok { background: rgba(34,197,94,0.08); border-color: var(--m360-primary); }
+.m360-alert-err { background: rgba(239,68,68,0.1); border-color: #7f1d1d; }
+.m360-alert-warn { background: rgba(212,175,55,0.08); border-color: #92400e; }
+.m360-alert-info { background: rgba(59,130,246,0.08); border-color: #1e3a5f; }
+
+/* ── Step grid (owner test path) ── */
+.m360-step-section { margin-bottom: 1.5rem; }
+.m360-step-section h3 {
+  font-size: 0.88rem; font-weight: 700; color: var(--m360-accent);
+  margin: 0 0 0.6rem; padding-bottom: 0.35rem; border-bottom: 1px solid var(--m360-border);
+}
+.m360-step-grid { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.m360-step-pill {
+  display: inline-block; padding: 0.4rem 0.75rem; border-radius: 999px;
+  background: rgba(34,197,94,0.08); border: 1px solid rgba(34,197,94,0.2);
+  color: var(--m360-primary); text-decoration: none; font-size: 0.82rem;
+  transition: background 0.15s, border-color 0.15s;
+}
+.m360-step-pill:hover { background: rgba(34,197,94,0.16); border-color: rgba(34,197,94,0.4); }
+
+/* ── Empty state ── */
+.m360-empty-state {
+  text-align: center; padding: 2.5rem 1rem; color: var(--m360-muted); font-size: 0.92rem;
+}
+
+/* ── Login ── */
+.m360-login-shell {
+  min-height: 100vh; display: flex; align-items: center; justify-content: center;
+  background: radial-gradient(ellipse at top, #1a2e26 0%, var(--m360-bg) 55%);
+  padding: 1rem;
+}
+.m360-login-card {
+  background: var(--m360-panel); border: 1px solid var(--m360-border);
+  border-radius: var(--m360-radius-lg); padding: 2.25rem 2rem;
+  box-shadow: var(--m360-shadow); max-width: 420px; width: 100%;
+}
+.m360-login-card h1 {
+  text-align: center; font-size: 1.35rem; font-weight: 800; margin-bottom: 0.25rem;
+  color: var(--m360-primary);
+}
+.m360-login-card .subtitle {
+  text-align: center; font-size: 0.82rem; color: var(--m360-muted);
+  margin-bottom: 1.5rem; display: block;
+}
+.m360-login-card label {
+  display: block; margin: 0.85rem 0 0.3rem; font-size: 0.88rem; color: var(--m360-muted);
+}
+.m360-login-card input {
+  width: 100%; padding: 0.65rem 0.85rem; border-radius: 10px;
+  border: 1px solid var(--m360-border); background: #0f1613;
+  color: var(--m360-text); font-family: inherit; font-size: 0.92rem;
+}
+.m360-login-card button {
+  width: 100%; margin-top: 1.1rem; padding: 0.7rem;
+  border: none; border-radius: 10px; font-family: inherit; font-size: 0.95rem; font-weight: 700;
+  background: linear-gradient(135deg, var(--m360-primary), var(--m360-primary-2));
+  color: #041008; cursor: pointer; transition: filter 0.15s;
+}
+.m360-login-card button:hover { filter: brightness(1.06); }
+
+/* ── Toolbar ── */
+.m360-toolbar { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1rem; }
+
+/* ── Responsive ── */
+@media (max-width: 900px) {
+  .m360-app-shell { grid-template-columns: 1fr; }
+  .m360-sidebar {
+    position: sticky; top: 0; z-index: 10; max-height: 45vh;
+    overflow-y: auto; border-left: none; border-bottom: 1px solid var(--m360-border);
+  }
+  .m360-main { padding: 1rem; }
+  .m360-kpi-grid { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }
+  .m360-module-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 480px) {
+  html { font-size: 14px; }
+  .m360-login-card { padding: 1.5rem 1.25rem; }
+}

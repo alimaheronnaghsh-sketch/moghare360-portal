@@ -127,3 +127,67 @@ function mirror_render_foot(): void
     echo '<script>(function(){if("serviceWorker"in navigator){navigator.serviceWorker.getRegistrations().then(function(r){r.forEach(function(x){x.unregister();});});}if(window.caches&&caches.keys){caches.keys().then(function(k){k.forEach(function(n){caches.delete(n);});});}window.addEventListener("pageshow",function(e){if(e.persisted){window.location.reload();}});})();</script>';
     echo '</body></html>';
 }
+
+/** @return list<string> */
+function m360_hall_return_tabs(): array
+{
+    return ['overview', 'assignments', 'requests', 'external', 'timeline', 'quality'];
+}
+
+/**
+ * Parse allowlisted Hall JobCard return context from GET (navigation only).
+ *
+ * @return array{ok:bool,jobcard_id:int,tab:string,href:string,label:string}
+ */
+function m360_hall_parse_return_context(): array
+{
+    $jobcardId = (int)($_GET['return_jobcard_id'] ?? 0);
+    $tab = strtolower(trim((string)($_GET['return_tab'] ?? '')));
+    if ($jobcardId < 1 || !in_array($tab, m360_hall_return_tabs(), true)) {
+        return [
+            'ok' => false,
+            'jobcard_id' => 0,
+            'tab' => '',
+            'href' => 'erp-operations-home.php',
+            'label' => 'بازگشت به عملیات تعمیرگاه',
+        ];
+    }
+
+    return [
+        'ok' => true,
+        'jobcard_id' => $jobcardId,
+        'tab' => $tab,
+        'href' => 'erp-hall-jobcard-detail.php?jobcard_id=' . $jobcardId . '&tab=' . rawurlencode($tab),
+        'label' => 'بازگشت به جزئیات پرونده',
+    ];
+}
+
+/**
+ * Append controlled return context to an existing relative URL.
+ */
+function m360_hall_append_return_context(string $url, int $jobcardId, string $tab): string
+{
+    $tab = strtolower(trim($tab));
+    if ($jobcardId < 1 || !in_array($tab, m360_hall_return_tabs(), true)) {
+        return $url;
+    }
+    $sep = str_contains($url, '?') ? '&' : '?';
+
+    return $url . $sep . 'return_jobcard_id=' . $jobcardId . '&return_tab=' . rawurlencode($tab);
+}
+
+/**
+ * Compact return bar for Hall child operational pages.
+ */
+function m360_hall_render_return_nav(string $sectionFa = ''): void
+{
+    $ctx = m360_hall_parse_return_context();
+    echo '<nav class="m360-hall-return-nav" aria-label="بازگشت" style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:.55rem;margin:0 0 .85rem;padding:.55rem .7rem;border:1px solid rgba(34,197,94,.22);border-radius:12px;background:rgba(15,23,42,.45);color:#e5e7eb;">';
+    if ($sectionFa !== '') {
+        echo '<span style="font-size:.82rem;color:#9ca3af;">عملیات تعمیرگاه › جزئیات پرونده › ' . mirror_h($sectionFa) . '</span>';
+    } else {
+        echo '<span style="font-size:.82rem;color:#9ca3af;">ناوبری بازگشت</span>';
+    }
+    echo '<a class="m360-btn" href="' . mirror_h($ctx['href']) . '">' . mirror_h($ctx['label']) . '</a>';
+    echo '</nav>';
+}

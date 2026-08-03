@@ -1,0 +1,35 @@
+/* Work360 gauge / command dashboard styles — Reception-aligned dark green */
+.w360-breadcrumb{font-size:.82rem;color:var(--m360-muted);margin:0 0 .85rem}
+.w360-breadcrumb a{color:var(--m360-accent);text-decoration:none}
+.w360-breadcrumb a:hover{text-decoration:underline}
+.w360-hero-meta{display:flex;flex-wrap:wrap;gap:.45rem;margin:.65rem 0 1.1rem}
+.w360-kpi-strip{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:.75rem;margin-bottom:1.25rem}
+.w360-kpi{background:linear-gradient(145deg,rgba(34,197,94,.1),var(--m360-panel));border:1px solid var(--m360-border);border-radius:14px;padding:.9rem;text-align:center}
+.w360-kpi span{display:block;font-size:.75rem;color:var(--m360-muted)}
+.w360-kpi strong{font-size:1.45rem;color:var(--m360-primary)}
+.w360-lights{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:1rem;margin-bottom:1.35rem}
+.w360-light-card{background:linear-gradient(165deg,#1f3229,var(--m360-panel) 55%,#132019);border:1px solid rgba(34,197,94,.18);border-radius:16px;padding:1rem 1.05rem;box-shadow:var(--m360-shadow)}
+.w360-light-card h3{margin:0 0 .55rem;font-size:.95rem}
+.w360-light{width:22px;height:22px;border-radius:50%;display:inline-block;box-shadow:0 0 12px rgba(0,0,0,.45);border:2px solid rgba(255,255,255,.15);vertical-align:middle;margin-left:.45rem}
+.w360-light.green{background:#22c55e;box-shadow:0 0 14px rgba(34,197,94,.55)}
+.w360-light.yellow{background:#d4af37;box-shadow:0 0 14px rgba(212,175,55,.5)}
+.w360-light.red{background:#ef4444;box-shadow:0 0 14px rgba(239,68,68,.55)}
+.w360-light.gray{background:#6b7280}
+.w360-gauge-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:1rem;margin-bottom:1.35rem}
+.w360-gauge{position:relative;width:140px;height:140px;margin:0 auto}
+.w360-gauge svg{width:140px;height:140px;transform:rotate(-90deg)}
+.w360-gauge-track{fill:none;stroke:rgba(255,255,255,.08);stroke-width:10}
+.w360-gauge-value{fill:none;stroke-width:10;stroke-linecap:round;transition:stroke-dashoffset .4s ease}
+.w360-gauge-center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.w360-gauge-center strong{font-size:1.25rem;color:var(--m360-primary)}
+.w360-gauge-center span{font-size:.72rem;color:var(--m360-muted)}
+.w360-actions{display:flex;flex-wrap:wrap;gap:.5rem;margin:1rem 0 1.35rem}
+.w360-task-mini{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:.75rem;margin-bottom:1.25rem}
+.w360-task-card{background:var(--m360-panel);border:1px solid var(--m360-border);border-radius:12px;padding:.85rem}
+.w360-task-card h4{margin:0 0 .35rem;font-size:.9rem}
+.w360-task-card p{margin:0;font-size:.78rem;color:var(--m360-muted)}
+.w360-badge-prio{font-size:.7rem;padding:.1rem .4rem;border-radius:999px;border:1px solid var(--m360-border)}
+.w360-table-wrap{overflow:auto}
+.w360-suggest{display:flex;flex-wrap:wrap;gap:.35rem;margin:.4rem 0 .8rem}
+.w360-suggest button{background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.25);color:var(--m360-primary);border-radius:999px;padding:.25rem .6rem;font:inherit;font-size:.78rem;cursor:pointer}
+@media(max-width:900px){.w360-gauge{width:120px;height:120px}.w360-gauge svg{width:120px;height:120px}}

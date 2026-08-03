@@ -2,6 +2,8 @@
 declare(strict_types=1);
 
 require_once dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-fulljob-lifecycle-helper.php';
+require_once dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-access-matrix-guard.php';
+require_once dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-workshop-access-enforcement.php';
 
 $conn = customer_core_db();
 $actor = m360_fulljob_require_role($conn, ['OWNER', 'SYSTEM_ADMIN', 'SERVICE_MANAGER', 'TECHNICIAN']);
@@ -11,6 +13,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
     exit;
 }
 $jobcardId = (int)($_POST['jobcard_id'] ?? 0);
+m360_ws_require('workshop.part_request.create', $jobcardId > 0 ? $jobcardId : null);
 $result = is_resource($conn)
     ? m360_fulljob_create_request($conn, $jobcardId, $_POST, $actor)
     : ['ok' => false, 'message' => 'DB unavailable', 'technical_request_id' => 0];

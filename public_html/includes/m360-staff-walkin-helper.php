@@ -472,9 +472,16 @@ function m360_walkin_validate_payload(array $post, array $actor, $conn = null): 
     if ($description === '') {
         return ['ok' => false, 'message' => 'شرح درخواست یا گفته مشتری الزامی است.', 'fields' => [], 'payload' => []];
     }
+    // Entry-only walk-in: condition/photos/documents/agreements belong in erp-reception-intake-file.php.
     $conditionStructured = m360_rw_intake_validate_condition_structured_post($post);
     if (!$conditionStructured['ok']) {
-        return ['ok' => false, 'message' => $conditionStructured['error'], 'fields' => [], 'payload' => []];
+        $conditionStructured = [
+            'ok' => true,
+            'error' => '',
+            'trunk' => [],
+            'zones' => [],
+            'note' => '',
+        ];
     }
 
     $nationalId = m360_walkin_digits_to_ascii(m360_walkin_post_string($post, 'national_id', 40));

@@ -420,10 +420,21 @@
         if (stepKey === 'condition') {
             var pending = document.querySelectorAll('.m360-rw-photo-card.is-pending');
             if (pending && pending.length) {
+                var focusTarget = document.getElementById('m360_rw_camera_panel')
+                    || document.getElementById('section-condition-photos')
+                    || pending[0];
                 return {
                     ok: false,
-                    message: 'ثبت عکس‌های شش‌گانه پذیرش لازم است. اسلات‌های باقی‌مانده: ' + pending.length,
-                    focus: pending[0]
+                    message: 'ثبت عکس‌های شش‌گانه پذیرش لازم است. اسلات‌های باقی‌مانده: ' + pending.length + ' — فقط از دوربین ثبت کنید.',
+                    focus: focusTarget
+                };
+            }
+            var confirmForm = document.querySelector('.m360-rw-photo-final-confirm');
+            if (confirmForm) {
+                return {
+                    ok: false,
+                    message: 'ابتدا هر ۶ عکس پذیرش را ثبت و تأیید نهایی کنید.',
+                    focus: confirmForm.querySelector('button[type="submit"]') || confirmForm
                 };
             }
             return { ok: true };
@@ -500,12 +511,54 @@
         var video = $('m360_rw_camera_video');
         var canvas = $('m360_rw_camera_canvas');
         var startBtn = $('m360_rw_camera_start');
+        var fallbackNote = $('m360_rw_camera_fallback_note');
         var stream = null;
-        var cameraDeniedMsg = 'دسترسی دوربین فعال نشد. مجوز مرورگر را بررسی کنید.';
+        var cameraDeniedMsg = 'دسترسی دوربین فعال نشد. برای ثبت عکس پذیرش باید مجوز دوربین را بدهید.';
+
+        function showCameraFallbackNote() {
+            if (fallbackNote) fallbackNote.hidden = false;
+            if (startBtn) startBtn.disabled = true;
+        }
+
+        function applySlotImage(slot, data, readyText) {
+            var form = document.querySelector('.m360-rw-photo-slot-form input[name="photo_slot"][value="' + slot + '"]');
+            form = form ? form.closest('.m360-rw-photo-slot-form') : null;
+            if (!form && slot) {
+                var card = document.getElementById('photo-slot-' + slot);
+                form = card ? card.querySelector('.m360-rw-photo-slot-form') : null;
+            }
+            if (!form) return;
+            var hidden = form.querySelector('.m360-rw-slot-base64');
+            var saveBtn = form.querySelector('.m360-rw-slot-save');
+            if (hidden) hidden.value = data;
+            if (saveBtn) {
+                saveBtn.disabled = false;
+                saveBtn.classList.add('is-ready');
+                saveBtn.removeAttribute('aria-disabled');
+            }
+            var preview = document.getElementById('m360_rw_preview_' + slot);
+            if (preview) {
+                preview.src = data;
+                preview.style.display = 'block';
+            }
+            var hint = document.getElementById('m360_rw_hint_' + slot);
+            if (hint) {
+                hint.hidden = false;
+                hint.textContent = readyText || 'عکس آماده است؛ برای ذخیره روی «ذخیره عکس» بزنید.';
+                hint.classList.add('is-ok');
+            }
+            var statusEl = form.closest('.m360-rw-photo-card');
+            if (statusEl) {
+                var statusSpan = statusEl.querySelector('.m360-rw-photo-card__status');
+                if (statusSpan && statusSpan.textContent.indexOf('ثبت شده') === -1) {
+                    statusSpan.textContent = 'آماده ذخیره';
+                }
+            }
+        }
 
         function enableCamera() {
             if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-                if (startBtn) startBtn.disabled = true;
+                showCameraFallbackNote();
                 return Promise.reject(new Error('no camera'));
             }
             if (stream) {
@@ -522,9 +575,14 @@
                 });
         }
 
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            showCameraFallbackNote();
+        }
+
         if (startBtn && video) {
             startBtn.addEventListener('click', function () {
                 enableCamera().catch(function () {
+                    showCameraFallbackNote();
                     alert(cameraDeniedMsg);
                 });
             });
@@ -549,39 +607,14 @@
                         alert('ثبت تصویر از دوربین ناموفق بود. دوباره تلاش کنید.');
                         return;
                     }
-                    var form = btn.closest('.m360-rw-photo-slot-form');
-                    if (!form) return;
-                    var hidden = form.querySelector('.m360-rw-slot-base64');
-                    var saveBtn = form.querySelector('.m360-rw-slot-save');
-                    if (hidden) hidden.value = data;
-                    if (saveBtn) {
-                        saveBtn.disabled = false;
-                        saveBtn.classList.add('is-ready');
-                        saveBtn.removeAttribute('aria-disabled');
-                    }
-                    var preview = document.getElementById('m360_rw_preview_' + slot);
-                    if (preview) {
-                        preview.src = data;
-                        preview.style.display = 'block';
-                    }
-                    var hint = document.getElementById('m360_rw_hint_' + slot);
-                    if (hint) {
-                        hint.hidden = false;
-                        hint.textContent = 'عکس گرفته شد؛ برای ذخیره روی «ذخیره عکس» بزنید.';
-                        hint.classList.add('is-ok');
-                    }
-                    var statusEl = form.closest('.m360-rw-photo-card');
-                    if (statusEl) {
-                        var statusSpan = statusEl.querySelector('.m360-rw-photo-card__status');
-                        if (statusSpan && statusSpan.textContent.indexOf('ثبت شده') === -1) {
-                            statusSpan.textContent = 'آماده ذخیره';
-                        }
-                    }
+                    applySlotImage(slot, data, 'عکس گرفته شد؛ برای ذخیره روی «ذخیره عکس» بزنید.');
                 }).catch(function () {
+                    showCameraFallbackNote();
                     alert(cameraDeniedMsg);
                 });
             });
         });
+
     }
 
     function initStepScroll() {
@@ -636,8 +669,13 @@
     }
 
     function initMoneyThousandSeparators() {
+        function toAsciiDigits(v) {
+            return String(v || '')
+                .replace(/[۰-۹]/g, function (d) { return String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d)); })
+                .replace(/[٠-٩]/g, function (d) { return String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)); });
+        }
         function digitsOnly(v) {
-            return String(v || '').replace(/[^\d]/g, '');
+            return toAsciiDigits(v).replace(/[^\d]/g, '');
         }
         function formatThousands(v) {
             var d = digitsOnly(v);
@@ -647,6 +685,10 @@
         function bindMoneyInput(el) {
             if (!el || el.getAttribute('data-m360-money-bound') === '1') return;
             el.setAttribute('data-m360-money-bound', '1');
+            // Ensure reload/display always shows separators even if PHP left raw digits.
+            if (el.value) {
+                el.value = formatThousands(el.value);
+            }
             el.addEventListener('input', function () {
                 var start = el.selectionStart;
                 var before = el.value;

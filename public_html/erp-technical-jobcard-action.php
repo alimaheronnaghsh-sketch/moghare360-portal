@@ -9,6 +9,8 @@ header('Content-Type: text/html; charset=UTF-8');
 header('X-Robots-Tag: noindex, nofollow');
 
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-technical-operation-helper.php';
+require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-access-matrix-guard.php';
+require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-workshop-access-enforcement.php';
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
     header('Location: erp-technical-board.php');
@@ -25,6 +27,17 @@ $detailUrl = 'erp-technical-jobcard-detail.php?jobcard_id=' . max(0, $jobcardId)
 if ($jobcardId < 1) {
     header('Location: erp-technical-board.php?msg=' . rawurlencode('شناسه کارت کار نامعتبر است.') . '&ok=0');
     exit;
+}
+
+$diagPerm = m360_ws_diagnosis_permission_for_action($action);
+if ($diagPerm !== null) {
+    m360_ws_require($diagPerm, $jobcardId);
+} elseif (in_array($action, ['approve_diagnosis', 'return_diagnosis'], true)) {
+    // Handled via dedicated report page — block legacy silent path
+    m360_am_forbidden('تأیید/برگشت تشخیص فقط از صفحه گزارش تشخیص مجاز است.');
+} else {
+    // Non-diagnosis technical writes still require family view (no silent elevation).
+    m360_ws_require_any(['workshop.electrical_options.view', 'workshop.inspection.view'], $jobcardId);
 }
 
 $allowed = array_keys(m360_technician_workflow_history_event_map());

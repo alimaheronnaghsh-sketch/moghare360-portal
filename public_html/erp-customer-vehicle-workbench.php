@@ -56,7 +56,8 @@ m34_ux_render_cv_css_link();
   <?php endif; ?>
 
   <div class="m360-page-toolbar">
-    <a class="m360-btn m360-btn-primary m360-btn-sm" href="erp-customer-vehicle-create-ux.php?role=<?= m34_ux_h(rawurlencode($roleMode)) ?>">راهنمای ثبت مشتری/خودرو</a>
+    <a class="m360-btn m360-btn-primary m360-btn-sm" href="erp-reception-board.php">بازگشت به مرکز ارتباط با مشتریان</a>
+    <a class="m360-btn m360-btn-secondary m360-btn-sm" href="erp-customer-vehicle-create-ux.php?role=<?= m34_ux_h(rawurlencode($roleMode)) ?>">راهنمای ثبت مشتری/خودرو</a>
     <a class="m360-btn m360-btn-secondary m360-btn-sm" href="erp-customer-vehicle-readonly-list.php">لیست فنی M15</a>
     <a class="m360-btn m360-btn-ghost m360-btn-sm" href="erp-jobcard-workbench.php?role=<?= m34_ux_h(rawurlencode($roleMode)) ?>">میز کار JobCard</a>
   </div>

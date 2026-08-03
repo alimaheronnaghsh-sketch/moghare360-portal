@@ -16,7 +16,33 @@ const M360_CONTRACT_OTP_PURPOSE = 'CONTRACT_CONFIRMATION';
 const M360_CONTRACT_TASK_CONTEXT_SESSION = 'm360_contract_task_context';
 const M360_CONTRACT_ENTRY_TASK = 'TASK_CARTABLE';
 const M360_CONTRACT_ENTRY_TOKEN = 'SECURE_TOKEN';
+const M360_CONTRACT_CUSTOMER_CSRF_PURPOSE = 'intake_contract_customer_review';
 
+function m360_contract_customer_csrf_token(): string
+{
+    if (!function_exists('erp_csrf_get_or_create_token')) {
+        customer_core_require_helper('erp-csrf.php');
+    }
+
+    return erp_csrf_get_or_create_token(M360_CONTRACT_CUSTOMER_CSRF_PURPOSE);
+}
+
+function m360_contract_customer_csrf_input_html(): string
+{
+    $token = m360_contract_customer_csrf_token();
+
+    return '<input type="hidden" name="erp_csrf_token" value="'
+        . htmlspecialchars($token, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '">';
+}
+
+function m360_contract_customer_csrf_is_valid(?string $token): bool
+{
+    if (!function_exists('erp_csrf_validate_token')) {
+        customer_core_require_helper('erp-csrf.php');
+    }
+
+    return erp_csrf_validate_token(M360_CONTRACT_CUSTOMER_CSRF_PURPOSE, trim((string)($token ?? '')));
+}
 /**
  * @return array{
  *   task_id:int,
@@ -304,11 +330,82 @@ function m360_contract_resolve_customer_context($conn, array $input): array
         if (function_exists('m360_rw_intake_contract_validate_review_token')) {
             $tokenCheck = m360_rw_intake_contract_validate_review_token($payload, $requestId, $rawToken);
             if (!$tokenCheck['ok']) {
-                return array_merge($empty, [
-                    'message' => (string)($tokenCheck['error'] ?? $empty['message']),
-                    'entry_mode' => M360_CONTRACT_ENTRY_TOKEN,
-                    'raw_token' => $rawToken,
-                ]);
+                // Payload review TTL can expire while DB contract remains unsigned + cartable-active.
+                // Refresh payload/cartable expiry only for unsigned contracts (never fake-sign).
+                $unsigned = !m360_intake_contract_is_signed($contract);
+                $statusUpper = strtoupper((string)($contract['contract_status'] ?? ''));
+                $refreshableStatus = in_array($statusUpper, [
+                    M360_CONTRACT_STATUS_SENT,
+                    M360_CONTRACT_STATUS_VIEWED,
+                    M360_CONTRACT_STATUS_OTP_SENT,
+                    M360_CONTRACT_STATUS_GENERATED,
+                    M360_CONTRACT_STATUS_EXPIRED,
+                ], true);
+                $hasActiveCartableToken = false;
+                $contractIdForCartable = (int)($contract['contract_id'] ?? 0);
+                if ($unsigned && $contractIdForCartable > 0 && function_exists('m360_cartable_tables_available') && m360_cartable_tables_available($conn)) {
+                    $activeTaskToken = m360_cartable_find_active_by_source(
+                        $conn,
+                        M360_CARTABLE_SOURCE_MODULE_INTAKE_CONTRACT,
+                        M360_CARTABLE_SOURCE_ENTITY_TYPE_INTAKE_CONTRACT,
+                        (string)$contractIdForCartable,
+                        M360_CARTABLE_TASK_TYPE_CONTRACT_SIGNATURE
+                    );
+                    $hasActiveCartableToken = $activeTaskToken !== null;
+                }
+                $onlyExpired = !empty($tokenCheck['expired']);
+                if ($unsigned && $onlyExpired && ($hasActiveCartableToken || $refreshableStatus)
+                    && function_exists('m360_rw_intake_ensure_nested')
+                    && function_exists('m360_rw_intake_persist_payload')
+                ) {
+                    $newExpiresIso = gmdate('c', time() + M360_CONTRACT_TOKEN_TTL_SECONDS);
+                    $newExpiresSql = gmdate('Y-m-d H:i:s', time() + M360_CONTRACT_TOKEN_TTL_SECONDS);
+                    $payload = m360_rw_intake_ensure_nested($payload);
+                    if (!isset($payload['reception_intake']) || !is_array($payload['reception_intake'])) {
+                        $payload['reception_intake'] = [];
+                    }
+                    if (!isset($payload['reception_intake']['contract']) || !is_array($payload['reception_intake']['contract'])) {
+                        $payload['reception_intake']['contract'] = [];
+                    }
+                    if (!isset($payload['reception_intake']['customer_cartable']) || !is_array($payload['reception_intake']['customer_cartable'])) {
+                        $payload['reception_intake']['customer_cartable'] = [];
+                    }
+                    if (!isset($payload['reception_intake']['customer_cartable']['contract_task']) || !is_array($payload['reception_intake']['customer_cartable']['contract_task'])) {
+                        $payload['reception_intake']['customer_cartable']['contract_task'] = [];
+                    }
+                    $payload['reception_intake']['contract']['review_token_expires_at'] = $newExpiresIso;
+                    $payload['reception_intake']['customer_cartable']['contract_task']['access_token_expires_at'] = $newExpiresIso;
+                    m360_rw_intake_persist_payload($conn, $requestId, $payload, []);
+                    if ($contractIdForCartable > 0) {
+                        customer_core_execute(
+                            $conn,
+                            'UPDATE dbo.erp_customer_cartable_tasks
+                             SET action_expires_at = ?, updated_at = SYSUTCDATETIME()
+                             WHERE contract_id = ? AND task_type = ? AND is_active = 1
+                               AND status IN (?, ?)',
+                            [
+                                $newExpiresSql,
+                                $contractIdForCartable,
+                                M360_CARTABLE_TASK_TYPE_CONTRACT_SIGNATURE,
+                                M360_CARTABLE_STATUS_PENDING,
+                                M360_CARTABLE_STATUS_OPENED,
+                            ]
+                        );
+                    }
+                    m360_intake_contract_record_event(
+                        $conn,
+                        $contractIdForCartable,
+                        'CONTRACT_PAYLOAD_TOKEN_TTL_REFRESHED',
+                        'unsigned_expired_payload_token',
+                        null
+                    );
+                } else {
+                    return array_merge($empty, [
+                        'message' => (string)($tokenCheck['error'] ?? $empty['message']),
+                        'entry_mode' => M360_CONTRACT_ENTRY_TOKEN,
+                        'raw_token' => $rawToken,
+                    ]);
+                }
             }
         }
     }
@@ -736,6 +833,25 @@ function m360_contract_confirm_signature_locked(array $contractRow, string $sign
     m360_contract_sig_session_start();
     $_SESSION['m360_contract_sig_draft_' . $contractId] = $signatureImageData;
     m360_intake_contract_record_event($conn, $contractId, 'SIGNATURE_CONFIRMED_AND_LOCKED', 'hash=' . substr($sigHash, 0, 16), null);
+    if (!function_exists('m360_vault_store_signature_image')) {
+        require_once __DIR__ . DIRECTORY_SEPARATOR . 'm360-document-vault-helper.php';
+    }
+    if (m360_vault_table_exists($conn)) {
+        $sigVault = m360_vault_store_signature_image(
+            $conn,
+            $contractId,
+            (int)($contractRow['online_request_id'] ?? 0),
+            (int)($contractRow['customer_id'] ?? 0),
+            $signatureImageData,
+            null
+        );
+        if ($sigVault['ok'] && $sigVault['blob_id'] > 0) {
+            m360_intake_contract_patch_workflow_meta($conn, $contractId, [
+                'signature_vault_blob_id' => (string)$sigVault['blob_id'],
+                'signature_vault_sha256' => (string)$sigVault['sha256'],
+            ]);
+        }
+    }
 
     return ['ok' => true, 'message' => 'امضای شما ثبت و قفل شد.', 'signature_hash' => $sigHash];
 }
@@ -915,6 +1031,9 @@ function m360_contract_otp_verified(int $contractId, string $mobile): bool
     if (empty($bag['verified'])) {
         return false;
     }
+    if (!empty($bag['used_at']) && (string)($bag['hash'] ?? '') === '') {
+        // Verified once; still valid for the signing session until expires_at.
+    }
     if ((int)($bag['expires_at'] ?? 0) < time()) {
         return false;
     }
@@ -933,7 +1052,11 @@ function m360_contract_verify_otp(int $contractId, string $mobile, string $otp):
     if (trim((string)($bag['mobile'] ?? '')) !== $mobile) {
         return ['ok' => false, 'message' => 'شماره موبایل مطابقت ندارد.'];
     }
+    if (!empty($bag['used_at'])) {
+        return ['ok' => false, 'message' => 'این کد تأیید قبلاً استفاده شده است. کد جدید درخواست کنید.'];
+    }
     if ((int)($bag['expires_at'] ?? 0) < time()) {
+        unset($_SESSION[$key]);
         return ['ok' => false, 'message' => 'کد تأیید منقضی شده است.'];
     }
     $digits = preg_replace('/\D+/', '', $otp) ?? '';
@@ -941,9 +1064,18 @@ function m360_contract_verify_otp(int $contractId, string $mobile, string $otp):
         return ['ok' => false, 'message' => 'کد تأیید باید ۶ رقم باشد.'];
     }
     if (!password_verify($digits, (string)($bag['hash'] ?? ''))) {
+        $attempts = (int)($bag['attempts'] ?? 0) + 1;
+        $_SESSION[$key]['attempts'] = $attempts;
+        if ($attempts >= 5) {
+            unset($_SESSION[$key]);
+            return ['ok' => false, 'message' => 'تعداد تلاش‌های مجاز تمام شد. لطفاً کد جدید درخواست کنید.'];
+        }
         return ['ok' => false, 'message' => 'کد تأیید نادرست است.'];
     }
     $_SESSION[$key]['verified'] = true;
+    $_SESSION[$key]['used_at'] = time();
+    // Invalidate reusable secret after successful verification.
+    $_SESSION[$key]['hash'] = '';
     return ['ok' => true, 'message' => 'کد تأیید شد.'];
 }
 
@@ -1066,6 +1198,29 @@ function m360_contract_complete_signature(
         return ['ok' => false, 'message' => 'ثبت امضا ناموفق بود.'];
     }
 
+    // New signatures must land in SQL vault before contract is marked SIGNED.
+    if (!function_exists('m360_vault_store_signature_image')) {
+        require_once __DIR__ . DIRECTORY_SEPARATOR . 'm360-document-vault-helper.php';
+    }
+    if (m360_vault_table_exists($conn)) {
+        $sigVault = m360_vault_store_signature_image(
+            $conn,
+            $contractId,
+            (int)($contractRow['online_request_id'] ?? 0),
+            (int)($contractRow['customer_id'] ?? 0),
+            $signatureImageData,
+            null
+        );
+        if (empty($sigVault['ok']) || (int)($sigVault['blob_id'] ?? 0) < 1) {
+            return ['ok' => false, 'message' => 'ذخیره تصویر امضا در مخزن اسناد ناموفق بود. لطفاً دوباره تلاش کنید.'];
+        }
+        m360_intake_contract_patch_workflow_meta($conn, $contractId, [
+            'signature_vault_blob_id' => (string)$sigVault['blob_id'],
+            'signature_vault_sha256' => (string)($sigVault['sha256'] ?? ''),
+            'signature_vault_at' => gmdate('c'),
+        ]);
+    }
+
     customer_core_execute(
         $conn,
         'UPDATE dbo.' . M360_CONTRACT_TABLE . ' SET contract_status = ?, signed_at = SYSUTCDATETIME(), updated_at = SYSUTCDATETIME(), contract_body_hash = ? WHERE contract_id = ?',
@@ -1095,6 +1250,12 @@ function m360_contract_complete_signature(
     m360_intake_contract_record_event($conn, $contractId, 'CONTRACT_CONFIRMED', null, null);
     m360_intake_contract_record_event($conn, $contractId, 'CONTRACT_LOCKED', null, null);
     m360_intake_contract_record_event($conn, $contractId, 'CONTRACT_SIGNED', 'signed_hash=' . substr($signedHash, 0, 16), null);
+
+    $freshContract = m360_intake_contract_fetch_by_id($conn, $contractId);
+    if (is_array($freshContract)) {
+        m360_intake_contract_ensure_pdf($conn, $freshContract, 'customer', null, false);
+    }
+
     if (m360_cartable_tables_available($conn)) {
         $activeTask = m360_cartable_find_active_by_source(
             $conn,
@@ -1138,13 +1299,67 @@ function m360_contract_resolve_token(string $rawToken): array
     if ($row === null) {
         return ['ok' => false, 'message' => 'قرارداد یافت نشد.', 'contract' => null];
     }
-    if (!m360_intake_contract_token_valid($row)) {
-        customer_core_execute(
+    $contractId = (int)($row['contract_id'] ?? 0);
+    if (m360_intake_contract_is_signed($row)) {
+        return ['ok' => true, 'message' => '', 'contract' => $row];
+    }
+    if ((string)($row['contract_status'] ?? '') === M360_CONTRACT_STATUS_CANCELLED) {
+        return ['ok' => false, 'message' => 'این قرارداد لغو شده است.', 'contract' => null];
+    }
+
+    // Unsigned contracts with an active cartable signature task must remain signable.
+    // Refresh token TTL instead of permanently marking EXPIRED (blocks Owner UAT recapture).
+    $hasActiveCartable = false;
+    if ($contractId > 0 && function_exists('m360_cartable_tables_available') && m360_cartable_tables_available($conn)) {
+        $activeTask = m360_cartable_find_active_by_source(
             $conn,
-            'UPDATE dbo.' . M360_CONTRACT_TABLE . ' SET contract_status = ?, updated_at = SYSUTCDATETIME() WHERE contract_id = ? AND contract_status NOT IN (?, ?)',
-            [M360_CONTRACT_STATUS_EXPIRED, (int)$row['contract_id'], M360_CONTRACT_STATUS_SIGNED, M360_CONTRACT_STATUS_OVERRIDDEN]
+            M360_CARTABLE_SOURCE_MODULE_INTAKE_CONTRACT,
+            M360_CARTABLE_SOURCE_ENTITY_TYPE_INTAKE_CONTRACT,
+            (string)$contractId,
+            M360_CARTABLE_TASK_TYPE_CONTRACT_SIGNATURE
         );
+        $hasActiveCartable = $activeTask !== null;
+    }
+
+    if (!m360_intake_contract_token_valid($row)) {
+        if ($hasActiveCartable || in_array(strtoupper((string)($row['contract_status'] ?? '')), [
+            M360_CONTRACT_STATUS_SENT,
+            M360_CONTRACT_STATUS_VIEWED,
+            M360_CONTRACT_STATUS_OTP_SENT,
+            M360_CONTRACT_STATUS_GENERATED,
+            M360_CONTRACT_STATUS_EXPIRED,
+        ], true)) {
+            $newExpires = gmdate('Y-m-d H:i:s', time() + M360_CONTRACT_TOKEN_TTL_SECONDS);
+            $restoreStatus = strtoupper((string)($row['contract_status'] ?? '')) === M360_CONTRACT_STATUS_EXPIRED
+                ? M360_CONTRACT_STATUS_VIEWED
+                : (string)($row['contract_status'] ?? M360_CONTRACT_STATUS_VIEWED);
+            if ($restoreStatus === M360_CONTRACT_STATUS_EXPIRED) {
+                $restoreStatus = M360_CONTRACT_STATUS_VIEWED;
+            }
+            customer_core_execute(
+                $conn,
+                'UPDATE dbo.' . M360_CONTRACT_TABLE . '
+                 SET secure_token_expires_at = ?, contract_status = ?, updated_at = SYSUTCDATETIME()
+                 WHERE contract_id = ? AND signed_at IS NULL
+                   AND contract_status NOT IN (?, ?)',
+                [$newExpires, $restoreStatus, $contractId, M360_CONTRACT_STATUS_SIGNED, M360_CONTRACT_STATUS_OVERRIDDEN]
+            );
+            $row = m360_intake_contract_fetch_by_id($conn, $contractId) ?? $row;
+            $row['secure_token_expires_at'] = $newExpires;
+            $row['contract_status'] = $restoreStatus;
+            m360_intake_contract_record_event(
+                $conn,
+                $contractId,
+                'CONTRACT_TOKEN_TTL_REFRESHED',
+                'unsigned_active_cartable_or_viewed',
+                null
+            );
+
+            return ['ok' => true, 'message' => '', 'contract' => $row];
+        }
+
         return ['ok' => false, 'message' => 'لینک قرارداد منقضی شده است. لطفاً با پذیرش تماس بگیرید.', 'contract' => null];
     }
+
     return ['ok' => true, 'message' => '', 'contract' => $row];
 }

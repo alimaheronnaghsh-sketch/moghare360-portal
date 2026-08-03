@@ -6,6 +6,11 @@ declare(strict_types=1);
  */
 
 require_once __DIR__ . '/includes/erp-operation-engine-helper.php';
+require_once __DIR__ . '/includes/m360-access-matrix-guard.php';
+require_once __DIR__ . '/includes/m360-workshop-access-enforcement.php';
+m360_am_guard('workshop.operations.home.view');
+$wsCtx = m360_ws_require_actor_context();
+// m360_ws_object_scope_not_applicable — KPI shell; counts filtered by company below.
 
 $connection = false;
 $errorMessage = '';
@@ -30,29 +35,53 @@ try {
     operation_engine_require_auth_and_guard($connection, 'operation.engine.dashboard.view');
 
     if (operation_engine_table_exists($connection, 'erp_operation_cases')) {
-        $stats['total'] = operation_engine_scalar($connection, 'SELECT COUNT(*) FROM dbo.erp_operation_cases') ?? '0';
+        $companyJoin = '';
+        $companyWhere = '1=1';
+        $companyParams = [];
+        if (function_exists('customer_core_column_exists')
+            && customer_core_column_exists($connection, 'erp_jobcards', 'company_id')) {
+            $companyJoin = ' INNER JOIN dbo.erp_jobcards j ON j.jobcard_id = oc.jobcard_id ';
+            if (!(bool)$wsCtx['is_owner']) {
+                $companyWhere = 'j.company_id = ?';
+                $companyParams = [(int)$wsCtx['company_id']];
+            }
+        } elseif (!(bool)$wsCtx['is_owner']) {
+            $companyWhere = '1=0';
+        }
+
+        $baseFrom = 'FROM dbo.erp_operation_cases oc' . $companyJoin . ' WHERE ' . $companyWhere;
+
+        $stats['total'] = operation_engine_scalar(
+            $connection,
+            'SELECT COUNT(*) ' . $baseFrom,
+            $companyParams
+        ) ?? '0';
         $stats['waiting_approval'] = operation_engine_scalar(
             $connection,
-            "SELECT COUNT(*) FROM dbo.erp_operation_cases WHERE current_stage = 'WAITING_APPROVAL'"
+            "SELECT COUNT(*) {$baseFrom} AND oc.current_stage = 'WAITING_APPROVAL'",
+            $companyParams
         ) ?? '0';
         $stats['waiting_parts'] = operation_engine_scalar(
             $connection,
-            "SELECT COUNT(*) FROM dbo.erp_operation_cases WHERE current_stage = 'WAITING_PARTS'"
+            "SELECT COUNT(*) {$baseFrom} AND oc.current_stage = 'WAITING_PARTS'",
+            $companyParams
         ) ?? '0';
         $stats['qc'] = operation_engine_scalar(
             $connection,
-            "SELECT COUNT(*) FROM dbo.erp_operation_cases WHERE current_stage = 'QC'"
+            "SELECT COUNT(*) {$baseFrom} AND oc.current_stage = 'QC'",
+            $companyParams
         ) ?? '0';
         $stats['ready_delivery'] = operation_engine_scalar(
             $connection,
-            "SELECT COUNT(*) FROM dbo.erp_operation_cases WHERE current_stage = 'READY_FOR_DELIVERY'"
+            "SELECT COUNT(*) {$baseFrom} AND oc.current_stage = 'READY_FOR_DELIVERY'",
+            $companyParams
         ) ?? '0';
 
         foreach (ERP_PHASE2_OPERATION_STAGES as $stage) {
             $count = operation_engine_scalar(
                 $connection,
-                'SELECT COUNT(*) FROM dbo.erp_operation_cases WHERE current_stage = ?',
-                [$stage]
+                "SELECT COUNT(*) {$baseFrom} AND oc.current_stage = ?",
+                array_merge($companyParams, [$stage])
             );
             $stageCounts[$stage] = $count ?? '0';
         }

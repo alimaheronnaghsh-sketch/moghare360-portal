@@ -128,7 +128,7 @@ try {
     exit(1);
 }
 
-$userId = ERP_M24_PLATFORM_OWNER_ID;
+$userId = 0;
 $guardListLabel = 'FAIL';
 $errorMessage = '';
 $overallOk = false;
@@ -140,16 +140,18 @@ try {
 
     $connection = erp_auth_create_local_odbc_connection();
 
-    if (erp_auth_current_user_id() !== $userId || erp_auth_load_current_user($connection) === null) {
+    require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-access-matrix-guard.php';
+    require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'm360-workshop-access-enforcement.php';
+    $resolvedUid = (int)(erp_auth_current_user_id() ?? 0);
+    if ($resolvedUid < 1 || erp_auth_load_current_user($connection) === null) {
         throw new RuntimeException('Access denied.');
     }
+    $userId = $resolvedUid;
+    m360_ws_require('workshop.billable_parts.view');
 
     $guardList = erp_m24_list_guard_eval($connection, $userId, ERP_M24_LIST_ACTION);
     $guardListLabel = (string)($guardList['label'] ?? 'FAIL');
-
-    if (empty($guardList['allowed'])) {
-        throw new RuntimeException('Access denied.');
-    }
+    // Matrix key workshop.billable_parts.view is authoritative (no purchase price columns in SELECT).
 
     $listRows = erp_m24_list_fetch_rows(
         $connection,
