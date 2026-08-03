@@ -10,9 +10,9 @@ require_once __DIR__ . '/m360-access-matrix-guard.php';
 
 /** @var list<string> */
 const M360_WS_PRICE_FIELD_KEYS = [
-    'unit_price', 'customer_price', 'price', 'amount', 'line_total', 'discount', 'discount_amount',
-    'tax', 'tax_amount', 'vat', 'vat_amount', 'margin', 'purchase_price', 'supplier_payment',
-    'settlement_amount', 'invoice_amount', 'financial_amount',
+    'unit_price', 'customer_price', 'price', 'price_irr', 'price_irr_input', 'amount', 'line_total',
+    'discount', 'discount_amount', 'tax', 'tax_amount', 'vat', 'vat_amount', 'margin',
+    'purchase_price', 'supplier_payment', 'settlement_amount', 'invoice_amount', 'financial_amount',
 ];
 
 /**

@@ -103,6 +103,9 @@ function m360_nav_registry(): array
         m360_nav_route('p5_work_action', 'P5', 'عملیات اجرای کار', 'Work Execution Action', 'erp-work-execution-action.php', 'Work Execution', 'staff', 'POST', $s()),
         m360_nav_route('p5_unit_work_board', 'P5', 'کارتابل واحد تخصصی', 'Specialist Unit Work Board', 'erp-unit-work-board.php', 'Work Execution', 'staff', 'GET', $s(), 'Parent: erp-operations-home.php — unit=MECHANICAL|ELECTRICAL|OPTIONS'),
         m360_nav_route('p5_operations_home', 'P5', 'خانه عملیات تعمیرگاه', 'Operations Domain Home', 'erp-operations-home.php', 'Work Execution', 'staff', 'GET', $s()),
+        m360_nav_route('p5_ws_service_entry', 'P5', 'ثبت خط خدمت فروش', 'Workshop Service Entry', 'erp-workshop-service-entry.php', 'Work Execution', 'staff', 'GET', $s()),
+        m360_nav_route('p5_ws_service_pricing', 'P5', 'قیمت‌گذاری خدمات فروش', 'Workshop Service Pricing', 'erp-workshop-service-pricing.php', 'Work Execution', 'staff', 'GET', $s()),
+        m360_nav_route('p5_ws_service_summary', 'P5', 'خلاصه خدمات فروش', 'Workshop Service Summary', 'erp-workshop-service-summary.php', 'Work Execution', 'staff', 'GET', $s()),
 
         // P6 — QC
         m360_nav_route('p6_qc_board', 'P6', 'برد QC', 'QC Board', 'erp-qc-board.php', 'QC', 'staff', 'GET', $s()),

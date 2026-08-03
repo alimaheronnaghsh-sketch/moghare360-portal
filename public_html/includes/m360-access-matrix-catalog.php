@@ -246,12 +246,29 @@ function m360_access_matrix_catalog_definitions(): array
         ['workshop.work_report.create', 'CREATE', 'ثبت گزارش امور انجام‌شده', 'گزارش پس از کار — متفاوت از گزارش تشخیص', 'ENFORCED'],
         ['workshop.work_report.approve', 'APPROVE', 'تأیید گزارش امور انجام‌شده', 'تأیید گزارش انجام کار — بدون تأیید قیمت مشتری', 'ENFORCED'],
         ['workshop.work_report.return', 'RETURN', 'برگشت گزارش انجام‌شده برای اصلاح', 'برگشت گزارش انجام کار با دلیل و حفظ تاریخچه', 'ENFORCED'],
-        ['workshop.service_line.create_no_price', 'CREATE', 'ثبت خدمات انجام‌شده بدون مبلغ', 'ثبت نوع خدمت، شرح، تعداد، مدت، مجری، نتیجه — بدون مبلغ مشتری', 'ENFORCED'],
+        ['workshop.service_line.create_no_price', 'CREATE', 'ثبت خدمات انجام‌شده بدون مبلغ', 'ثبت نوع خدمت، شرح، مدت، مجری — بدون مبلغ مشتری', 'ENFORCED'],
+        ['workshop.service_line.review', 'APPROVE', 'تأیید فنی خط خدمت فروش', 'تأیید محتوای فنی خط خدمت — maker-checker', 'ENFORCED'],
+        ['workshop.service_line.return', 'RETURN', 'برگشت خط خدمت برای اصلاح', 'برگشت خط خدمت با دلیل فارسی', 'ENFORCED'],
+        ['workshop.service_line.price', 'FINANCIAL_EDIT', 'ثبت و ویرایش مبلغ خدمت (ریال)', 'قیمت‌گذاری مدیر سالن — BIGINT ریال', 'ENFORCED'],
+        ['workshop.service_line.view_price', 'FINANCIAL_VIEW', 'مشاهده مبلغ خدمت', 'مشاهده مبلغ — پنهان از تکنسین عادی', 'ENFORCED'],
+        ['workshop.service_line.mark_ready_for_invoice', 'CLOSE', 'آماده‌سازی خط خدمت برای فاکتور', 'READY_FOR_INVOICE — بدون صدور فاکتور', 'ENFORCED'],
     ] as [$k, $act, $t, $d, $enf]) {
-        $add($rows, $k, 'workshop', 'work_report', $act, $t, $d, [
-            'sort' => $wsSort++, 'mc' => $act === 'APPROVE' ? 1 : 0, 'enforcement' => $enf,
-            'group' => 'ws_work', 'group_fa' => $wsGroups['ws_work'],
-            'routes' => ['erp-workshop-work-report.php', 'erp-work-execution-detail.php', 'erp-work-execution-action.php'],
+        $isServiceLine = str_starts_with($k, 'workshop.service_line.');
+        $routes = $isServiceLine
+            ? [
+                'erp-workshop-service-entry.php',
+                'erp-workshop-service-pricing.php',
+                'erp-workshop-service-summary.php',
+                'erp-work-execution-action.php',
+            ]
+            : ['erp-workshop-work-report.php', 'erp-work-execution-detail.php', 'erp-work-execution-action.php'];
+        $add($rows, $k, 'workshop', $isServiceLine ? 'service_line' : 'work_report', $act, $t, $d, [
+            'sort' => $wsSort++,
+            'mc' => in_array($act, ['APPROVE'], true) ? 1 : 0,
+            'enforcement' => $enf,
+            'group' => 'ws_work',
+            'group_fa' => $wsGroups['ws_work'],
+            'routes' => $routes,
         ]);
     }
 

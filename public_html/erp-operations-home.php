@@ -120,6 +120,16 @@ $opsEntries = [
         'secondary_action' => 'کنترل تحویل',
     ],
     [
+        'key' => 'service_sales',
+        'title' => 'خدمات فروش تعمیرگاه',
+        'desc' => 'ثبت خط خدمت بدون مبلغ توسط تکنسین و قیمت‌گذاری ریالی توسط مدیر سالن.',
+        'href' => 'erp-workshop-service-entry.php',
+        'action' => 'ثبت خدمت',
+        'available' => true,
+        'secondary_href' => 'erp-workshop-service-pricing.php',
+        'secondary_action' => 'قیمت‌گذاری سالن',
+    ],
+    [
         'key' => 'internal_consumable',
         'title' => 'مواد و ملزومات مصرفی داخلی',
         'desc' => 'ثبت، تأیید و سوابق مصرف داخلی غیرقابل‌صورتحساب مشتری.',

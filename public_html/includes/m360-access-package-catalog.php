@@ -50,6 +50,8 @@ function m360_access_package_definitions(): array
     $wsWork = [
         'workshop.work_report.create', 'workshop.work_report.approve', 'workshop.work_report.return',
         'workshop.service_line.create_no_price',
+        'workshop.service_line.review', 'workshop.service_line.return', 'workshop.service_line.price',
+        'workshop.service_line.view_price', 'workshop.service_line.mark_ready_for_invoice',
     ];
     $wsIc = [
         'workshop.internal_consumable.create', 'workshop.internal_consumable.approve', 'workshop.internal_consumable.return',
@@ -106,6 +108,8 @@ function m360_access_package_definitions(): array
         'WORKSHOP', 'APPROVE',
         array_merge($wsView, $wsAssign, $wsDiag, [
             'workshop.part_request.technical_approve', 'workshop.work_report.approve', 'workshop.work_report.return',
+            'workshop.service_line.review', 'workshop.service_line.return', 'workshop.service_line.price',
+            'workshop.service_line.view_price', 'workshop.service_line.mark_ready_for_invoice',
             'workshop.qc.queue.view', 'workshop.delivery.queue.view', 'workshop.operations.home.view',
         ]),
         ['finance.reports.VIEW', 'access.matrix.manage', 'hr.payroll.admin.VIEW']
@@ -152,6 +156,7 @@ function m360_access_package_definitions(): array
         'ASSIGNED_WORK', 'SUBMIT',
         ['workshop.mechanical.view', 'workshop.periodic_service.view', 'workshop.inspection.view', 'workshop.jobcard.view',
             'workshop.diagnosis_report.create', 'workshop.work_report.create', 'workshop.service_line.create_no_price',
+            /* price keys intentionally omitted from technician packages */
             'workshop.part_request.create', 'workshop.part_issue.receive_confirm', 'workshop.internal_consumable.create'],
         ['workshop.internal_consumable.cost_view', 'finance.reports.VIEW']
     );
