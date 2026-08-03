@@ -521,11 +521,132 @@ function m360_fi_delete_calculated_items($conn, int $invoiceId): void
     if (!is_resource($conn) || !customer_core_table_exists($conn, M360_FI_ITEMS)) {
         return;
     }
+    // Do not delete WORKSHOP_SERVICE_LINE — idempotent unique conversion.
     customer_core_execute(
         $conn,
-        "DELETE FROM dbo." . M360_FI_ITEMS . " WHERE final_invoice_id = ? AND source_type IN (N'ESTIMATE_ITEM', N'SERVICE_OPERATION', N'PART_USAGE')",
+        "DELETE FROM dbo." . M360_FI_ITEMS . " WHERE final_invoice_id = ? AND source_type IN (N'ESTIMATE_ITEM', N'SERVICE_OPERATION', N'PART_USAGE', N'EXTERNAL_SERVICE')",
         [$invoiceId]
     );
+}
+
+/**
+ * Convert positive BIGINT IRR to DECIMAL(18,2) string without floating arithmetic.
+ */
+function m360_fi_irr_bigint_to_decimal_string(int $irr): string
+{
+    if ($irr <= 0) {
+        return '0.00';
+    }
+    return (string)$irr . '.00';
+}
+
+/**
+ * Idempotent insert of a READY_FOR_INVOICE workshop service line into final invoice.
+ *
+ * @return array{ok:bool,already:bool,message:string}
+ */
+function m360_fi_convert_workshop_service_line($conn, int $invoiceId, int $jobcardId, array $line, int $userId): array
+{
+    $lineId = (int)($line['service_line_id'] ?? 0);
+    $price = (int)($line['price_irr'] ?? 0);
+    if ($lineId < 1 || $price <= 0) {
+        return ['ok' => false, 'already' => false, 'message' => 'خط خدمت برای تبدیل نامعتبر است.'];
+    }
+    $existing = customer_core_fetch_rows(
+        $conn,
+        "SELECT TOP 1 final_invoice_item_id FROM dbo." . M360_FI_ITEMS . "
+         WHERE source_type=N'WORKSHOP_SERVICE_LINE' AND source_id=?",
+        [$lineId]
+    );
+    if ($existing !== []) {
+        return ['ok' => true, 'already' => true, 'message' => 'قبلاً به فاکتور تبدیل شده است.'];
+    }
+
+    $title = function_exists('m360_ws_sl_display_title')
+        ? m360_ws_sl_display_title((string)$line['sales_category'], (string)$line['service_title'])
+        : trim((string)($line['service_title'] ?? 'خدمت'));
+    $desc = isset($line['service_description']) ? (string)$line['service_description'] : null;
+    $unitStr = m360_fi_irr_bigint_to_decimal_string($price);
+    $snap = null;
+    if (customer_core_column_exists($conn, M360_FI_ITEMS, 'source_snapshot_json')) {
+        $snap = json_encode([
+            'service_line_id' => $lineId,
+            'sales_category' => (string)($line['sales_category'] ?? ''),
+            'service_title' => (string)($line['service_title'] ?? ''),
+            'price_irr' => $price,
+            'priced_by_user_id' => (int)($line['priced_by_user_id'] ?? 0),
+            'priced_at' => (string)($line['priced_at'] ?? ''),
+            'company_id' => (int)($line['company_id'] ?? 0),
+            'jobcard_id' => $jobcardId,
+            'work_item_id' => (int)($line['work_item_id'] ?? 0),
+        ], JSON_UNESCAPED_UNICODE);
+    }
+
+    if ($snap !== null) {
+        $ok = customer_core_execute(
+            $conn,
+            'INSERT INTO dbo.' . M360_FI_ITEMS . '
+                (final_invoice_id, jobcard_id, source_type, source_id, item_type, item_title, item_description,
+                 quantity, unit_price, line_total, source_snapshot_json)
+             VALUES (?, ?, N\'WORKSHOP_SERVICE_LINE\', ?, N\'SERVICE\', ?, ?, 1, ?, ?, ?)',
+            [$invoiceId, $jobcardId, $lineId, $title, $desc, $unitStr, $unitStr, $snap]
+        );
+    } else {
+        $ok = customer_core_execute(
+            $conn,
+            'INSERT INTO dbo.' . M360_FI_ITEMS . '
+                (final_invoice_id, jobcard_id, source_type, source_id, item_type, item_title, item_description,
+                 quantity, unit_price, line_total)
+             VALUES (?, ?, N\'WORKSHOP_SERVICE_LINE\', ?, N\'SERVICE\', ?, ?, 1, ?, ?)',
+            [$invoiceId, $jobcardId, $lineId, $title, $desc, $unitStr, $unitStr]
+        );
+    }
+    if ($ok === false) {
+        // Unique race: treat as already converted.
+        $again = customer_core_fetch_rows(
+            $conn,
+            "SELECT TOP 1 final_invoice_item_id FROM dbo." . M360_FI_ITEMS . "
+             WHERE source_type=N'WORKSHOP_SERVICE_LINE' AND source_id=?",
+            [$lineId]
+        );
+        if ($again !== []) {
+            return ['ok' => true, 'already' => true, 'message' => 'قبلاً به فاکتور تبدیل شده است.'];
+        }
+        return ['ok' => false, 'already' => false, 'message' => 'درج خط خدمت در فاکتور ناموفق بود.'];
+    }
+
+    $itemId = (int)(customer_core_scalar(
+        $conn,
+        "SELECT TOP 1 final_invoice_item_id FROM dbo." . M360_FI_ITEMS . "
+         WHERE source_type=N'WORKSHOP_SERVICE_LINE' AND source_id=? ORDER BY final_invoice_item_id DESC",
+        [$lineId]
+    ) ?? 0);
+
+    customer_core_execute(
+        $conn,
+        "UPDATE dbo.erp_workshop_service_lines
+         SET status=N'INVOICED', invoiced_at=SYSUTCDATETIME(), invoice_item_id=?,
+             updated_by_user_id=?, updated_at=SYSUTCDATETIME()
+         WHERE service_line_id=? AND status=N'READY_FOR_INVOICE'",
+        [$itemId > 0 ? $itemId : null, $userId, $lineId]
+    );
+    if (function_exists('m360_ws_sl_history_add')) {
+        m360_ws_sl_history_add(
+            $conn,
+            $lineId,
+            (int)($line['company_id'] ?? 0),
+            $jobcardId,
+            (int)($line['work_item_id'] ?? 0),
+            'SERVICE_LINE_INVOICED',
+            'READY_FOR_INVOICE',
+            'INVOICED',
+            $price,
+            $price,
+            'تبدیل به فاکتور نهایی',
+            $userId
+        );
+    }
+    return ['ok' => true, 'already' => false, 'message' => 'خط خدمت به فاکتور افزوده شد.'];
 }
 
 function m360_fi_insert_item(
@@ -632,6 +753,7 @@ function m360_fi_calculate($conn, int $invoiceId, int $jobcardId, int $userId): 
         if ($itemType === 'PART') {
             continue;
         }
+        // OUTSOURCE and other estimate lines remain canonical for approved outsource pricing.
         m360_fi_insert_item(
             $conn,
             $invoiceId,
@@ -646,7 +768,47 @@ function m360_fi_calculate($conn, int $invoiceId, int $jobcardId, int $userId): 
         );
     }
 
-    if (customer_core_table_exists($conn, M360_TECHNICAL_SERVICE_TABLE)) {
+    $hasWorkshopSales = false;
+    if (customer_core_table_exists($conn, 'erp_workshop_service_lines')) {
+        require_once __DIR__ . '/m360-workshop-service-line-helper.php';
+        $readyLines = customer_core_fetch_rows(
+            $conn,
+            "SELECT * FROM dbo.erp_workshop_service_lines
+             WHERE jobcard_id=? AND status IN (N'READY_FOR_INVOICE', N'INVOICED')
+             ORDER BY service_line_id",
+            [$jobcardId]
+        );
+        foreach ($readyLines as $sl) {
+            $st = strtoupper((string)($sl['status'] ?? ''));
+            if ($st === 'READY_FOR_INVOICE') {
+                $scope = strtoupper((string)($sl['agreement_scope'] ?? 'WITHIN_AGREEMENT'));
+                if ($scope === 'ADDITIONAL' && function_exists('m360_ws_sl_additional_approval_ok')
+                    && !m360_ws_sl_additional_approval_ok($conn, $jobcardId)) {
+                    continue;
+                }
+                $conv = m360_fi_convert_workshop_service_line($conn, $invoiceId, $jobcardId, $sl, $userId);
+                if (!empty($conv['ok'])) {
+                    $hasWorkshopSales = true;
+                }
+            } elseif ($st === 'INVOICED') {
+                // Ensure item remains on this invoice if previously converted elsewhere — unique source.
+                $hasWorkshopSales = true;
+                $existsHere = customer_core_fetch_rows(
+                    $conn,
+                    "SELECT TOP 1 final_invoice_item_id FROM dbo." . M360_FI_ITEMS . "
+                     WHERE final_invoice_id=? AND source_type=N'WORKSHOP_SERVICE_LINE' AND source_id=?",
+                    [$invoiceId, (int)$sl['service_line_id']]
+                );
+                if ($existsHere === []) {
+                    // Already on another invoice — skip duplicate.
+                    continue;
+                }
+            }
+        }
+    }
+
+    // Legacy operational SERVICE_OPERATION pricing skipped when workshop sales lines drive the invoice.
+    if (!$hasWorkshopSales && customer_core_table_exists($conn, M360_TECHNICAL_SERVICE_TABLE)) {
         $serviceOps = customer_core_fetch_rows(
             $conn,
             "SELECT service_operation_id, service_title, service_description, service_status
@@ -670,6 +832,41 @@ function m360_fi_calculate($conn, int $invoiceId, int $jobcardId, int $userId): 
                 isset($so['service_description']) ? (string)$so['service_description'] : null,
                 1.0,
                 $price
+            );
+        }
+    }
+
+    if (customer_core_table_exists($conn, 'erp_external_service_requests')) {
+        $extRows = customer_core_fetch_rows(
+            $conn,
+            "SELECT * FROM dbo.erp_external_service_requests
+             WHERE jobcard_id=? AND status IN (N'APPROVED', N'RETURNED', N'SENT_OUT')
+               AND estimated_cost > 0
+             ORDER BY external_service_request_id",
+            [$jobcardId]
+        );
+        foreach ($extRows as $ex) {
+            $exId = (int)($ex['external_service_request_id'] ?? 0);
+            $dup = customer_core_fetch_rows(
+                $conn,
+                "SELECT TOP 1 final_invoice_item_id FROM dbo." . M360_FI_ITEMS . "
+                 WHERE final_invoice_id=? AND source_type=N'EXTERNAL_SERVICE' AND source_id=?",
+                [$invoiceId, $exId]
+            );
+            if ($dup !== []) {
+                continue;
+            }
+            m360_fi_insert_item(
+                $conn,
+                $invoiceId,
+                $jobcardId,
+                'EXTERNAL_SERVICE',
+                $exId,
+                'OUTSOURCE',
+                trim((string)($ex['service_title'] ?? 'خدمت بیرونی')),
+                isset($ex['vendor_name']) ? ('پیمانکار: ' . (string)$ex['vendor_name']) : null,
+                1.0,
+                (float)($ex['estimated_cost'] ?? 0)
             );
         }
     }
