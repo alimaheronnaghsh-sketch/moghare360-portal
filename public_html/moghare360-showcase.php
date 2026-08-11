@@ -14,7 +14,7 @@ header('X-Robots-Tag: noindex, nofollow');
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex, nofollow">
-  <title>MOGHARE360 ERP — Soft Run Version 1.0</title>
+  <title>MAHIN 360° — Soft Run Version 1.0</title>
   <style>
     :root {
       --bg-deep: #0a0e17;
@@ -397,7 +397,7 @@ header('X-Robots-Tag: noindex, nofollow');
   <div class="wrap">
     <header class="hero">
       <span class="hero-badge">Soft Run Version 1.0 Ready</span>
-      <h1>MOGHARE360 ERP</h1>
+      <h1>MAHIN 360°</h1>
       <p class="hero-sub">نرم‌افزار جامع مدیریت تعمیرگاه، پذیرش، عملیات، مالی، CRM و کنترل فرآیند</p>
       <p class="hero-meta">سیستم عامل تعمیرگاه — از فرآیند کارگاه تا محصول نرم‌افزاری</p>
     </header>
@@ -496,7 +496,7 @@ header('X-Robots-Tag: noindex, nofollow');
         <span class="module-pill">Customer UX</span>
         <span class="module-pill">Service UX</span>
         <span class="module-pill">Finance Preview</span>
-        <span class="module-pill">Moghare Ready</span>
+        <span class="module-pill">MAHIN Ready</span>
       </div>
     </section>
 
@@ -505,7 +505,7 @@ header('X-Robots-Tag: noindex, nofollow');
         <article class="panel">
           <h3 id="vision-title">چشم‌انداز محصول</h3>
           <p>
-            MOGHARE360 فقط یک وب‌سایت نیست. این یک <strong style="color:var(--text);">سیستم عامل تعمیرگاه</strong> است
+            ماهین 360° فقط یک وب‌سایت نیست. این یک <strong style="color:var(--text);">سیستم عامل تعمیرگاه</strong> است
             که گام‌به‌گام برای تبدیل شدن به یک <strong style="color:var(--text);">محصول ERP قابل فروش</strong> طراحی شده است.
             هر ماژول با کنترل فنی، مستندسازی مأموریت و تست مرحله‌ای ساخته شده تا از کارگاه واقعی به نرم‌افزار پایدار برسد.
           </p>
@@ -513,7 +513,7 @@ header('X-Robots-Tag: noindex, nofollow');
         <article class="panel">
           <h3>مرز نسخه فعلی</h3>
           <ul class="boundary-list">
-            <li><span>نسخه جاری</span><span class="tag-current">Moghareh Internal Soft Run</span></li>
+            <li><span>نسخه جاری</span><span class="tag-current">MAHIN Internal Soft Run</span></li>
             <li><span>SaaS</span><span class="tag-future">هنوز نه</span></li>
             <li><span>پرتال مشتری</span><span class="tag-future">هنوز نه</span></li>
             <li><span>حسابداری نهایی</span><span class="tag-future">هنوز نه</span></li>
@@ -539,7 +539,7 @@ header('X-Robots-Tag: noindex, nofollow');
 
     <footer>
       <strong>Built step by step as a controlled ERP product.</strong>
-      MOGHARE360 — From workshop process to software product.
+      MAHIN 360° — From workshop process to software product.
     </footer>
   </div>
 </body>

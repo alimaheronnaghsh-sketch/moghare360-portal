@@ -8,15 +8,15 @@ try {
     if ($c !== false) { cs_require_auth($c, 'commercial.demo.view'); @odbc_close($c); }
 } catch (Throwable) { cs_error('Sales Showcase', 'دسترسی به Sales Showcase ممکن نیست.'); }
 
-cs_render_head('MOGHARE360 Sales Showcase');
-echo '<div class="p10cs-hero"><h1>MOGHARE360 Sales Showcase</h1><p>فروش اولیه — بدون ادعای SaaS production</p></div>';
+cs_render_head('MAHIN 360° Sales Showcase');
+echo '<div class="p10cs-hero"><h1>MAHIN 360° Sales Showcase</h1><p>فروش اولیه — بدون ادعای SaaS production</p></div>';
 
 $sections = [
     'Problem' => 'تعمیرگاه‌ها با پراکندگی JobCard، انبار، مالی و CRM در اکسل و سیستم‌های جداگانه درگیرند.',
-    'Solution' => 'MOGHARE360 یک Repair Shop Operating System یکپارچه از پذیرش تا تحویل، CRM و گزارش مدیریتی است.',
+    'Solution' => 'MAHIN 360° یک Repair Shop Operating System یکپارچه از پذیرش تا تحویل، CRM و گزارش مدیریتی است.',
     'Modules' => 'Customer Core · Operation Engine · Rule Engine · Inventory · Finance Preview · CRM · HR · Management Reporting',
     'Business Value' => 'کاهش گم‌شدن پرونده، شفافیت مالی preview، پیگیری مشتری، آمادگی مدیریتی.',
-    'Why MOGHARE360' => 'ساخته‌شده برای تعمیرگاه ایرانی — RTL — Soft Run تست‌شده — مرزهای امن معماری حفظ‌شده.',
+    'Why MAHIN 360°' => 'ساخته‌شده برای تعمیرگاه ایرانی — RTL — Soft Run تست‌شده — مرزهای امن معماری حفظ‌شده.',
     'Demo Flow' => 'Soft Run Home → Business Command → Operation → Finance Preview → CRM → Management Dashboard → Commercial Demo',
     'Commercial Readiness' => 'بسته‌های محصول، license preview، checklist و گزارش نهایی — بدون billing واقعی.',
 ];

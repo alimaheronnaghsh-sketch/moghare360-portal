@@ -1088,7 +1088,7 @@ function m360_contract_send_link_sms(string $mobile, string $url): array
         }
         return ['ok' => false, 'message' => M360_OTP_MSG_SMS_INACTIVE];
     }
-    $message = 'مقاره۳۶۰: لینک قرارداد پذیرش خودرو: ' . $url;
+    $message = 'ماهین 360°: لینک قرارداد پذیرش خودرو: ' . $url;
     return m360_contract_send_plain_sms($mobile, $message);
 }
 

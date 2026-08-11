@@ -28,7 +28,7 @@ $urls = [
 ];
 
 cs_render_head('Final Commercial Release Report');
-echo '<div class="p10cs-hero"><h1>گزارش نهایی Commercial Release</h1><p>MOGHARE360 — Phases 1–10 Summary</p></div>';
+echo '<div class="p10cs-hero"><h1>گزارش نهایی Commercial Release</h1><p>MAHIN 360° — Phases 1–10 Summary</p></div>';
 
 echo '<div class="p1cc-card"><h2 class="p10cs-section-title">وضعیت فازها</h2><table class="p1cc-table"><thead><tr><th>فاز</th><th>عنوان</th><th>وضعیت</th></tr></thead><tbody>';
 foreach ($phases as [$n, $t, $s]) {
@@ -63,7 +63,7 @@ foreach ($urls as $group => $list) {
 }
 echo '</div>';
 
-echo '<div class="p1cc-card p10cs-final-statement"><p><strong>MOGHARE360 has been converted from Soft Run Internal ERP into a Business-Ready Repair Shop Operating System with Commercial Demo Readiness.</strong></p>';
+echo '<div class="p1cc-card p10cs-final-statement"><p><strong>MAHIN 360° has been converted from Soft Run Internal ERP into a Business-Ready Repair Shop Operating System with Commercial Demo Readiness.</strong></p>';
 echo '<p style="margin-top:.75rem">PHASE 11 Stabilization Sprint follows Commercial Release for Local Release Candidate 1 preparation — see <a href="erp-stabilization-dashboard.php">Stabilization Dashboard</a> and <a href="erp-local-release-candidate.php">Local RC1</a>.</p>';
 echo '<p style="margin-top:.5rem">PHASE 12.5 — <a href="erp-brand-system.php">Brand System</a> · <a href="erp-localization-audit.php">Localization Audit</a> · <a href="erp-asset-registry.php">Asset Registry</a> · <a href="moghare360-demo-package.php">Demo Package</a></p>';
 echo '<p style="margin-top:.5rem">PHASE 13 — <a href="erp-security-hardening-dashboard.php">Security Hardening Dashboard</a> · <a href="erp-write-route-audit.php">Write Route Audit</a> · <a href="erp-csrf-audit.php">CSRF Audit</a></p>';

@@ -46,7 +46,7 @@ $jobcardRows = $pageInfo['rows'];
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="robots" content="noindex, nofollow">
-    <title>پرونده‌های کار پذیرش | مقاره ۳۶۰</title>
+    <title>پرونده‌های کار پذیرش | ماهین 360°</title>
     <link rel="stylesheet" href="assets/moghare360-ui/moghare360-soft-run-release.css">
     <link rel="stylesheet" href="assets/css/mirror.css">
     <link rel="stylesheet" href="assets/css/moghare360-v1-luxury-ui.css">

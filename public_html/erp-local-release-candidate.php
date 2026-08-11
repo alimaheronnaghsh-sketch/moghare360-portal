@@ -19,8 +19,8 @@ try {
 
 $rc = stabilization_release_candidate_status();
 
-stab_render_head('MOGHARE360 Local Release Candidate 1');
-echo '<div class="p11st-rc-hero"><h1>MOGHARE360 Local Release Candidate 1</h1>';
+stab_render_head('MAHIN 360° Local Release Candidate 1');
+echo '<div class="p11st-rc-hero"><h1>ماهین 360° Local Release Candidate 1</h1>';
 echo '<p>' . stabilization_h((string)$rc['scope']) . '</p></div>';
 
 echo '<div class="p1cc-card"><h2 class="p11st-section-title">وضعیت Release</h2>';

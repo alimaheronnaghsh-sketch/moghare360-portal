@@ -17,14 +17,14 @@ $roleMode = moghare360_shell_normalize_role_mode(isset($_GET['role']) ? (string)
 $activeModule = 'soft_run_gate';
 $missions = m37_ux_mission_status_list();
 
-moghare360_render_shell_start('Moghare Ready', $activeModule, $roleMode);
+moghare360_render_shell_start('MAHIN Ready', $activeModule, $roleMode);
 m37_ux_render_release_css_link();
 ?>
 
 <div class="m37-sr-board">
   <article class="m37-sr-ready-panel">
-    <h1 class="m37-sr-ready-title">Soft Run Version 1.0 — Moghareh Internal ERP</h1>
-    <p style="margin:0;color:#525252;font-size:0.95rem;">MOGHARE READY — Product UX Layer M31–M37 Complete</p>
+    <h1 class="m37-sr-ready-title">Soft Run Version 1.0 — MAHIN Internal ERP</h1>
+    <p style="margin:0;color:#525252;font-size:0.95rem;">MAHIN READY — Product UX Layer M31–M37 Complete</p>
 
     <div class="m37-sr-internal-warning" style="margin-top:1rem;">
       <strong>Soft Run Boundary:</strong> Internal use only · Not SaaS · Not production commercial · No final accounting · No customer portal · No tenant system

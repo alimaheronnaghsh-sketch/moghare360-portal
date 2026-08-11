@@ -144,7 +144,7 @@ function m360_nav_registry(): array
         m360_nav_route('p9_api_readiness', 'P9', 'API Readiness', 'Readiness Summary API', 'api/soft-run/readiness-summary.php', 'API', 'staff', 'GET', array_merge($a(), $d())),
 
         // P10 — Release / RC
-        m360_nav_route('p10_product_home', 'P10', 'خانه محصول MOGHARE360', 'Product Home', 'erp-product-home.php', 'Release / RC', 'staff', 'GET', ['staff' => true, 'owner' => true, 'demo' => true]),
+        m360_nav_route('p10_product_home', 'P10', 'خانه محصول ماهین 360°', 'Product Home', 'erp-product-home.php', 'Release / RC', 'staff', 'GET', ['staff' => true, 'owner' => true, 'demo' => true]),
         m360_nav_route('p10_demo_package_rc', 'P10', 'Demo Package RC', 'Demo Package RC', 'erp-demo-package-rc.php', 'Release / RC', 'staff', 'GET', $d()),
         m360_nav_route('p10_release_readiness', 'P10', 'آمادگی Release', 'Release Readiness', 'erp-release-readiness.php', 'Release / RC', 'staff', 'GET', $o()),
         m360_nav_route('p10_route_map', 'P10', 'نقشه Route', 'Route Map', 'erp-route-map.php', 'Release / RC', 'staff', 'GET', $s()),

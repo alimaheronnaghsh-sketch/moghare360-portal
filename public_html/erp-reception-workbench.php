@@ -2,7 +2,7 @@
 declare(strict_types=1);
 
 /**
- * MOGHARE360 P11.9-C-2B — Reception Staff Workbench
+ * MAHIN 360° P11.9-C-2B — Reception Staff Workbench
  */
 
 header('Content-Type: text/html; charset=UTF-8');
@@ -30,16 +30,16 @@ $isLanding = ($section === '' || $section === 'home');
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="robots" content="noindex, nofollow">
-    <title>میز کار پذیرش — MOGHARE360</title>
+    <title>میز کار پذیرش — MAHIN 360°</title>
     <link rel="stylesheet" href="assets/css/moghare360-v1-luxury-ui.css">
 </head>
 <body class="m360-public-shell m360-rw-page">
 <div class="m360-wrap m360-rw-wrap">
     <header class="m360-rw-header">
-        <div class="m360-brand-lockup" aria-label="MOGHARE360">
-            <img class="m360-brand-logo" src="assets/brand/moghareh-motors-logo.jpg" width="40" height="40" alt="MOGHARE360" onerror="this.style.display='none'">
+        <div class="m360-brand-lockup" aria-label="MAHIN 360°">
+            <img class="m360-brand-logo" src="assets/brand/mahin360-logo.png" width="40" height="40" alt="MAHIN 360°" onerror="this.style.display='none'">
             <div class="m360-brand-wordmark">
-                <span class="m360-brand-wordmark__title" lang="en" dir="ltr">MOGHARE360</span>
+                <span class="m360-brand-wordmark__title" lang="en" dir="ltr">MAHIN 360°</span>
                 <span class="m360-brand-wordmark__sub">میز کار پذیرش</span>
             </div>
         </div>

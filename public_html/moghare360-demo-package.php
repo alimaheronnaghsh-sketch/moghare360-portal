@@ -13,8 +13,8 @@ try {
     mogh_loc_error('بسته نمایشی', 'دسترسی ممکن نیست.');
 }
 
-mogh_loc_render_head('بسته نمایشی MOGHARE360');
-echo '<div class="m125bl-hero"><h1>بسته نمایشی MOGHARE360</h1>';
+mogh_loc_render_head('بسته نمایشی ماهین 360°');
+echo '<div class="m125bl-hero"><h1>بسته نمایشی ماهین 360°</h1>';
 echo '<p>Demo Package Ready Plan — آماده‌سازی بسته نمایشی بدون Installer واقعی</p></div>';
 
 echo '<div class="m125bl-warning-box">';
@@ -23,12 +23,12 @@ echo '</div>';
 
 echo '<div class="m125bl-kpi-grid">';
 echo '<div class="m125bl-kpi m125bl-kpi-neon"><div class="label">وضعیت</div><div class="value">Demo Package Ready Plan</div></div>';
-echo '<div class="m125bl-kpi"><div class="label">محصول</div><div class="value">MOGHARE360 ERP</div></div>';
+echo '<div class="m125bl-kpi"><div class="label">محصول</div><div class="value">MAHIN 360° ERP</div></div>';
 echo '<div class="m125bl-kpi"><div class="label">نسخه</div><div class="value">Local RC1</div></div>';
 echo '</div>';
 
 echo '<div class="m125bl-card-dark"><h2 class="m125bl-section-title">معرفی محصول</h2>';
-echo '<p>MOGHARE360 ERP سیستم مدیریتی تعمیرگاه و عملیات سرویس است که از اجرای نرم داخلی تا نسخه نمایشی تجاری و اجرای آزمایشی کنترل‌شده تعمیرگاه آماده شده است.</p>';
+echo '<p>MAHIN 360° ERP سیستم مدیریتی تعمیرگاه و عملیات سرویس است که از اجرای نرم داخلی تا نسخه نمایشی تجاری و اجرای آزمایشی کنترل‌شده تعمیرگاه آماده شده است.</p>';
 echo '<table class="p1cc-table"><tbody>';
 foreach (mogh_loc_product_status_labels() as $row) {
     echo '<tr><td>' . mogh_loc_h($row['label']) . '</td>';

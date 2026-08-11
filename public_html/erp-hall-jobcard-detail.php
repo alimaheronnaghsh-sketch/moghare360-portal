@@ -368,7 +368,7 @@ mirror_render_head('جزئیات سالن کارت کار', 'staff');
 </style>
 <section class="m360-card m360-hall-shell">
   <div class="m360-hall-topbar">
-    <h1 class="m360-step-title">جزئیات سالن کارت کار — مقاره ۳۶۰</h1>
+    <h1 class="m360-step-title">جزئیات سالن کارت کار — ماهین 360°</h1>
     <a class="m360-btn" href="erp-hall-cartable.php">بازگشت به کارتابل مدیر سالن</a>
   </div>
   <?php if ($message !== ''): ?>

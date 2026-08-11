@@ -37,8 +37,8 @@ try {
     }
 }
 
-v1ctrl_render_head('MOGHARE360 V1 — Production Run Signoff');
-echo '<div class="v1sig-banner">MOGHARE360 V1 SaaS-enabled Production Release — Post-Run Signoff Control</div>';
+v1ctrl_render_head('MAHIN 360° V1 — Production Run Signoff');
+echo '<div class="v1sig-banner">MAHIN 360° V1 SaaS-enabled Production Release — Post-Run Signoff Control</div>';
 echo '<div class="v1sig-hero"><h1>Production Run Signoff</h1>';
 echo '<p>ثبت وضعیت نهایی V1 پس از اجرای واقعی — بدون بازگشت به چرخه ساخت بی‌پایان</p></div>';
 

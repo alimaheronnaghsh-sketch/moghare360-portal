@@ -268,7 +268,7 @@ $runAt = (new DateTimeImmutable('now', new DateTimeZone('Asia/Tehran')))->format
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex, nofollow">
-  <title>داشبورد فقط‌خواندنی چرخه عمر دسترسی ERP — MOGHARE360 V0</title>
+  <title>داشبورد فقط‌خواندنی چرخه عمر دسترسی ERP — ماهین 360° V0</title>
   <style>
     body { font-family: Tahoma, Arial, sans-serif; margin: 0; background: #f0f4f8; color: #1a1a1a; line-height: 1.5; }
     .wrap { max-width: 1100px; margin: 0 auto; padding: 20px; }
@@ -298,7 +298,7 @@ $runAt = (new DateTimeImmutable('now', new DateTimeZone('Asia/Tehran')))->format
 
     <div class="card">
       <h1>داشبورد فقط‌خواندنی چرخه عمر دسترسی ERP</h1>
-      <p class="muted">MOGHARE360 ERP V0 — Access Lifecycle — فقط SELECT</p>
+      <p class="muted">ماهین 360° V0 — Access Lifecycle — فقط SELECT</p>
       <p class="muted">زمان اجرا (Asia/Tehran): <?= erp_alc_h($runAt) ?></p>
     </div>
 

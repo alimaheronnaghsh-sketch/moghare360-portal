@@ -96,7 +96,7 @@ $hallReturn = m360_hall_parse_return_context();
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?= m360_fulljob_h($title) ?> | مقاره ۳۶۰</title>
+    <title><?= m360_fulljob_h($title) ?> | ماهین 360°</title>
     <link rel="stylesheet" href="assets/moghare360-ui/moghare360-soft-run-release.css">
     <link rel="stylesheet" href="assets/css/mirror.css">
     <link rel="stylesheet" href="assets/css/moghare360-v1-luxury-ui.css">

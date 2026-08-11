@@ -14,7 +14,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <div class="m360-login-shell">
 <div class="m360-login-card">
 <h1>PeopleOS360</h1>
-<span class="subtitle">سامانه مستقل اداری و منابع انسانی — مجموعه MOGHARE360</span>
+<span class="subtitle">سامانه مستقل اداری و منابع انسانی — مجموعه ماهین 360°</span>
 <?php if ($msg): ?>
 <div class="m360-alert <?= $ok ? 'm360-alert-ok' : 'm360-alert-err' ?>"><?= p360_h($msg) ?></div>
 <?php endif; ?>

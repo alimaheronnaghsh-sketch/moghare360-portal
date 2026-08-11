@@ -15,9 +15,9 @@ try {
 
 $packages = mogh_rel_package_types();
 
-mogh_rel_render_head('دانلود بسته خروجی MOGHARE360');
-echo '<div class="p15rel-hero"><h1>دانلود بسته خروجی MOGHARE360</h1>';
-echo '<p>MOGHARE360 V1 SaaS-enabled Production Release — Production Installer · Auto Deploy · SaaS Activation · Mirror/PWA</p></div>';
+mogh_rel_render_head('دانلود بسته خروجی ماهین 360°');
+echo '<div class="p15rel-hero"><h1>دانلود بسته خروجی ماهین 360°</h1>';
+echo '<p>MAHIN 360° V1 SaaS-enabled Production Release — Production Installer · Auto Deploy · SaaS Activation · Mirror/PWA</p></div>';
 
 echo '<div class="p15rel-warning-box"><strong>هشدار امنیتی:</strong> No credentials in ZIP · No private config in ZIP · No real customer data in ZIP. Config و secrets فقط روی سرور مقصد (environment / private config) تنظیم می‌شوند.</div>';
 

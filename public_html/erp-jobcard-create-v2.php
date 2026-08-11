@@ -16,7 +16,7 @@ header('X-Robots-Tag: noindex, nofollow');
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="robots" content="noindex, nofollow">
-    <title>ثبت کارت کار v2 — MOGHARE360</title>
+    <title>ثبت کارت کار v2 — ماهین 360°</title>
     <link rel="stylesheet" href="assets/moghare360-ui/moghare360-soft-run-release.css">
 </head>
 <body style="background:#f5f5f5;margin:0;padding:1.5rem;color:#171717;">

@@ -13,7 +13,7 @@ try {
 } catch (Throwable) { cs_error('Product Packages', 'دسترسی ممکن نیست.'); }
 
 cs_render_head('Product Packages');
-echo '<div class="p10cs-hero"><h1>بسته‌های محصول MOGHARE360</h1><p>Product Package Plans — preview</p></div>';
+echo '<div class="p10cs-hero"><h1>بسته‌های محصول ماهین 360°</h1><p>Product Package Plans — preview</p></div>';
 echo '<div class="p10cs-warning">قیمت‌ها draft/preview هستند و قرارداد فروش رسمی نیستند.</div>';
 
 echo '<div class="p10cs-package-grid">';

@@ -266,7 +266,7 @@ function mogh_rel_render_head(string $title): void
     echo '<link rel="stylesheet" href="assets/moghare360-ui/moghare360-brand-localization.css">';
     echo '<link rel="stylesheet" href="assets/moghare360-ui/moghare360-release-package.css">';
     echo '</head><body class="p15rel-page"><div class="p15rel-wrap">';
-    echo '<div class="p15rel-banner">MOGHARE360 V1 — SaaS-enabled Production Release · Installer · Auto Deploy · Controlled Run</div>';
+    echo '<div class="p15rel-banner">MAHIN 360° V1 — SaaS-enabled Production Release · Installer · Auto Deploy · Controlled Run</div>';
 }
 
 function mogh_rel_render_foot(): void

@@ -28,7 +28,7 @@ function m360_sr_badge(string $s): string {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>کنترل‌سنتر Soft Run MOGHARE360</title>
+    <title>کنترل‌سنتر Soft Run ماهین 360°</title>
     <link rel="stylesheet" href="assets/moghare360-ui/moghare360-soft-run-release.css">
     <link rel="stylesheet" href="assets/css/m360-soft-run.css">
 </head>

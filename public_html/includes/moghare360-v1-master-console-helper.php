@@ -60,7 +60,7 @@ function v1mc_render_foot(): void
     echo '<a href="index.php">ورود اصلی</a> · ';
     echo '<a href="erp-v1-master-console.php">Master Console</a> · ';
     echo '<a href="erp-v1-unit-access-console.php">Unit Access Console</a> · ';
-    echo '<a href="erp-moghare-ready.php">Moghare Ready</a> · ';
+    echo '<a href="erp-moghare-ready.php">MAHIN Ready</a> · ';
     echo '<a href="erp-v1-production-signoff.php">Production Signoff</a>';
     echo '</p></div></body></html>';
 }

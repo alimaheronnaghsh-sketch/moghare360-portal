@@ -98,7 +98,7 @@ $m360CustomerPageBoot = [
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="robots" content="noindex, nofollow">
-    <title>پذیرش حضوری — MOGHARE360</title>
+    <title>پذیرش حضوری — ماهین 360°</title>
     <link rel="stylesheet" href="assets/css/mirror.css">
     <link rel="stylesheet" href="assets/css/moghare360-v1-luxury-ui.css">
 </head>

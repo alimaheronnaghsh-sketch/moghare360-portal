@@ -224,7 +224,7 @@ if (!function_exists('sendWelcomeSms')) {
         if (($ippanelApiKey ?? '') === 'CHANGE_ME_IPPANEL_API_KEY' || !function_exists('curl_init')) {
             return 'پیام خوش‌آمدگویی به دلیل تکمیل نبودن تنظیمات پیامک ارسال نشد.';
         }
-        $message = "مشتری گرامی {$fullName}، به پرتال مقاره موتورز 360 خوش آمدید.";
+        $message = "مشتری گرامی {$fullName}، به پرتال ماهین 360° خوش آمدید.";
         $payload = ['sender' => $ippanelSender ?: '100033605070', 'receptor' => $mobile, 'message' => $message];
         $ch = curl_init('https://api2.ippanel.com/api/v1/sms/send/webservice/single');
         curl_setopt_array($ch, [

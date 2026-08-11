@@ -967,7 +967,7 @@ function m360_otp_send_sms(string $phone, string $code): array
     if ($s['pattern_id'] !== '') {
         $payload = m360_otp_ippanel_pattern_payload($phone, $code, $s);
     } else {
-        $payload = m360_otp_ippanel_webservice_payload($phone, 'کد تأیید مقاره۳۶۰: ' . $code, $s);
+        $payload = m360_otp_ippanel_webservice_payload($phone, 'کد تأیید ماهین 360°: ' . $code, $s);
     }
 
     $send = m360_otp_ippanel_send($payload, (string)$s['api_key']);

@@ -22,7 +22,7 @@ try {
     }
 }
 
-v1ctrl_render_head('MOGHARE360 V1 — Post-Run Fix Register');
+v1ctrl_render_head('MAHIN 360° V1 — Post-Run Fix Register');
 echo '<div class="v1sig-banner">Post-Run Fix / Development Control — جلوگیری از چرخه ساخت بی‌پایان</div>';
 echo '<div class="v1sig-hero"><h1>Fix / Development Register</h1>';
 echo '<p>ثبت اصلاحات بعد از Production Run واقعی — تفکیک Bug / Fix / Improvement / V2 Backlog</p></div>';

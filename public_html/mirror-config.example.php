@@ -17,7 +17,7 @@ return [
     'LOCAL_STORAGE_ALLOWED' => false,
     'HOST_DATABASE_ALLOWED' => false,
     'API_TIMEOUT_SECONDS' => 15,
-    'BRAND_NAME' => 'MOGHAREH360',
+    'BRAND_NAME' => 'MAHIN 360°',
     'SUPPORT_PHONE' => '021-00000000',
     'SMS_OTP_ENABLED' => false,
     'SMS_GATEWAY_CONFIGURED' => false,

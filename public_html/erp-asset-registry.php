@@ -37,7 +37,7 @@ echo '<div><h2 class="m125bl-section-title" style="margin-top:0">پیش‌نما
 mogh_loc_render_brand_logo();
 echo '</div><div>';
 if (!mogh_loc_brand_logo_exists()) {
-    echo '<p>Logo file not found. Expected path: <code class="m360-ltr">public_html/assets/moghare360-brand/moghareh-motors-logo.jpg</code></p>';
+    echo '<p>Logo file not found. Expected path: <code class="m360-ltr">public_html/assets/brand/mahin360-logo.png</code></p>';
 }
 echo '<p>وضعیت: <span class="m125bl-badge ' . (mogh_loc_brand_logo_exists() ? 'm125bl-badge-ok' : 'm125bl-badge-warn') . '">' . mogh_loc_h(mogh_loc_brand_logo_status()) . '</span></p>';
 echo '</div></div>';

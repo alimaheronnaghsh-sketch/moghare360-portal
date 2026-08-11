@@ -223,7 +223,7 @@ function moghare360_render_shell_start(string $pageTitle, string $activeModule, 
     echo '<meta charset="UTF-8">' . "\n";
     echo '<meta name="viewport" content="width=device-width, initial-scale=1">' . "\n";
     echo '<meta name="robots" content="noindex, nofollow">' . "\n";
-    echo '<title>' . moghare360_shell_h($pageTitle) . ' — MOGHARE360 ERP</title>' . "\n";
+    echo '<title>' . moghare360_shell_h($pageTitle) . ' — ماهین 360°</title>' . "\n";
     echo '<link rel="stylesheet" href="' . moghare360_shell_h($assetBase . '/moghare360-design-tokens.css') . '">' . "\n";
     echo '<link rel="stylesheet" href="' . moghare360_shell_h($assetBase . '/moghare360-rtl.css') . '">' . "\n";
     echo '<link rel="stylesheet" href="' . moghare360_shell_h($assetBase . '/moghare360-layout.css') . '">' . "\n";
@@ -251,7 +251,7 @@ function moghare360_render_shell_start(string $pageTitle, string $activeModule, 
     echo '<button type="button" class="m360-shell-topbar-toggle is-desktop-collapse" data-m360-shell-toggle aria-label="باز و بسته کردن منو">☰</button>';
     echo '<div class="m360-shell-topbar-title-wrap">';
     echo '<h1 class="m360-shell-topbar-title">' . moghare360_shell_h($pageTitle) . '</h1>';
-    echo '<p class="m360-shell-topbar-breadcrumb">MOGHARE360 / Soft Run / ' . moghare360_shell_h($roleLabel) . '</p>';
+    echo '<p class="m360-shell-topbar-breadcrumb">ماهین 360° / Soft Run / ' . moghare360_shell_h($roleLabel) . '</p>';
     echo '</div></div>';
     echo '<div class="m360-shell-topbar-end">';
     echo '<span class="m360-shell-status-pill is-soft-run">Soft Run Prototype</span>';

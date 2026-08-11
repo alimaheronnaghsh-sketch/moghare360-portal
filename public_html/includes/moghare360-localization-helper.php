@@ -44,12 +44,12 @@ function mogh_loc_project_root(): string
 
 function mogh_loc_brand_logo_path(): string
 {
-    return 'assets/moghare360-brand/moghareh-motors-logo.jpg';
+    return 'assets/brand/mahin360-logo.png';
 }
 
 function mogh_loc_brand_logo_exists(): bool
 {
-    return is_file(mogh_loc_public_path() . DIRECTORY_SEPARATOR . 'assets' . DIRECTORY_SEPARATOR . 'moghare360-brand' . DIRECTORY_SEPARATOR . 'moghareh-motors-logo.jpg');
+    return is_file(mogh_loc_public_path() . DIRECTORY_SEPARATOR . 'assets' . DIRECTORY_SEPARATOR . 'brand' . DIRECTORY_SEPARATOR . 'mahin360-logo.png');
 }
 
 function mogh_loc_brand_logo_status(): string
@@ -109,8 +109,8 @@ function mogh_loc_terms_needing_review(): array
 {
     return [
         'ERP',
-        'MOGHARE360',
-        'MOGHAREH MOTORS',
+        'MAHIN360',
+        'MAHIN 360°',
         'SQL Server',
         'PHP',
         'CSRF',
@@ -144,7 +144,7 @@ function mogh_loc_page_registry(): array
             ['file' => 'erp-localization-audit.php', 'title_fa' => 'ممیزی فارسی‌سازی محصول'],
             ['file' => 'erp-brand-system.php', 'title_fa' => 'سیستم برند'],
             ['file' => 'erp-asset-registry.php', 'title_fa' => 'دفتر ثبت دارایی‌های محصول'],
-            ['file' => 'moghare360-demo-package.php', 'title_fa' => 'بسته نمایشی MOGHARE360'],
+            ['file' => 'moghare360-demo-package.php', 'title_fa' => 'بسته نمایشی ماهین 360°'],
         ],
         'allowed_english' => mogh_loc_allowed_english_terms(),
         'needs_review' => mogh_loc_terms_needing_review(),
@@ -179,7 +179,7 @@ function mogh_loc_asset_registry(): array
     return [
         [
             'category' => 'برند',
-            'name' => 'لوگوی Moghareh Motors',
+            'name' => 'لوگوی ماهین 360°',
             'path' => $logoPath,
             'ownership' => $logoExists ? 'Owner Provided Asset' : 'PENDING OWNER FILE',
             'notes' => $logoExists ? 'فایل مالک در مسیر برند ثبت شده است.' : 'فایل لوگو یافت نشد؛ از fallback متنی استفاده می‌شود.',
@@ -327,10 +327,10 @@ function mogh_loc_error(string $title, string $message): never
 function mogh_loc_render_brand_logo(): void
 {
     if (mogh_loc_brand_logo_exists()) {
-        echo '<img class="m125bl-logo" src="' . mogh_loc_h(mogh_loc_brand_logo_path()) . '" alt="Moghareh Motors Logo">';
+        echo '<img class="m125bl-logo" src="' . mogh_loc_h(mogh_loc_brand_logo_path()) . '" alt="ماهین 360°">';
         return;
     }
-    echo '<div class="m125bl-logo-fallback">MOGHAREH MOTORS<br>MOGHARE360</div>';
+    echo '<div class="m125bl-logo-fallback">MAHIN 360°<br>MAHIN360</div>';
 }
 
 function mogh_loc_render_head(string $title): void

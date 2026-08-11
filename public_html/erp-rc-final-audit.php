@@ -24,7 +24,7 @@ $current = 'erp-rc-final-audit.php';
 <body class="m360-rcf-page">
 <div class="m360-rcf-wrap">
     <header class="w1c-banner">
-        <h1>RC Final Audit — MOGHARE360 V1</h1>
+        <h1>RC Final Audit — ماهین 360° V1</h1>
         <p>وضعیت: <?= m360_release_lock_h((string)($lock['rc_status'] ?? '')) ?> — Score: <?= m360_release_lock_h((string)($lock['readiness_score'] ?? 0)) ?>%</p>
         <p class="m360-rcf-note"><?= m360_release_lock_h((string)($lock['recommendation_fa'] ?? '')) ?></p>
     </header>

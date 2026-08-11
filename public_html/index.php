@@ -91,7 +91,7 @@ if (!$isAdmin) {
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
-  <title>ورود بخش مدیریت نرم‌افزار — مقاره ۳۶۰</title>
+  <title>ورود بخش مدیریت نرم‌افزار — ماهین 360°</title>
   <style>
     :root { --bg:#0f1714; --card:#1a2e24; --text:#ecfdf5; --muted:#94a3b8; --accent:#c9a962; }
     * { box-sizing: border-box; }
@@ -131,7 +131,7 @@ $hubLinks = m360_admin_index_hub_links();
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
-  <title>کنسول مدیریت مقاره ۳۶۰</title>
+  <title>کنسول مدیریت ماهین 360°</title>
   <style>
     :root { --bg:#0f1714; --card:#fff; --green:#1a2e24; --text:#1e293b; --muted:#64748b; --accent:#14532d; --gold:#c9a962; }
     * { box-sizing: border-box; }
@@ -158,7 +158,7 @@ $hubLinks = m360_admin_index_hub_links();
       <a href="owner-login.php">خروج / بازگشت به ورود مدیریت</a>
     </div>
     <header class="hub-hero">
-      <h1>کنسول مدیریت مقاره ۳۶۰</h1>
+      <h1>کنسول مدیریت ماهین 360°</h1>
       <p>دسترسی مدیریتی محافظت‌شده برای کنترل وضعیت نرم‌افزار، کاربران، مسیرها و گزارش‌های اجرایی</p>
     </header>
     <div class="hub-grid">

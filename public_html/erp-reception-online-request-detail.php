@@ -46,7 +46,7 @@ $customerRequestType = trim((string)($row['request_type'] ?? ($payload['request_
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="robots" content="noindex, nofollow">
-    <title>جزئیات درخواست آنلاین #<?= $requestId ?> — MOGHARE360</title>
+    <title>جزئیات درخواست آنلاین #<?= $requestId ?> — ماهین 360°</title>
     <link rel="stylesheet" href="assets/css/moghare360-v1-luxury-ui.css">
 </head>
 <body class="m360-public-shell m360-rw-page">

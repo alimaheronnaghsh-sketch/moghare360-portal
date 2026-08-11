@@ -119,10 +119,10 @@ m360_access_mgmt_render_head('داشبورد کاربران و نقش‌ها');
 m360_access_mgmt_render_flash();
 ?>
 <section class="m360-access-card m360-page-brand-header">
-    <div class="m360-brand-lockup" aria-label="MOGHARE360">
-        <img class="m360-brand-logo" src="assets/brand/moghareh-motors-logo.jpg" width="40" height="40" alt="MOGHARE360" onerror="this.style.display='none'">
+    <div class="m360-brand-lockup" aria-label="MAHIN 360°">
+        <img class="m360-brand-logo" src="assets/brand/mahin360-logo.png" width="40" height="40" alt="MAHIN 360°" onerror="this.style.display='none'">
         <div class="m360-brand-wordmark">
-            <span class="m360-brand-wordmark__title" lang="en" dir="ltr">MOGHARE360</span>
+            <span class="m360-brand-wordmark__title" lang="en" dir="ltr">MAHIN 360°</span>
             <span class="m360-brand-wordmark__sub">داشبورد دسترسی</span>
         </div>
     </div>

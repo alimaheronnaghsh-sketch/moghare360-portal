@@ -502,7 +502,7 @@ $stepLabels = [
             <input id="country" name="country" maxlength="80" value="<?= $v('country') ?>">
           </div>
           <div class="field">
-            <label for="item_code">کد داخلی مقاره 360</label>
+            <label for="item_code">کد داخلی ماهین 360°</label>
             <input id="item_code" name="item_code" maxlength="80" value="<?= $v('item_code') ?>" dir="ltr">
           </div>
           <div class="field">

@@ -33,7 +33,7 @@ $gateLabelFa = static function (string $raw): string {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>برآوردها و تأیید هزینه | مقاره ۳۶۰</title>
+    <title>برآوردها و تأیید هزینه | ماهین 360°</title>
     <link rel="stylesheet" href="assets/moghare360-ui/moghare360-soft-run-release.css">
     <link rel="stylesheet" href="assets/css/mirror.css">
     <link rel="stylesheet" href="assets/css/moghare360-v1-luxury-ui.css">

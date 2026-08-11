@@ -315,7 +315,7 @@ $timelineComplete = $missingHistoryTypes === [];
 
     <div class="card">
         <h1>Phase 2.1 - Admin Read-Only Workflow Viewer</h1>
-        <p class="muted">MOGHARE360 ERP — fixed request_id = <?= erp_arw_h((string)ERP_ACCESS_REQUEST_WORKFLOW_READONLY_REQUEST_ID) ?></p>
+        <p class="muted">ماهین 360° — fixed request_id = <?= erp_arw_h((string)ERP_ACCESS_REQUEST_WORKFLOW_READONLY_REQUEST_ID) ?></p>
         <?php if ($connectionError !== ''): ?>
             <p class="fail"><?= erp_arw_h($connectionError) ?></p>
         <?php endif; ?>

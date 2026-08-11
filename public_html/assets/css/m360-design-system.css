@@ -135,3 +135,62 @@ select.m360-form-select {
     --m360-table-cell-pad-x: var(--m360-space-2);
   }
 }
+
+/* —— Canonical brand logo tokens (MAHIN 360°) —— */
+:root {
+  --m360-logo-header-height: 40px;
+  --m360-logo-login-height: 72px;
+  --m360-logo-mobile-height: 32px;
+  --m360-logo-nav-height: 36px;
+  --m360-logo-pdf-max-height: 56px;
+  --m360-logo-gap: 0.75rem;
+}
+
+.m360-brand-logo,
+img.m360-brand-logo,
+.m360-public-brand__logo,
+.m360-public-logo,
+.m360-home-hero__logo {
+  height: var(--m360-logo-header-height);
+  width: auto;
+  max-width: 100%;
+  object-fit: contain;
+  object-position: center;
+  display: inline-block;
+  vertical-align: middle;
+  flex-shrink: 0;
+}
+
+.m360-brand-logo--login,
+.m360-login-logo {
+  height: var(--m360-logo-login-height);
+}
+
+.m360-brand-logo--nav {
+  height: var(--m360-logo-nav-height);
+}
+
+.m360-brand-logo--pdf {
+  height: var(--m360-logo-pdf-max-height);
+  max-height: var(--m360-logo-pdf-max-height);
+}
+
+.m360-public-brand,
+.m360-brand-lockup {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--m360-logo-gap);
+}
+
+@media (max-width: 768px) {
+  .m360-brand-logo,
+  img.m360-brand-logo,
+  .m360-public-brand__logo,
+  .m360-public-logo {
+    height: var(--m360-logo-mobile-height);
+  }
+  .m360-brand-logo--login,
+  .m360-login-logo {
+    height: calc(var(--m360-logo-login-height) * 0.85);
+  }
+}

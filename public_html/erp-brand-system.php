@@ -13,23 +13,23 @@ try {
     mogh_loc_error('سیستم برند', 'دسترسی ممکن نیست.');
 }
 
-mogh_loc_render_head('سیستم برند MOGHARE360');
-echo '<div class="m125bl-hero"><h1>سیستم برند MOGHARE360</h1>';
+mogh_loc_render_head('سیستم برند ماهین 360°');
+echo '<div class="m125bl-hero"><h1>سیستم برند ماهین 360°</h1>';
 echo '<p>Brand System — Industrial Premium Persian ERP</p></div>';
 
 echo '<div class="m125bl-brand-header">';
 mogh_loc_render_brand_logo();
-echo '<div><h2 style="margin:0 0 .35rem;color:#39ff14">MOGHARE360 ERP</h2>';
+echo '<div><h2 style="margin:0 0 .35rem;color:#39ff14">MAHIN 360°</h2>';
 echo '<p style="margin:0 0 .5rem;color:#9aa8b5">نسخه: Local Release Candidate 1 / Controlled Pilot Ready</p>';
 echo '<p style="margin:0;color:#e8ecef">از فرآیند تعمیرگاه تا محصول نرم‌افزاری</p></div></div>';
 
 if (!mogh_loc_brand_logo_exists()) {
-    echo '<div class="m125bl-warning-box">Logo file not found. Expected path: <code class="m360-ltr">public_html/assets/moghare360-brand/moghareh-motors-logo.jpg</code></div>';
+    echo '<div class="m125bl-warning-box">Logo file not found. Expected path: <code class="m360-ltr">public_html/assets/brand/mahin360-logo.png</code></div>';
 }
 
 echo '<div class="m125bl-kpi-grid">';
-echo '<div class="m125bl-kpi m125bl-kpi-neon"><div class="label">نام برند</div><div class="value">MOGHAREH MOTORS</div></div>';
-echo '<div class="m125bl-kpi"><div class="label">نام محصول</div><div class="value">MOGHARE360 ERP</div></div>';
+echo '<div class="m125bl-kpi m125bl-kpi-neon"><div class="label">نام برند</div><div class="value">ماهین 360°</div></div>';
+echo '<div class="m125bl-kpi"><div class="label">نام محصول</div><div class="value">MAHIN 360°</div></div>';
 echo '<div class="m125bl-kpi"><div class="label">وضعیت لوگو</div><div class="value">' . mogh_loc_h(mogh_loc_brand_logo_status()) . '</div></div>';
 echo '</div>';
 

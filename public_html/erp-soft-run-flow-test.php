@@ -39,7 +39,7 @@ m37_ux_render_release_css_link();
 <div class="m37-sr-board">
   <div class="m35-so-page-nav" style="display:flex;flex-wrap:wrap;gap:0.5rem;margin-bottom:0.5rem;">
     <a class="m360-btn m360-btn-secondary m360-btn-sm" href="erp-soft-run-home.php?role=<?= m37_ux_h(rawurlencode($roleMode)) ?>">صفحه اصلی</a>
-    <a class="m360-btn m360-btn-ghost m360-btn-sm" href="erp-moghare-ready.php?role=<?= m37_ux_h(rawurlencode($roleMode)) ?>">Moghare Ready</a>
+    <a class="m360-btn m360-btn-ghost m360-btn-sm" href="erp-moghare-ready.php?role=<?= m37_ux_h(rawurlencode($roleMode)) ?>">MAHIN Ready</a>
   </div>
 
   <div class="m360-page-header">

@@ -4703,7 +4703,7 @@ function m360_rw_intake_wizard_operational_keys(): array
     return ['otp', 'customer', 'vehicle', 'service', 'condition', 'documents', 'signature', 'referral'];
 }
 
-const M360_RW_INTAKE_CONTRACT_SMS_TEXT_FA = 'لطفاً قرارداد خودروی خود را در سامانه مقاره موتورز امضا فرمایید.';
+const M360_RW_INTAKE_CONTRACT_SMS_TEXT_FA = 'لطفاً قرارداد خودروی خود را در سامانه ماهین 360° امضا فرمایید.';
 const M360_RW_INTAKE_CARTABLE_TASK_TITLE_FA = 'قرارداد نیازمند امضا';
 const M360_RW_INTAKE_CARTABLE_TASK_MESSAGE_FA = 'قرارداد پذیرش خودروی شما آماده بررسی و امضا است.';
 const M360_RW_INTAKE_CARTABLE_TASK_STATUS_ACTION_FA = 'نیازمند اقدام';

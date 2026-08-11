@@ -1,6 +1,6 @@
-# راهنمای نصب روی تبلت ویندوز — MOGHARE360 / MOGHAREH360
+# راهنمای نصب روی تبلت ویندوز — ماهین 360° / MAHIN 360°
 
-**محصول:** MOGHARE360 / MOGHAREH360  
+**محصول:** ماهین 360° / MAHIN 360° (کوتاه: MAHIN360)  
 **نسخه سند:** V1  
 **زبان:** فارسی (RTL) + شناسه‌های فنی انگلیسی  
 **هدف:** تبلت / دستگاه ثابت Windows برای پیشخوان و کارگاه
@@ -38,7 +38,7 @@
 1. Edge را باز کنید و به آدرس Production HTTPS بروید  
    (تست Local: `http://127.0.0.1:8080/moghare360/`).
 2. منو ⋯ → **Apps** → **Install this site as an app**.
-3. نام **MOGHAREH360** / مقاره۳۶۰ را تأیید کنید.
+3. نام **MAHIN360** / ماهین 360° را تأیید کنید.
 4. گزینهٔ پین به Taskbar / Start را فعال کنید.
 5. پنجرهٔ standalone را ببندید و از میانبر Start/Taskbar دوباره باز کنید.
 
@@ -47,7 +47,7 @@
 ## ۴. نصب با Google Chrome
 
 1. Chrome را باز کنید و origin را لود کنید.
-2. منو ⋮ → **Install MOGHAREH360…** / **Install app**  
+2. منو ⋮ → **Install MAHIN360…** / **Install app**  
    یا آیکون نصب در Omnibox.
 3. میانبر Desktop و/یا Start Menu را تأیید کنید.
 4. اجرا در حالت `standalone` را بررسی کنید.

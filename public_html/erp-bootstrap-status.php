@@ -393,7 +393,7 @@ $runAt = (new DateTimeImmutable('now', new DateTimeZone('Asia/Tehran')))->format
 
     <div class="card">
       <h1>وضعیت Bootstrap ERP — صفحه تشخیصی (فقط خواندنی)</h1>
-      <p class="muted">MOGHARE360 ERP V0 — بدون تغییر ورود پرتال — فقط SELECT</p>
+      <p class="muted">MAHIN 360° ERP V0 — بدون تغییر ورود پرتال — فقط SELECT</p>
       <p class="muted">زمان اجرا (Asia/Tehran): <?= erp_diag_h($runAt) ?></p>
       <p class="muted">روش اتصال: <?= erp_diag_h($driverLabel) ?></p>
       <?php if ($ownerDisplayName !== '—'): ?>

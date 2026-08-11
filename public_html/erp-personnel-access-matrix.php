@@ -49,10 +49,10 @@ m360_access_mgmt_render_head('ماتریس دسترسی پرسنل');
 ?>
 <link rel="stylesheet" href="assets/css/m360-access-matrix.css?v=pkg-rec-1">
 <section class="m360-access-card m360-am-wrap">
-    <div class="m360-brand-lockup" aria-label="MOGHARE360">
-        <img class="m360-brand-logo" src="assets/brand/moghareh-motors-logo.jpg" width="40" height="40" alt="MOGHARE360" onerror="this.style.display='none'">
+    <div class="m360-brand-lockup" aria-label="MAHIN 360°">
+        <img class="m360-brand-logo" src="assets/brand/mahin360-logo.png" width="40" height="40" alt="MAHIN 360°" onerror="this.style.display='none'">
         <div class="m360-brand-wordmark">
-            <span class="m360-brand-wordmark__title" lang="en" dir="ltr">MOGHARE360</span>
+            <span class="m360-brand-wordmark__title" lang="en" dir="ltr">MAHIN 360°</span>
             <span class="m360-brand-wordmark__sub">ماتریس دسترسی پرسنل</span>
         </div>
     </div>

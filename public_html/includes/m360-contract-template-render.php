@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 const M360_CONTRACT_VERSION = 'MOGHARE360-INTAKE-V1';
 const M360_CONTRACT_TITLE = 'قرارداد پذیرش، بررسی، کارشناسی، تعمیر، سرویس، تأمین قطعه و تحویل خودرو';
+// LEGAL_ENTITY_REVIEW_REQUIRED — legal contracting party name; not commercial product brand
 const M360_CONTRACT_COMPANY = 'مجموعه خدمات فنی مهندسی مقاره موتورز';
 
 function m360_contract_h(string $value): string

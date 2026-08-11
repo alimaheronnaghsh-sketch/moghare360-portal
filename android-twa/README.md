@@ -1,4 +1,4 @@
-# MOGHARE360 Android Trusted Web Activity (TWA)
+# MAHIN 360° Android Trusted Web Activity (TWA)
 
 Canonical business application = HTTPS PWA only.
 This project wraps the same origin via Chrome Custom Tabs / TWA.
@@ -9,7 +9,7 @@ Do **not** embed ERP business logic, PHP, or API clients here.
 | Key | Value |
 |-----|-------|
 | applicationId | `ir.moghare360.app` |
-| app name | `MOGHAREH360` |
+| app name | `MAHIN360` |
 | versionCode | integer, monotonic |
 | versionName | align with V1 release tag (e.g. `1.0.0`) |
 | host | Production HTTPS domain (Owner-provided) |

@@ -13,8 +13,8 @@ try {
     bl_error('مرکز فرماندهی', 'دسترسی به مرکز فرماندهی تجاری ممکن نیست.');
 }
 
-bl_render_head('مرکز فرماندهی تجاری MOGHARE360');
-echo '<div class="p8bl-hero"><h1>مرکز فرماندهی تجاری MOGHARE360</h1><p>Business Execution Layer — یکپارچه‌سازی فازهای ۱ تا ۷</p></div>';
+bl_render_head('مرکز فرماندهی تجاری ماهین 360°');
+echo '<div class="p8bl-hero"><h1>مرکز فرماندهی تجاری ماهین 360°</h1><p>Business Execution Layer — یکپارچه‌سازی فازهای ۱ تا ۷</p></div>';
 
 echo '<div class="p8bl-phase-summary">';
 echo '<div class="p8bl-summary-card"><span class="label">فاز ۱–۷</span><span class="value">COMPLETED</span></div>';

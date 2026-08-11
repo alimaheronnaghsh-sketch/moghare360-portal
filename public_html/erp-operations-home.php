@@ -164,7 +164,7 @@ $opsEntries = array_values(array_filter($opsEntries, static function (array $ent
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>عملیات تعمیرگاه | مقاره ۳۶۰</title>
+    <title>عملیات تعمیرگاه | ماهین 360°</title>
     <link rel="stylesheet" href="assets/moghare360-ui/moghare360-soft-run-release.css">
     <link rel="stylesheet" href="assets/css/mirror.css">
     <link rel="stylesheet" href="assets/css/moghare360-v1-luxury-ui.css">
@@ -236,10 +236,10 @@ $opsEntries = array_values(array_filter($opsEntries, static function (array $ent
     </div>
 
     <header class="w1c-banner m360-page-brand-header">
-        <div class="m360-brand-lockup" aria-label="مقاره ۳۶۰">
-            <img class="m360-brand-logo" src="assets/brand/moghareh-motors-logo.jpg" width="40" height="40" alt="مقاره ۳۶۰" onerror="this.style.display='none'">
+        <div class="m360-brand-lockup" aria-label="ماهین 360°">
+            <img class="m360-brand-logo" src="assets/brand/mahin360-logo.png" width="40" height="40" alt="ماهین 360°" onerror="this.style.display='none'">
             <div class="m360-brand-wordmark">
-                <span class="m360-brand-wordmark__title">مقاره ۳۶۰</span>
+                <span class="m360-brand-wordmark__title">ماهین 360°</span>
                 <span class="m360-brand-wordmark__sub">حوزه عملیات تعمیرگاه</span>
             </div>
         </div>

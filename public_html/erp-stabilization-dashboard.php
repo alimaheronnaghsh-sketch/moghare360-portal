@@ -28,8 +28,8 @@ $forbiddenMod = count(array_filter($forbidden, static fn(array $r): bool => ($r[
 $sqlReview = stabilization_expected_sql_files();
 $sqlWarn = count(array_filter($sqlReview, static fn(array $r): bool => ($r['review'] ?? '') !== 'OK'));
 
-stab_render_head('داشبورد پایداری MOGHARE360');
-echo '<div class="p11st-hero"><h1>داشبورد پایداری MOGHARE360</h1><p>PHASE 11 — Stabilization Sprint · Local Release Candidate 1</p></div>';
+stab_render_head('داشبورد پایداری ماهین 360°');
+echo '<div class="p11st-hero"><h1>داشبورد پایداری ماهین 360°</h1><p>PHASE 11 — Stabilization Sprint · Local Release Candidate 1</p></div>';
 
 echo '<div class="p11st-phase-row">';
 foreach (stabilization_phase_status_rows() as $row) {
@@ -58,7 +58,7 @@ $reports = [
     ['erp-broken-link-report.php', 'گزارش لینک‌ها', 'URL registry + file status'],
     ['erp-ui-polish-report.php', 'گزارش UI Polish', 'RTL · titles · boundaries'],
     ['erp-db-consistency-check.php', 'بررسی یکپارچگی DB', 'جداول Phase 1–10'],
-    ['erp-local-release-candidate.php', 'Local Release Candidate 1', 'MOGHARE360 RC1'],
+    ['erp-local-release-candidate.php', 'Local Release Candidate 1', 'MAHIN360 RC1'],
     ['erp-soft-run-pilot-center.php', 'Soft Run Pilot Center', 'Phase 12 controlled pilot'],
 ];
 foreach ($reports as [$url, $title, $sub]) {

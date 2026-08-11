@@ -14,7 +14,7 @@ try {
 }
 
 bl_render_head('وضعیت محصول');
-echo '<div class="p8bl-hero"><h1>وضعیت محصول MOGHARE360</h1><p>Product Status — مرزها و آمادگی فازها</p></div>';
+echo '<div class="p8bl-hero"><h1>وضعیت محصول ماهین 360°</h1><p>Product Status — مرزها و آمادگی فازها</p></div>';
 
 echo '<div class="p1cc-card"><h2 class="p8bl-section-title">وضعیت کلی</h2><table class="p1cc-table"><tbody>';
 foreach (bl_product_status_rows() as $row) {

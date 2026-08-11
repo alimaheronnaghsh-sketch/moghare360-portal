@@ -4,7 +4,7 @@ require_once __DIR__ . '/inventory-helpers.php';
 
 try {
     $staff = inv_require_inventory_access('view');
-    renderHeader('کارتابل انبار', 'MOGHARE360 StockCenter');
+    renderHeader('کارتابل انبار', 'MAHIN 360° StockCenter');
     renderFlashes();
     inventoryHeaderActions('dashboard');
 
@@ -38,9 +38,9 @@ try {
     <div class="avatar avatar-3x4"><?= e(initialLetter((string)($staff['full_name'] ?? 'W'))) ?></div>
     <div>
       <h2>StockCenter | مرکز عملیات انبار</h2>
-      <p class="muted">ساختار این بخش مطابق منطق MOGHARE360_StockCenter تنظیم شده: شناسه فنی، OEM، لوکیشن انبار، وضعیت فنی، قیمت و رسید.</p>
+      <p class="muted">ساختار این بخش مطابق منطق StockCenter تنظیم شده: شناسه فنی، OEM، لوکیشن انبار، وضعیت فنی، قیمت و رسید.</p>
     </div>
-    <div class="logo-frame"><img src="assets/moghareh-logo.png" alt="Moghareh Motors"></div>
+    <div class="logo-frame"><img src="assets/brand/mahin360-logo.png" alt="ماهین 360°"></div>
   </section>
 
   <section class="inventory-kpis">

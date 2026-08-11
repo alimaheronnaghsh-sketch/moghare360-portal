@@ -495,7 +495,7 @@ if (isset($context['full_name']) && is_string($context['full_name'])) {
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <title>MOGHARE360 ERP - Access Request Apply Transition</title>
+    <title>MAHIN 360° - Access Request Apply Transition</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
         body {
@@ -569,7 +569,7 @@ if (isset($context['full_name']) && is_string($context['full_name'])) {
 </head>
 <body>
 <div class="page">
-    <h1>MOGHARE360 ERP - Access Request Apply Transition</h1>
+    <h1>MAHIN 360° - Access Request Apply Transition</h1>
 
     <div class="box warning">
         <strong>Controlled Write-Enabled Boundary</strong>

@@ -10,8 +10,8 @@ try {
 
 $demos = commercial_get_demo_registry(commercial_db() ?: false);
 
-cs_render_head('MOGHARE360 Commercial Demo');
-echo '<div class="p10cs-hero"><h1>MOGHARE360 Commercial Demo</h1><p>Repair Shop Operating System — نمایش تجاری</p></div>';
+cs_render_head('MAHIN 360° Commercial Demo');
+echo '<div class="p10cs-hero"><h1>MAHIN 360° Commercial Demo</h1><p>Repair Shop Operating System — نمایش تجاری</p></div>';
 echo '<div class="p10cs-warning">این Demo تجاری است، نه Production SaaS.</div>';
 
 echo '<div class="p10cs-path"><span>Soft Run Internal ERP</span> → <span>Business Ready System</span> → <span>Commercial Demo Ready</span> → <span>SaaS Ready / Not Production SaaS</span></div>';
@@ -31,6 +31,6 @@ foreach ($demos as $d) {
 }
 echo '</div>';
 
-echo '<div class="p1cc-card"><p>MOGHARE360 has been converted from Soft Run Internal ERP into a Business-Ready Repair Shop Operating System with Commercial Demo Readiness.</p></div>';
+echo '<div class="p1cc-card"><p>MAHIN 360° has been converted from Soft Run Internal ERP into a Business-Ready Repair Shop Operating System with Commercial Demo Readiness.</p></div>';
 
 cs_render_foot();

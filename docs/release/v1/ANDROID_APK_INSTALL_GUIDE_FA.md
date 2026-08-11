@@ -1,6 +1,6 @@
-# راهنمای نصب APK اندروید — MOGHARE360 / MOGHAREH360
+# راهنمای نصب APK اندروید — ماهین 360° / MAHIN 360°
 
-**محصول:** MOGHARE360 / MOGHAREH360  
+**محصول:** ماهین 360° / MAHIN 360° (کوتاه: MAHIN360)  
 **نسخه سند:** V1  
 **زبان:** فارسی (RTL) + شناسه‌های فنی انگلیسی  
 **پروژه:** `android-twa/` — Trusted Web Activity  
@@ -16,7 +16,7 @@ APK اندروید یک **پوشش TWA** روی همان PWA/HTTPS است. هی�
 |------|--------|
 | پروژه | `android-twa/` |
 | applicationId | `ir.moghare360.app` |
-| نام نمایشی | MOGHAREH360 |
+| نام نمایشی | MAHIN360 |
 | خروجی build | `release-artifacts/android/` |
 | PWA cache | `m360-pwa-static-v1-20260803` (سمت وب) |
 | Production host | فقط HTTPS (دامنهٔ مالک) |
@@ -58,7 +58,7 @@ APK اندروید یک **پوشش TWA** روی همان PWA/HTTPS است. هی�
 2. در Settings → Security اجازهٔ نصب از منابع ناشناس/فایل‌منیجر را موقتاً فعال کنید (فقط برای کانال داخلی مطمئن).
 3. روی APK ضربه بزنید → Install.
 4. پس از نصب، منبع ناشناس را در صورت سیاست امنیتی غیرفعال کنید.
-5. اپ `MOGHAREH360` (`ir.moghare360.app`) را باز کنید.
+5. اپ `MAHIN360` (`ir.moghare360.app`) را باز کنید.
 
 ### روش B — ADB (فنی)
 
@@ -116,7 +116,7 @@ adb install -r path\to\moghare360-twa-*.apk
 
 روی دستگاه:
 
-1. Settings → Apps → MOGHAREH360 → نسخه را بخوانید (`versionName`).
+1. Settings → Apps → MAHIN360 → نسخه را بخوانید (`versionName`).
 2. داخل وب: `service-worker.js` → `CACHE_VERSION`.
 3. مطمئن شوید host داخل TWA همان دامنهٔ Production اعلام‌شده است.
 
@@ -134,7 +134,7 @@ adb install -r path\to\moghare360-twa-*.apk
 
 داخل Chrome مرتبط با TWA یا از تنظیمات سایت:
 
-1. Settings → Apps → MOGHAREH360 → Storage → Clear cache (در صورت وجود).
+1. Settings → Apps → MAHIN360 → Storage → Clear cache (در صورت وجود).
 2. در صورت نیاز Clear data (نشست وب پاک می‌شود؛ دوباره login لازم است).
 3. یا در وب: Clear site data برای origin + باز کردن مجدد اپ.
 4. تأیید کنید فقط cache استاتیک `m360-pwa-static-v1-*` باقی است و HTML حساس کش نشده.

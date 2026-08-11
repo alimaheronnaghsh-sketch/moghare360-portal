@@ -85,7 +85,7 @@ $keep = m360_rui_query_keep(['page' => null], ['page']);
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="robots" content="noindex, nofollow">
-<title>درخواست‌های آنلاین — MOGHARE360</title>
+<title>درخواست‌های آنلاین — ماهین 360°</title>
 <?php m360_rui_css_links(); ?>
 </head>
 <body class="c360-body">

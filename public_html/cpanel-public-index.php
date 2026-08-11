@@ -7,7 +7,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR . 'mirror-layout.php';
 
-mirror_render_head('ورود به MOGHAREH360', 'index');
+mirror_render_head('ورود به ماهین 360°', 'index');
 ?>
 <section class="m360-hero">
     <h2>خوش آمدید</h2>

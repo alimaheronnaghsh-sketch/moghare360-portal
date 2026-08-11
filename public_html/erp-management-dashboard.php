@@ -40,7 +40,7 @@ $cardDefs = [
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>داشبورد مدیریت MOGHARE360</title>
+    <title>داشبورد مدیریت ماهین 360°</title>
     <link rel="stylesheet" href="assets/moghare360-ui/moghare360-soft-run-release.css">
     <link rel="stylesheet" href="assets/css/m360-management-dashboard.css">
     <link rel="stylesheet" href="assets/css/mirror.css">

@@ -99,7 +99,7 @@ function p360_browser_title(string $title): string
 {
     $title = trim($title);
     if ($title === '' || $title === 'منابع انسانی' || $title === 'داشبورد') {
-        return 'منابع انسانی | مقاره ۳۶۰';
+        return 'منابع انسانی | ماهین 360°';
     }
     return $title . ' | منابع انسانی';
 }
@@ -121,7 +121,7 @@ function p360_layout_start(string $title, string $active = ''): void
     echo '</head><body>';
     echo '<div class="m360-app-shell">';
     echo '<aside class="m360-sidebar" aria-label="منوی منابع انسانی">';
-    echo '<div class="m360-sidebar-brand"><h2>منابع انسانی</h2><small>مقاره ۳۶۰</small></div>';
+    echo '<div class="m360-sidebar-brand"><h2>منابع انسانی</h2><small>ماهین 360°</small></div>';
     foreach (p360_nav_items() as $href => $label) {
         $cls = ($activeHref === $href) ? ' active' : '';
         $aria = ($activeHref === $href) ? ' aria-current="page"' : '';

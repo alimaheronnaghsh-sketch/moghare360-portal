@@ -695,7 +695,7 @@ $pageStepTitle = m360_g2_step_label_fa((string)$activeStep);
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="robots" content="noindex, nofollow">
-    <title>تکمیل پرونده پذیرش — MOGHARE360</title>
+    <title>تکمیل پرونده پذیرش — ماهین 360°</title>
     <link rel="stylesheet" href="assets/css/moghare360-v1-luxury-ui.css?v=<?= m360_rw_h($m360LuxCssVer) ?>">
     <link rel="stylesheet" href="assets/css/mirror.css?v=<?= m360_rw_h($m360MirrorCssVer) ?>">
 </head>

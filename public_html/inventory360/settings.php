@@ -11,7 +11,7 @@ $get=function($k,$d='') use($conn){ return (string)(inv360_setting_get($conn,$k)
 inv360_layout_start('تنظیمات','settings.php'); inv360_flash_render($msg,$ok);
 ?>
 <form method="post" class="m360-form"><?= inv360_csrf_field() ?>
-<label>نام شرکت<input name="company_name" value="<?= inv360_h($get('company_name','MOGHARE360')) ?>"></label>
+<label>نام شرکت<input name="company_name" value="<?= inv360_h($get('company_name','MAHIN360')) ?>"></label>
 <label>ارز پیش‌فرض<input name="default_currency" value="<?= inv360_h($get('default_currency','IRR')) ?>"></label>
 <label>روش ارزش‌گذاری<select name="valuation_method">
 <?php $vm=$get('valuation_method','weighted_average'); foreach(['weighted_average','last_purchase_price','standard_cost','replacement_cost'] as $m): ?>

@@ -101,7 +101,7 @@ if (!function_exists('renderFooter')) {
 if (!function_exists('showErrorPage')) {
     function showErrorPage(string $message, string $detail = ''): void
     {
-        renderHeader('پیام سیستم', 'MOGHARE360 Inventory');
+        renderHeader('پیام سیستم', 'MAHIN 360° Inventory');
         echo '<main class="auth-wrap wide-auth inventory-page"><section class="card form-card">';
         echo '<h2>' . e($message) . '</h2>';
         if ($detail !== '') {

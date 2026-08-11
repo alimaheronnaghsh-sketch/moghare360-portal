@@ -50,7 +50,7 @@ header('X-Robots-Tag: noindex, nofollow');
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>رزرو قطعه برای پرونده کار | مقاره ۳۶۰</title>
+    <title>رزرو قطعه برای پرونده کار | ماهین 360°</title>
     <link rel="stylesheet" href="assets/css/mirror.css">
     <link rel="stylesheet" href="assets/css/moghare360-v1-luxury-ui.css">
     <style>

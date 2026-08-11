@@ -187,7 +187,7 @@ $cfClose = $cf['open'] + $cfNet;
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>مرکز مالی و تسویه MOGHARE360</title>
+<title>مرکز مالی و تسویه ماهین 360°</title>
 <link rel="stylesheet" href="assets/css/m360-suite-theme.css">
 <link rel="stylesheet" href="assets/css/m360-finance.css">
 </head>
@@ -196,7 +196,7 @@ $cfClose = $cf['open'] + $cfNet;
   <div class="f360-crumb"><a href="personnel.html">پرسنل</a> / مالی / مرکز مالی و تسویه</div>
   <header class="f360-head">
     <div>
-      <h1>مرکز مالی و تسویه MOGHARE360</h1>
+      <h1>مرکز مالی و تسویه ماهین 360°</h1>
       <p>داشبورد مالی، تسویه JobCard، دریافت‌ها، پرداخت‌ها، صندوق و بانک، مطالبات، بدهی‌ها و Audit مالی</p>
     </div>
     <div>

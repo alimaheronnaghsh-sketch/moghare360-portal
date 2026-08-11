@@ -161,7 +161,7 @@ function p360hr_layout_start(string $title, string $subtitle = ''): void
     echo '<link rel="stylesheet" href="../assets/css/p360-jalali-picker.css">';
     echo '<script src="../assets/js/p360-jalali-picker.js" defer></script>';
     echo '</head><body><div class="m360-app-shell">';
-    echo '<aside class="m360-sidebar"><div class="m360-sidebar-brand"><h2>کارتابل پرسنل</h2><small>مقاره ۳۶۰</small></div>';
+    echo '<aside class="m360-sidebar"><div class="m360-sidebar-brand"><h2>کارتابل پرسنل</h2><small>ماهین 360°</small></div>';
     echo '<a class="m360-sidebar-link' . $navActive('my-cartable.php') . '" href="my-cartable.php">میز کار من</a>';
     echo '<a class="m360-sidebar-link' . $navActive('my-password.php') . '" href="my-password.php">تغییر رمز عبور</a>';
     echo '<a class="m360-sidebar-link' . $navActive('my-dossier.php') . '" href="my-dossier.php">پرونده پرسنلی</a>';

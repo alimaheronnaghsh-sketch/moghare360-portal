@@ -3,7 +3,10 @@ declare(strict_types=1);
 
 /**
  * MOGHARE360 Mirror — shared layout and config loader.
+ * Customer-facing brand: MAHIN 360° / ماهین 360°
  */
+
+require_once __DIR__ . DIRECTORY_SEPARATOR . 'm360-brand.php';
 
 function mirror_h(string $value): string
 {
@@ -37,20 +40,21 @@ function mirror_config(): array
 
 function mirror_brand_name(): string
 {
-    return 'MOGHAREH360';
+    return m360_brand_name_en();
 }
 
 function mirror_brand_tagline(): string
 {
-    return 'سامانه خدمات خودرو';
+    return m360_brand_tagline_fa();
 }
 
 function mirror_logo_path(): string
 {
-    $jpg = 'assets/brand/moghareh-motors-logo.jpg';
-    if (is_file(__DIR__ . DIRECTORY_SEPARATOR . '..' . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $jpg))) {
-        return $jpg;
+    $png = m360_brand_logo_path();
+    if (is_file(__DIR__ . DIRECTORY_SEPARATOR . '..' . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $png))) {
+        return $png;
     }
+
     return '';
 }
 
@@ -67,7 +71,7 @@ function mirror_public_asset_version(): string
         return (string)filemtime($css);
     }
 
-    return 'fix-f-v2';
+    return 'mahin360-v1';
 }
 
 function mirror_render_head(string $title, string $activeNav = ''): void
@@ -85,8 +89,9 @@ function mirror_render_head(string $title, string $activeNav = ''): void
     echo '<meta http-equiv="Pragma" content="no-cache">';
     echo '<meta http-equiv="Expires" content="0">';
     echo '<meta name="robots" content="noindex,nofollow">';
-    echo '<meta name="theme-color" content="#22c55e">';
+    echo '<meta name="theme-color" content="#16a34a">';
     echo '<link rel="manifest" href="manifest.webmanifest">';
+    m360_brand_render_head_links();
     echo '<title>' . mirror_h($title) . '</title>';
     $assetV = mirror_public_asset_version();
     $tokensPath = __DIR__ . DIRECTORY_SEPARATOR . '..' . DIRECTORY_SEPARATOR . 'assets' . DIRECTORY_SEPARATOR . 'moghare360-ui' . DIRECTORY_SEPARATOR . 'moghare360-design-tokens.css';
@@ -100,10 +105,10 @@ function mirror_render_head(string $title, string $activeNav = ''): void
     echo '<div class="m360-public-header__inner">';
     echo '<a href="./" class="m360-public-brand">';
     if ($logo !== '') {
-        echo '<img class="m360-public-brand__logo m360-public-logo" src="' . mirror_h($logo) . '" alt="MOGHAREH360">';
+        echo '<img class="m360-public-brand__logo m360-public-logo" src="' . mirror_h($logo) . '" alt="' . mirror_h(m360_brand_name_fa()) . '">';
     }
     echo '<span class="m360-public-brand__text">';
-    echo '<span class="m360-public-brand__title m360-brand-latin" lang="en" dir="ltr">MOGHAREH360</span>';
+    echo '<span class="m360-public-brand__title">' . mirror_h(m360_brand_name_fa()) . '</span>';
     echo '<span class="m360-public-brand__tagline">' . mirror_h(mirror_brand_tagline()) . '</span>';
     echo '</span></a>';
     echo '<nav class="m360-public-nav" aria-label="منوی اصلی">';
@@ -124,10 +129,10 @@ function mirror_render_foot(): void
 {
     echo '</main>';
     echo '<footer class="m360-footer">';
-    echo '© <span class="m360-brand-latin" lang="en" dir="ltr">MOGHAREH360</span> — تمام حقوق محفوظ است.';
+    echo '© <span class="m360-brand-fa">' . mirror_h(m360_brand_name_fa()) . '</span> — تمام حقوق محفوظ است.';
     echo '<div class="m360-install-hint">برای نصب اپلیکیشن، از منوی مرورگر «افزودن به صفحه اصلی» را انتخاب کنید.</div>';
     echo '</footer></div>';
-    echo '<script src="assets/js/m360-pwa.js?v=20260803" defer></script>';
+    echo '<script src="assets/js/m360-pwa.js?v=20260811" defer></script>';
     echo '<script>(function(){window.addEventListener("pageshow",function(e){if(e.persisted){window.location.reload();}});})();</script>';
     echo '</body></html>';
 }

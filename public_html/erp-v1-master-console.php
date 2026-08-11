@@ -88,7 +88,7 @@ function v1mc_master_units(): array
     ];
 }
 
-v1mc_render_head('MOGHARE360 V1 — Master Console');
+v1mc_render_head('MAHIN 360° V1 — Master Console');
 $units = v1mc_master_units();
 ?>
 <div class="v1mc-banner">MOGHARE360 V1 Master Console — Local unit launcher · No legacy MySQL index</div>
@@ -101,7 +101,7 @@ $units = v1mc_master_units();
   <a href="erp-v1-unit-access-console.php">Unit Access Console</a>
   <a href="erp-v1-production-signoff.php">Production Signoff</a>
   <a href="erp-v1-fix-register.php">Fix Register</a>
-  <a href="erp-moghare-ready.php">Moghare Ready</a>
+  <a href="erp-moghare-ready.php">MAHIN Ready</a>
   <a href="erp-soft-run-home.php?role=owner">Soft Run Home (Owner)</a>
   <a href="erp-operational-command-center.php">Operational Command Center</a>
   <a href="erp-product-status.php">Product Status</a>

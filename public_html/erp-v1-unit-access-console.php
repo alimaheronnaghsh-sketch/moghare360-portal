@@ -91,7 +91,7 @@ function v1mc_access_units(): array
     ];
 }
 
-v1mc_render_head('MOGHARE360 V1 — Unit Access Check Console');
+v1mc_render_head('MAHIN 360° V1 — Unit Access Check Console');
 $units = v1mc_access_units();
 ?>
 <div class="v1mc-banner">Unit Access Check Console — مسیرهای امن فقط · بدون ساخت کاربر · بدون دریافت رمز</div>

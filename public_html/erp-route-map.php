@@ -34,7 +34,7 @@ function m360_rmap_badge_class(string $opsClass): string
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>نقشه مسیرها — MOGHARE360 V1</title>
+    <title>نقشه مسیرها — ماهین 360° V1</title>
     <link rel="stylesheet" href="assets/moghare360-ui/moghare360-soft-run-release.css">
     <link rel="stylesheet" href="assets/css/m360-release-hardening.css">
     <link rel="stylesheet" href="assets/css/m360-route-map-safety.css">

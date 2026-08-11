@@ -247,7 +247,7 @@ $experiencePanels = [
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>مرکز ارتباط با مشتریان — MOGHARE360</title>
+<title>مرکز ارتباط با مشتریان — ماهین 360°</title>
 <link rel="stylesheet" href="assets/css/m360-suite-theme.css">
 <link rel="stylesheet" href="assets/css/m360-crm.css">
 </head>

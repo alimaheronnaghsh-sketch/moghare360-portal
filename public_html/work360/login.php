@@ -17,7 +17,7 @@ if (!headers_sent()) {
 </head><body>
 <div class="m360-login-shell"><div class="m360-login-card">
 <h1>Work360</h1>
-<span class="subtitle">مرکز کار و پیگیری روزانه — مجموعه MOGHARE360</span>
+<span class="subtitle">مرکز کار و پیگیری روزانه — مجموعه ماهین 360°</span>
 <p style="text-align:center;font-size:.82rem;color:var(--m360-muted);margin:0 0 1rem"><a href="../personnel.html" style="color:var(--m360-accent)">بازگشت به صفحه پرسنل</a></p>
 <?php if ($msg !== ''): ?><div class="m360-alert <?= $ok ? 'm360-alert-ok' : 'm360-alert-err' ?>"><?= work360_h($msg) ?></div><?php endif; ?>
 <form method="post">

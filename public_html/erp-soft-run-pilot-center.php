@@ -26,7 +26,7 @@ try {
 }
 
 pilot_render_head('مرکز کنترل Soft Run Pilot');
-echo '<div class="p12pl-hero"><h1>مرکز کنترل Soft Run Pilot</h1><p>MOGHARE360 — Controlled Internal Pilot Workspace</p></div>';
+echo '<div class="p12pl-hero"><h1>مرکز کنترل Soft Run Pilot</h1><p>MAHIN 360° — Controlled Internal Pilot Workspace</p></div>';
 
 echo '<div class="p12pl-boundary-box"><strong>هشدار ثابت</strong><ul>';
 foreach (pilot_boundary_labels() as $b) {

@@ -113,7 +113,7 @@ try {
     ?>
     <main class="page-grid">
       <section class="card">
-        <div class="welcome-banner">به مجموعه مقاره موتورز خوش آمدید</div>
+        <div class="welcome-banner">به مجموعه ماهین 360° خوش آمدید</div>
         <h2>اطلاعات مشتری</h2>
         <div class="profile-box">
           <div class="avatar"><?= e(initialLetter($fullName !== '' ? $fullName : $mobile)) ?></div>

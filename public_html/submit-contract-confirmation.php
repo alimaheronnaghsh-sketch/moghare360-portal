@@ -89,7 +89,7 @@ function sendContractConfirmationSms(string $mobile, string $requestCode): bool
         return false;
     }
 
-    $message = 'قرارداد آنلاین پرونده ' . $requestCode . ' با موفقیت تایید شد. مقاره موتورز';
+    $message = 'قرارداد آنلاین پرونده ' . $requestCode . ' با موفقیت تایید شد. ماهین 360°';
     $payload = [
         'sending_type' => 'webservice',
         'from_number' => $ippanelSender ?: '100033605070',

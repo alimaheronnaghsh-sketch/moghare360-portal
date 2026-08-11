@@ -36,7 +36,7 @@ function m360_legacy_otp_route_deprecated(): never
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>مسیر OTP غیرفعال — MOGHARE360</title>
+    <title>مسیر OTP غیرفعال — ماهین 360°</title>
 </head>
 <body>
     <main style="max-width:32rem;margin:3rem auto;padding:1.5rem;font-family:Tahoma,sans-serif;">
