@@ -739,9 +739,10 @@ function m360_otp_debug_sanitize_headers(array $headers): array
 
 function m360_otp_debug_sanitize_text(string $text): string
 {
+    // Use '#' delimiters so literal '/' inside character classes is safe.
     $patterns = [
-        '/(api[_-]?key|accesskey|bearer|token|authorization|password|username|pattern[_-]?code)\s*[:=]\s*["\']?([^"\'\s,}]+)/i' => '$1=***MASKED***',
-        '/(AccessKey|Bearer)\s+[A-Za-z0-9._\-+/=]{8,}/i' => '$1 ***MASKED***',
+        '#(api[_-]?key|accesskey|bearer|token|authorization|password|username|pattern[_-]?code)\s*[:=]\s*["\']?([^"\'\s,}]+)#i' => '$1=***MASKED***',
+        '#(AccessKey|Bearer)\s+[A-Za-z0-9._\-+/=]{8,}#i' => '$1 ***MASKED***',
     ];
     foreach ($patterns as $pattern => $replacement) {
         $text = preg_replace($pattern, $replacement, $text) ?? $text;
@@ -768,7 +769,7 @@ function m360_otp_debug_sanitize_payload(array $payload): array
             $out[$key] = m360_otp_debug_sanitize_payload($value);
             continue;
         }
-        if (is_string($value) && strlen($value) >= 16 && preg_match('/^[A-Za-z0-9._\-+/=]+$/', $value) === 1) {
+        if (is_string($value) && strlen($value) >= 16 && preg_match('#^[A-Za-z0-9._\-+/=]+$#', $value) === 1) {
             $out[$key] = m360_otp_debug_mask_secret($value);
             continue;
         }
